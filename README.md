@@ -54,12 +54,28 @@ outcomes of using `stuf`
 - also as a TUI, forced to think of things in an efficient way, vim-style keyboard shortcuts
 - open to making it a web app as well in the future
 
+basic top down flow
+- monthly bank statement balances -> net growth/loss
+- monthly income -> net cash flow in/out
+- lump sum (eg. credit card payment) -> cash flow out sources, percentage of expense, tagging
+- transactions -> tagging and deeper analysis; should link to lump sum to prevent "double counting"
+
 ## the tech stack
 
 - golang, bubbletea, sqlite, goose, sqlc
 
 ## user journey
 
-- TODO
+### starting from scratch
 
-## TUI mockupHa!
+### monthly budgeting
+
+### yearly budgeting
+
+### saving goals
+
+### investment
+
+## TUI mockup
+
+
