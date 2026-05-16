@@ -78,6 +78,14 @@ components
     - styling = each item adjusts global width 
 - the "hope" is that... when we make a web app these can translate better to semantic HTML
 
+"url"
+- show this to users to know how they got there
+- also predictable esc (back) language
+- logic also becomes easy to flow
+    - dashboard can show depending on url
+    - keyboard shortcuts can change depending on url
+    - components can show depending on url
+
 ## user journey
 
 ### starting from scratch
@@ -96,6 +104,7 @@ journey
     - look for config file (empty counts too, eg. current dir)
     - if none, 
         - create global config file
+        - add comment which links to github repo for config docs
         - init currency based on current location (uh if cant... prompt user?)
     - if have, 
         - validate
@@ -121,10 +130,12 @@ net income  : HKD   (200.00)
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
-> 1) [a]ccounts
-  2) [b]udgets
-  3) [t]ransactions
-  4) [s]ettings
+/
+
+> 1) accounts
+  2) budgets
+  3) transactions
+  4) settings
 
 up/down : navigate
 enter   : confirm
@@ -133,11 +144,182 @@ esc     : quit
 ```
 
 - keyboard shortcuts shown are for basic navigation
-- pressing ? shows more
-- j/k can also navigate
-- q can also quit
-- 1/2/3/4 hotkeys
-- a/b/t/s hotkeys (check for collision)
+    - j/k, tab/shift-tab can also navigate
+    - q can also quit
+    - 1/2/3/4 hotkeys
+
+- pressing ? shows
+    - short description of each action
+    - other hidden keyboard shortcuts
+    - press ? again, or esc to exit help
+
+- user presses 1 (accounts)
+
+- dashboard still shows, cuz thats the context in which the user decided to select accounts for
+- esc becomes back instead of quit
+
+```
+# stuf
+
+total       : HKD 50,000.00
+budgeted    : HKD  3,000.00
+
+period      : 2026-05
+net income  : HKD   (200.00)
+
+you owe ppl : HKD     23.00
+ppl owe you : HKD    456.00
+
+/accounts/
+
+> 1) list
+  2) create
+
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- user presses 2 (create)
+
+- dashboard hides, focus on create account flow
+- keyboard shortcuts changes too, as we are now in /accounts/create/
+- arrow keys dont navigate, as it conflicts with 
+- tab/shift-tab becomes "navigate"
+- the input fields change how they are rendered based on focus state
+
+- for name input (this will be a text input component)
+- nothing entered will give a placeholder "(tyoe anything...)"
+- typing name enforces lowercase, no space, no special char (alphanumeric and hyphens only)
+- enter will go to next field
+
+```
+# stuf
+
+/accounts/create/
+
+> 1) name      : (type anything...)
+
+  2) on-budget : true
+
+  3) tags      : []
+
+  4) notes     :
+
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : quit
+?       : help
+```
+
+```bash
+# TODO : single select input for on-budget, select input component, multi-select = false, can-filter = false, can-create = false, default = "true", show pagination = false
+```
+
+- for tags input (this will be a select input component, options: multi-select = true, can-filter = true, can-create = true, default = [], show pagination = true)
+- can type anything to filter, fuzzy search
+- can move arrows up and down which moves the caret/cursor
+- enter to add tag, enter does NOT go to next field in this case
+- tags sort order... alphabetical by default, can add to config options (eg. last created / last used / most used)
+- show pagination at the bottom (8 max cuz... keep it single digit, starts with 1, 9 is ugly, 8 is nicer as a power of two aesthetically)
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+  2) on-budget : true
+
+> 3) tags      : []
+
+>    filter    : (type anything...)
+
+>    1) app
+     2) apple
+     3) bank
+     4) cad
+     5) canada
+     6) credit-card
+     7) debit-card
+     8) hkd
+
+     [08/12]
+
+  4) notes     :
+
+type           : filter
+up/down        : move cursor
+left/right     : next/prev page
+enter          : confirm
+tab            : navigate
+esc            : quit
+?              : help
+```
+
+- if no exact match for filter, show create as the last option
+
+```
+> 3) tags      : []
+
+>    filter    : ap
+
+     1) app
+     2) apple
+>    3) (create new "ap")
+
+     [02/02]
+```
+
+- add asterik for new tags *
+
+```
+> 4) tags      : [ap*]
+
+>    filter    : (type anything...)
+
+>    1) app
+     2) apple
+     3) bank
+     4) cad
+     5) canada
+     6) credit-card
+     7) debit-card
+     8) hkd
+
+     [08/12]
+```
+
+```
+> 5) tags      : [ap*]
+
+>    filter    : app
+
+>    1) app
+     2) apple
+
+     [02/02]
+```
+
+```
+> 6) tags      : [ap*, app]
+
+>    filter    : (type anything...)
+
+     1) apple
+     2) bank
+     3) cad
+     4) canada
+     5) credit-card
+     6) debit-card
+     7) hkd
+     8) hong-kong
+
+     [08/11]
+```
 
 
 ### monthly budgeting
@@ -154,9 +336,7 @@ esc     : quit
 
 - .jsonc file
 - in development i will also use .jsonc as source of truth for defaults, so that the parsing is always verified, and that will be embeded in go binary
-- pressing settings will
-
-
+- pressing settings will... simply show path to current config file
 
 ## TUI mockup
 
