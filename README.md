@@ -65,12 +65,18 @@ basic top down flow
 
 ## the implementation 
 
-- stack: golang, bubbletea, sqlite, goose, sqlc
-- custom components, dont fight with the defaults
+stack
+- golang, bubbletea, sqlite, goose, sqlc
+
+keyboard shortcuts
 - separate actions and keys
+
+components
+- custom components, dont fight with the defaults
 - see if can write it kinda like react components
   - h1, newline, tables, text and formatted text (date/money)
   - styling = each item adjusts global width 
+- the "hope" is that... when we make a web app these can translate better to semantic HTML
 
 ## user journey
 
