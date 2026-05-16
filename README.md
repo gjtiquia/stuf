@@ -74,8 +74,8 @@ keyboard shortcuts
 components
 - custom components, dont fight with the defaults
 - see if can write it kinda like react components
-  - h1, newline, tables, text and formatted text (date/money)
-  - styling = each item adjusts global width 
+    - h1, newline, tables, text and formatted text (date/money)
+    - styling = each item adjusts global width 
 - the "hope" is that... when we make a web app these can translate better to semantic HTML
 
 ## user journey
@@ -87,6 +87,23 @@ goals
 
 journey
 - user opens app
+- on init app
+    - look for db in current dir
+        - if none, create one, and seed default currencies conversion rates (relative to USD)
+        - if have,
+            - run migrations (if any)
+            - if have network, update cache (eg. currency conversion rates)
+    - look for config file (empty counts too, eg. current dir)
+    - if none, 
+        - create global config file
+        - init currency based on current location (uh if cant... prompt user?)
+    - if have, 
+        - validate
+        - throw error if invalid and irrecoverable
+            - eg. no currency will attempt to init currency
+            - if currency is not in currency db... (used for unit conversion...) then throw
+        - will suggest user to check, or delete
+            - implies that, config files should be safe to delete, always
 - user should be greeted with a dashboard which then shows different information, and action choices
 - the dashboard information should hint at what the users need to input, and users can easily see with the actions at the bottom
 - below is a quick draft
@@ -95,18 +112,19 @@ journey
 ```
 # stuf
 
-total      : HKD 50,000.00
-budgeted   : HKD  3,000.00
+total       : HKD 50,000.00
+budgeted    : HKD  3,000.00
 
-period     : 2026-05
-net income : HKD   (200.00)
+period      : 2026-05
+net income  : HKD   (200.00)
 
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
-> 1) accounts
-  2) budgets
-  3) transactions
+> 1) [a]ccounts
+  2) [b]udgets
+  3) [t]ransactions
+  4) [s]ettings
 
 up/down : navigate
 enter   : confirm
@@ -117,8 +135,9 @@ esc     : quit
 - keyboard shortcuts shown are for basic navigation
 - pressing ? shows more
 - j/k can also navigate
-- 1/2/3 hotkeys
-- a/b/t hotkeys (check for collision)
+- q can also quit
+- 1/2/3/4 hotkeys
+- a/b/t/s hotkeys (check for collision)
 
 
 ### monthly budgeting
@@ -128,6 +147,16 @@ esc     : quit
 ### saving goals
 
 ### investment
+
+### owed money tracking
+
+### customization
+
+- .jsonc file
+- in development i will also use .jsonc as source of truth for defaults, so that the parsing is always verified, and that will be embeded in go binary
+- pressing settings will
+
+
 
 ## TUI mockup
 
