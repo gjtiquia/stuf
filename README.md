@@ -30,6 +30,7 @@ answers that `stuf` should be able to answer:
 - what is my current strategy / action plan for my finances?
 
 things that `stuf` should be able to support
+- accounts (on-budget and off-budget)
 - multi-currency
 - multi-person (can be separate profiles, can be together in one profile, can be "hybrid")
 - zero-based / envelop budgeting
@@ -40,6 +41,7 @@ things that `stuf` should be able to support
 - notes
 - reports (cash flow / category trend)
 - exporting (prevent lock-in)
+- shared/owed expense tracking (shared expense with room mate, helping friend/family pay and waiting for them to pay back)
 
 stretch goals of `stuf`
 - track investments and their performance
@@ -67,6 +69,36 @@ basic top down flow
 ## user journey
 
 ### starting from scratch
+
+goals 
+- ux should guide users into inputting data naturally
+
+journey
+- user opens app
+- user should be greeted with a dashboard which then shows different information, and action choices
+- the dashboard information should hint at what the users need to input, and users can easily see with the actions at the bottom
+- below is a quick draft
+- total would be 0, total of on-budget accounts, user would question it, then see the first action to be accounts
+
+```
+# stuf
+
+period     : 2026-05
+
+total      : HKD 50,000.00
+budgeted   : HKD  3,000.00
+net income : HKD   (200.00)
+
+> 1) accounts
+  2) budgets
+  3) transactions
+
+j/k   : navigate
+enter : confirm
+esc   : quit
+```
+
+
 
 ### monthly budgeting
 
