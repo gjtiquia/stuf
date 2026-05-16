@@ -17,6 +17,7 @@ a finance tool
 - the hope is that, even filling in maybe 40-70% of information, is enough to give u enough knowledge and control about ur finances, ur cash flow
 - that also alleviates the pressure of keeping up-to-date and perfect records
 - ideally this also incorporates great queries, note taking, and zero-based envelop budgeting
+- ideally the envelops are not tied to "months", they can sort of carry over by default, kind of "global", like there only ever is one envelop
 - essentially combining Google Sheets / Excel Spreadsheets together with Actual Budget / YNAB, with the power of SQL queries
 
 answers that `stuf` should be able to answer:
@@ -62,9 +63,14 @@ basic top down flow
 - lump sum (eg. credit card payment) -> cash flow out sources, percentage of expense, tagging
 - transactions -> tagging and deeper analysis; should link to lump sum to prevent "double counting"
 
-## the tech stack
+## the implementation 
 
-- golang, bubbletea, sqlite, goose, sqlc
+- stack: golang, bubbletea, sqlite, goose, sqlc
+- custom components, dont fight with the defaults
+- separate actions and keys
+- see if can write it kinda like react components
+  - h1, newline, tables, text and formatted text (date/money)
+  - styling = each item adjusts global width 
 
 ## user journey
 
@@ -83,21 +89,30 @@ journey
 ```
 # stuf
 
-period     : 2026-05
-
 total      : HKD 50,000.00
 budgeted   : HKD  3,000.00
+
+period     : 2026-05
 net income : HKD   (200.00)
+
+you owe ppl : HKD     23.00
+ppl owe you : HKD    456.00
 
 > 1) accounts
   2) budgets
   3) transactions
 
-j/k   : navigate
-enter : confirm
-esc   : quit
+up/down : navigate
+enter   : confirm
+esc     : quit
+?       : help
 ```
 
+- keyboard shortcuts shown are for basic navigation
+- pressing ? shows more
+- j/k can also navigate
+- 1/2/3 hotkeys
+- a/b/t hotkeys (check for collision)
 
 
 ### monthly budgeting
