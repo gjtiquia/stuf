@@ -37,7 +37,7 @@ things that `stuf` should be able to support
 - multi-currency
 - multi-person (can be separate profiles, can be together in one profile, can be "hybrid")
 - zero-based / envelop budgeting
-  - being one month ahead (or more)
+    - being one month ahead (or more)
 - tagging
 - queries
 - aggregation (sum, count)
@@ -45,6 +45,11 @@ things that `stuf` should be able to support
 - reports (cash flow / category trend)
 - exporting (prevent lock-in)
 - shared/owed expense tracking (shared expense with room mate, helping friend/family pay and waiting for them to pay back)
+- undo support
+    - any mutations should be reversible or at least editable and not lossy, at least for that session
+- backup support
+    - easy to backup and restore
+    - "git" / "version control" mindset
 
 stretch goals of `stuf`
 - track investments and their performance
@@ -87,6 +92,19 @@ components
     - dashboard can show depending on url
     - keyboard shortcuts can change depending on url
     - components can show depending on url
+
+session action history / undo support
+- everytime a mutation occurs (create account / edit something), we log it above
+- this way, when Ctrl-C and exit, its easily searchable (eg. via tmux) previous actions
+- also super clear what Ctrl-Z does, it really just undoes the previous action
+- this also means this needs to be a first class citizen, baked deep into the architecture
+- literally any mutation, needs a way to undo, and this needs to be backed by compile time checking of interface, and also sufficient unit testing coverage to ensure correctness
+- what this unlocks is efficiency gains. not afraid to do things fast because, u can easily edit or undo. 
+- keeps things "simple" as well, we can skip confirmation pages for a lot of otherwise seemingly destructive actions
+
+backups
+- its really just all about copying the sqlite
+- for now, for simplicity, we no need WAL, cuz its just one user, this also keeps backups simple, can scale later on in the future if needed
 
 ## user journey
 
@@ -137,7 +155,8 @@ ppl owe you : HKD    456.00
 > 1) accounts
   2) budgets
   3) transactions
-  4) settings
+  4) backup
+  5) settings
 
 ---
 up/down : navigate
@@ -367,7 +386,9 @@ esc        : quit
      [08/11]
 ```
 
-- 
+- notes is also a text input, like name
+- options: newline - true
+- shift enter can newline
 
 ```
 # stuf
@@ -380,7 +401,7 @@ esc        : quit
 
   3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
 
-> 4) notes     :
+> 4) notes     : (type anything...)
 
 ---
 type        : enter text
