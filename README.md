@@ -232,11 +232,13 @@ esc     : back
 
   4) notes     :
 
+  [confirm]
+
 ---
 type    : enter text
 tab     : navigate
 enter   : confirm
-esc     : quit
+esc     : back
 ?       : help
 ```
 
@@ -253,18 +255,20 @@ esc     : quit
 
 > 2) on-budget : true
 
->    1) true
-     2) false
+     > true
+       false
 
   3) tags      : []
 
   4) notes     :
 
+  [confirm]
+
 ---
 type    : enter text
 tab     : navigate
 enter   : confirm
-esc     : quit
+esc     : back
 ?       : help
 ```
 
@@ -274,6 +278,7 @@ esc     : quit
 - enter to add tag, enter does NOT go to next field in this case
 - tags sort order... alphabetical by default, can add to config options (eg. last created / last used / most used)
 - show pagination at the bottom (8 max cuz... keep it single digit, starts with 1, 9 is ugly, 8 is nicer as a power of two aesthetically)
+- tags no need numbering cuz... typing any number should be going into the filter text input anyways, numbers are just unnecessary noise
 
 ```
 # stuf
@@ -286,20 +291,22 @@ esc     : quit
 
 > 3) tags      : []
 
->    filter    : (type anything...)
+   > filter    : (type anything...)
 
->    1) app
-     2) apple
-     3) bank
-     4) cad
-     5) canada
-     6) credit-card
-     7) debit-card
-     8) hkd
+     > app
+       apple
+       bank
+       cad
+       canada
+       credit-card
+       debit-card
+       hkd
 
      [08/12]
 
   4) notes     :
+
+  [confirm]
 
 ---
 type       : filter
@@ -316,11 +323,11 @@ esc        : quit
 ```
 > 3) tags      : []
 
->    filter    : ap
+   > filter    : ap
 
-     1) app
-     2) apple
->    3) (create new "ap")
+     > app
+       apple
+       (create new "ap")
 
      [02/02]
 ```
@@ -331,16 +338,16 @@ esc        : quit
 ```
 > 3) tags      : [ap*]
 
->    filter    : (type anything...)
+   > filter    : (type anything...)
 
->    1) app
-     2) apple
-     3) bank
-     4) cad
-     5) canada
-     6) credit-card
-     7) debit-card
-     8) hkd
+     > app
+       apple
+       bank
+       cad
+       canada
+       credit-card
+       debit-card
+       hkd
 
      [08/12]
 
@@ -358,10 +365,10 @@ esc        : quit
 ```
 > 3) tags      : [ap*]
 
->    filter    : app
+   > filter    : app
 
->    1) app
-     2) apple
+     > app
+       apple
 
      [02/02]
 ```
@@ -372,16 +379,16 @@ esc        : quit
 ```
 > 3) tags      : [ap*, app]
 
->    filter    : (type anything...)
+   > filter    : (type anything...)
 
-     1) apple
-     2) bank
-     3) cad
-     4) canada
-     5) credit-card
-     6) debit-card
-     7) hkd
-     8) hong-kong
+     > apple
+       bank
+       cad
+       canada
+       credit-card
+       debit-card
+       hkd
+       hong-kong
 
      [08/11]
 ```
@@ -389,6 +396,7 @@ esc        : quit
 - notes is also a text input, like name
 - options: newline - true
 - shift enter can newline
+- can be empty, so enter / tab will go next
 
 ```
 # stuf
@@ -403,6 +411,8 @@ esc        : quit
 
 > 4) notes     : (type anything...)
 
+  [confirm]
+
 ---
 type        : enter text
 tab         : navigate
@@ -410,6 +420,121 @@ enter       : confirm
 shift-enter : newline
 esc         : quit
 ?           : help
+```
+
+- on the last option "confirm", note the change in keyboard shortcuts
+- tab does nothing cuz already at the last, so show shift-tab cuz can go back up
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+  2) on-budget : true
+
+  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+  4) notes     :
+
+> [confirm]
+
+---
+shift-tab   : navigate
+enter       : confirm
+esc         : quit
+?           : help
+```
+
+- if confirmed failed for some reason, show error but dont crash the app (would be frustrating to re-enter)
+- can be anything but likely would be backend validation logic (eg. somehow the name is not all lowercase maybe)
+- the principle is that  
+    - backend should hv validation in addition to frontend logic
+    - should not error silently
+    - should not crash if error is recoverable or not fatal
+- general error behavior
+    - error should remain as long as we are still in this page
+    - error should disappear if we quit to the previous page (error no longer relevant)
+    - error should disappear after we successfully create account (see below)
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one-INVALIDCHARS!)(%@*)
+
+  2) on-budget : true
+
+  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+  4) notes     :
+
+> [confirm]
+
+  [!] ERROR: NAME - INVALID CHARACTERS DETECTED
+
+---
+shift-tab   : navigate
+enter       : confirm
+esc         : quit
+?           : help
+```
+
+- after confirm success, goes to /accounts/list automatically, serves a few purposes
+    - quickly confirms that the account has been created successfully
+    - user tends to want to do something with that account after it has been created
+- accounts list should be filterable
+- perhaps can reuse the multi-select component... or multi-select component should be built from reusable components that this can use
+- filterable because there can be a LOT of accounts
+- listed alphabetically by default... think about alternative sorting in the future but, alphabetical works as a good default cuz, can just rename them with number prefixes
+
+- do note that history is added!
+- history above is shown for the current session only
+- however, history should also be stored in db, so that nothing is ever irrecoverable, tho for now we only support ctrl-z for current session actions for simplicity
+- and since history is stored in db, the db schema can also be much simpler, no need for each table to support soft deletes, as all deletes are soft by default, assuming all actions are undo-able
+- on undo any action, we return to the main menu and re-render, just to keep things simple for now and prevent any rendering bugs
+- the language we go for {date} {time} {create/update/delete} {type} {name}, we can update further in the future
+- history db... should be sufficient to a point such that, even if all the tables are deleted, it can be recoverable via the history db
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create account hsbc-one
+
+# stuf
+
+total       : HKD 50,000.00
+budgeted    : HKD  3,000.00
+
+period      : 2026-05
+net income  : HKD   (200.00)
+
+you owe ppl : HKD     23.00
+ppl owe you : HKD    456.00
+
+/accounts/list
+
+> filter : (type anything...)
+
+  > hsbc-one
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- no results mockup
+
+```
+/accounts/list
+
+> filter : amex
+
+  (no results)
+
 ```
 
 
