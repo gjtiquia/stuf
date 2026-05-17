@@ -1,5 +1,7 @@
 # stuf
 
+> ehh... apparently this name is taken... gotta think of a new project name...
+
 ```
 - [stu]ward [f]inance
 - [stuf]f
