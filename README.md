@@ -177,7 +177,6 @@ esc     : quit
     - press ? again, or esc to exit help
 
 - user presses 1 (accounts)
-
 - dashboard still shows, cuz thats the context in which the user decided to select accounts for
 - esc becomes back instead of quit
 
@@ -195,8 +194,9 @@ ppl owe you : HKD    456.00
 
 /accounts/
 
-> 1) list
-  2) create
+> 1) overview
+  2) list
+  3) create
 
 ---
 up/down : navigate
@@ -205,7 +205,7 @@ esc     : back
 ?       : help
 ```
 
-- user presses 2 (create)
+- user presses 3 (create)
 
 - dashboard hides, focus on create account flow
 - keyboard shortcuts changes too, as we are now in /accounts/create/
@@ -441,10 +441,10 @@ esc         : quit
 > [confirm]
 
 ---
-shift-tab   : navigate
-enter       : confirm
-esc         : quit
-?           : help
+shift-tab : navigate
+enter     : confirm
+esc       : quit
+?         : help
 ```
 
 - if confirmed failed for some reason, show error but dont crash the app (would be frustrating to re-enter)
@@ -490,6 +490,8 @@ esc         : quit
 - filterable because there can be a LOT of accounts
 - listed alphabetically by default... think about alternative sorting in the future but, alphabetical works as a good default cuz, can just rename them with number prefixes
 
+- here we should also be able to have a birds eye view of account stuff like totals
+
 - do note that history is added!
 - history above is shown for the current session only
 - however, history should also be stored in db, so that nothing is ever irrecoverable, tho for now we only support ctrl-z for current session actions for simplicity
@@ -497,6 +499,7 @@ esc         : quit
 - on undo any action, we return to the main menu and re-render, just to keep things simple for now and prevent any rendering bugs
 - the language we go for {date} {time} {create/update/delete} {type} {name}, we can update further in the future
 - history db... should be sufficient to a point such that, even if all the tables are deleted, it can be recoverable via the history db
+- to keep things simple... store json data, like the create -> old is null, new has json, update -> old has json, new has json, represents the diff, delete -> old has json, new is null
 
 ```
 history (ctrl-z to undo)
@@ -517,16 +520,21 @@ ppl owe you : HKD    456.00
 
 > filter : (type anything...)
 
-  > hsbc-one
+    name     | 
+
+  > hsbc-one | 
+    hsbc-abc | 
+    hsbc-def | 
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+up/down   : navigate
+left/right: 
+enter     : confirm
+esc       : back
+?         : help
 ```
 
-- no results mockup
+- "no results" mockup
 
 ```
 /accounts/list
