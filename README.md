@@ -139,6 +139,7 @@ ppl owe you : HKD    456.00
   3) transactions
   4) settings
 
+---
 up/down : navigate
 enter   : confirm
 esc     : quit
@@ -152,6 +153,7 @@ esc     : quit
 
 - pressing ? shows
     - short description of each action
+    - the help should change based on the current context
     - other hidden keyboard shortcuts
     - press ? again, or esc to exit help
 
@@ -177,6 +179,7 @@ ppl owe you : HKD    456.00
 > 1) list
   2) create
 
+---
 up/down : navigate
 enter   : confirm
 esc     : back
@@ -191,9 +194,10 @@ esc     : back
 - tab/shift-tab becomes "navigate"
 - the input fields change how they are rendered based on focus state
 
-- for name input (this will be a text input component)
-- nothing entered will give a placeholder "(tyoe anything...)"
+- for name input (this will be a text input component, option: single-line)
+- nothing entered will give a placeholder "(type anything...)"
 - typing name enforces lowercase, no space, no special char (alphanumeric and hyphens only)
+    - implementation-wise... perhaps the text input component have the option of passing in some sort of post-processing logic
 - enter will go to next field
 
 ```
@@ -209,6 +213,7 @@ esc     : back
 
   4) notes     :
 
+---
 type    : enter text
 tab     : navigate
 enter   : confirm
@@ -216,13 +221,37 @@ esc     : quit
 ?       : help
 ```
 
-```bash
-# TODO : single select input for on-budget, select input component, multi-select = false, can-filter = false, can-create = false, default = "true", show pagination = false
+- for on-budget input
+- select input component, multi-select = false, can-filter = false, can-create = false, default = "true", show pagination = false
+- share component with multi-select cuz we want to share the keybinds and logic, prevent drift
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+> 2) on-budget : true
+
+>    1) true
+     2) false
+
+  3) tags      : []
+
+  4) notes     :
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : quit
+?       : help
 ```
 
 - for tags input (this will be a select input component, options: multi-select = true, can-filter = true, can-create = true, default = [], show pagination = true)
 - can type anything to filter, fuzzy search
-- can move arrows up and down which moves the caret/cursor
+- can move arrows up and down which moves the caret/cursor, but not j/k cuz need to type
 - enter to add tag, enter does NOT go to next field in this case
 - tags sort order... alphabetical by default, can add to config options (eg. last created / last used / most used)
 - show pagination at the bottom (8 max cuz... keep it single digit, starts with 1, 9 is ugly, 8 is nicer as a power of two aesthetically)
@@ -253,13 +282,14 @@ esc     : quit
 
   4) notes     :
 
-type           : filter
-up/down        : move cursor
-left/right     : next/prev page
-enter          : confirm
-tab            : navigate
-esc            : quit
-?              : help
+---
+type       : filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+tab        : navigate
+esc        : quit
+?          : help
 ```
 
 - if no exact match for filter, show create as the last option
@@ -277,9 +307,10 @@ esc            : quit
 ```
 
 - add asterik for new tags *
+- if have at least one tag, and nothing is typed in the filter, backspace deletes the last tag (keyboard shortcut only shows backspace if the conditions are met)
 
 ```
-> 4) tags      : [ap*]
+> 3) tags      : [ap*]
 
 >    filter    : (type anything...)
 
@@ -293,10 +324,20 @@ esc            : quit
      8) hkd
 
      [08/12]
+
+---
+type       : filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+backspace  : delete last tag
+tab        : navigate
+esc        : quit
+?          : help
 ```
 
 ```
-> 5) tags      : [ap*]
+> 3) tags      : [ap*]
 
 >    filter    : app
 
@@ -306,8 +347,11 @@ esc            : quit
      [02/02]
 ```
 
+- tags already added should not show up in the tag list
+- note pagination should also update according to the tag list
+
 ```
-> 6) tags      : [ap*, app]
+> 3) tags      : [ap*, app]
 
 >    filter    : (type anything...)
 
@@ -321,6 +365,30 @@ esc            : quit
      8) hong-kong
 
      [08/11]
+```
+
+- 
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+  2) on-budget : true
+
+  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+> 4) notes     :
+
+---
+type        : enter text
+tab         : navigate
+enter       : confirm
+shift-enter : newline
+esc         : quit
+?           : help
 ```
 
 
