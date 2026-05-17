@@ -489,6 +489,9 @@ esc         : quit
 - perhaps can reuse the multi-select component... or multi-select component should be built from reusable components that this can use
 - filterable because there can be a LOT of accounts
 - listed alphabetically by default... think about alternative sorting in the future but, alphabetical works as a good default cuz, can just rename them with number prefixes
+- split by on/off budget, but arrow keys and filters should filter both
+    - hide either category if no search results for either one
+    - if no search results for both, see handling below, (no results)
 
 - here we should also be able to have a birds eye view of account stuff like totals
 
@@ -520,11 +523,20 @@ ppl owe you : HKD    456.00
 
 > filter : (type anything...)
 
-    name     | 
+    on-budget accounts
+    name           | balance          | notes
+    TOTAL          | HKD   50,000.00  |
 
-  > hsbc-one | 
-    hsbc-abc | 
-    hsbc-def | 
+  > hsbc-one       | HKD   35,000.00  | main chequing ac
+    hsbc-usd       | USD    1,000.00  |
+    hsbc-cad       | CAD      800.00  |
+
+    off-budget accounts
+    name           | balance
+    TOTAL          | HKD  (20,000.00) |
+
+    investment-hkd | HKD  182,000.00  |
+    student-loan   | HKD (200,000.00) | negative until fully paid
 
 ---
 up/down   : navigate
