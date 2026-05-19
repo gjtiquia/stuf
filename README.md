@@ -568,6 +568,16 @@ esc       : back
 
 ### owed money tracking
 
+- likely does not need a due date
+- think about it in terms of, either someone help paid a sum, or i help paid a sum (transaction + ppl owe me)
+- then need a way to be able to see my "expected totals" if all two-way debts are paid (better check how business/industries handles these...?)
+
+### shared finance tracking
+
+- a couple may be sharing the same account as it makes sense to see total net worth tgt
+- but they should also be easily able to check each individual
+- probably need to make sure tags + queries can fit this use case...? or that the accounts overview tooling should support some sort of filtering (which is querying and tags)
+
 ### customization
 
 - .jsonc file
