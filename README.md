@@ -157,6 +157,9 @@ account flow decisions
 - multi-currency institutions should be modeled as multiple accounts for v1
 - grouping related accounts can come later
 - balance entries inherit account currency
+- currencies are system/reference data, not user-created tags
+- seed common default currencies for v1
+- custom currency creation is not supported yet
 
 language
 - create = make a new object/container
@@ -288,6 +291,9 @@ esc     : back
 - for currency input
 - select input component, multi-select = false, can-filter = true, can-create = false, default = app currency, show pagination = true
 - account balance entries inherit account currency
+- users cannot create currencies from account creation
+- currency options come from the currency table
+- if a currency is missing, user should update currency data or configure it in settings later
 
 ```
 # stuf
