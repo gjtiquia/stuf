@@ -171,6 +171,7 @@ language
 
 history format
 - {date} {time} {verb} {path}
+- history is shown oldest at the top, newest at the bottom
 - 2026-05-17 17:30 create /accounts/hsbc-one
 - 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
 - 2026-05-17 17:40 edit /accounts/hsbc-one/balances/2026-05-21
@@ -665,7 +666,6 @@ notes       :
 
 > 1) balances
   2) edit account
-  3) delete account
 
 ---
 up/down : navigate
@@ -674,6 +674,9 @@ esc     : back
 ?       : help
 ```
 
+- account deletion is deferred for v1
+- accidental newly-created accounts can be undone with ctrl-z if still the latest history action
+- existing accounts should be edited instead of deleted for v1
 - pressing 1 (balances) opens the account balances page
 - user-facing language should say balance, not snapshot
 - internally, these may still be implemented as balance snapshots
@@ -747,8 +750,8 @@ esc     : back
 
 ```
 history (ctrl-z to undo)
-- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
 - 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
 
 # stuf
 
@@ -762,6 +765,101 @@ as of       : 2026-05-21
 > 2026-05-21 | HKD 50,000.00 | initial balance
 
   1) add balance
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing enter on a balance opens the balance detail page
+- detail pages show the selected resource, not necessarily the parent summary
+- parent identity can be shown as a field when useful
+- left/right move between older/newer balances
+- only show available left/right shortcuts
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+
+# stuf
+
+account     : hsbc-one
+date        : 2026-05-21
+balance     : HKD 50,000.00
+notes       : initial balance
+
+/accounts/hsbc-one/balances/2026-05-21/
+
+> 1) edit balance
+  2) delete balance
+
+---
+up/down : navigate
+left    : older
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- edit balance reuses the add balance form/input components
+- edit balance is pre-filled with existing balance data
+- keeping the same date is allowed
+- changing to another existing date for the same account is rejected
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+
+# stuf
+
+account     : hsbc-one
+
+/accounts/hsbc-one/balances/2026-05-21/edit/
+
+> 1) date    : 2026-05-21
+
+  2) balance : 50000.00
+
+  3) notes   : initial balance
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after edit success, goes to /accounts/hsbc-one/balances/ automatically
+- delete balance happens immediately
+- no confirmation screen for delete balance in v1
+- after delete, goes to /accounts/hsbc-one/balances/ automatically
+- ctrl-z undoes the latest history mutation
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+- 2026-05-17 17:45 delete /accounts/hsbc-one/balances/2026-05-21
+
+# stuf
+
+name        : hsbc-one
+balance     : HKD 0.00
+as of       : never
+
+/accounts/hsbc-one/balances/
+
+  date       | balance      | notes
+  (no balances yet)
+
+> 1) add balance
 
 ---
 up/down : navigate
@@ -813,7 +911,6 @@ esc       : back
 - deferred for this first slice
     - editing account
     - deleting account
-    - editing balance
     - transactions
     - budgets
     - preserving dirty create drafts after esc
