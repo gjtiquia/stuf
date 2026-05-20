@@ -157,6 +157,8 @@ account flow decisions
 - multi-currency institutions should be modeled as multiple accounts for v1
 - grouping related accounts can come later
 - balance entries inherit account currency
+- account name is a user-facing slug and can change
+- internal account id should be immutable
 - currencies are system/reference data, not user-created tags
 - seed common default currencies for v1
 - custom currency creation is not supported yet
@@ -678,8 +680,106 @@ esc     : back
 - accidental newly-created accounts can be undone with ctrl-z if still the latest history action
 - existing accounts should be edited instead of deleted for v1
 - pressing 1 (balances) opens the account balances page
+- pressing 2 (edit account) opens the edit account flow
 - user-facing language should say balance, not snapshot
 - internally, these may still be implemented as balance snapshots
+
+- edit account reuses the create account form/input components
+- edit account is pre-filled with existing account data
+- account name is required
+- account name must remain unique
+- duplicate account name is rejected
+- keeping the same name while editing is allowed
+- account currency can be edited only if the account has no balances
+- if balances exist, currency field is read-only/disabled
+- changing currency after balances exist should be modeled by creating a separate account
+- after edit success, goes to the account detail page
+- if account name changed, goes to the new account URL
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+
+# stuf
+
+/accounts/hsbc-one/edit/
+
+> 1) name      : hsbc-one
+
+  2) currency  : HKD
+
+  3) on-budget : true
+
+  4) tags      : []
+
+  5) notes     :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- if account has balances, currency is shown but cannot be changed
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+
+# stuf
+
+/accounts/hsbc-one/edit/
+
+> 1) name      : hsbc-one
+
+  2) currency  : HKD (locked because balances exist)
+
+  3) on-budget : true
+
+  4) tags      : []
+
+  5) notes     :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:40 edit /accounts/hsbc-main
+
+# stuf
+
+name        : hsbc-main
+balance     : HKD 0.00
+as of       : never
+on-budget   : true
+tags        : []
+notes       :
+
+/accounts/hsbc-main/
+
+> 1) balances
+  2) edit account
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
 
 ```
 history (ctrl-z to undo)
@@ -909,7 +1009,6 @@ esc       : back
 ```
 
 - deferred for this first slice
-    - editing account
     - deleting account
     - transactions
     - budgets
