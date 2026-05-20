@@ -1132,6 +1132,10 @@ esc       : back
 - dashboard shows growth group with on-budget and total
 - reports show growth group with on-budget, off-budget, and total
 - reports are calendar-period based where applicable
+- reports are the bird's eye view of the app
+- for now, reports are derived from accounts and balances only
+- as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
+- expect report screens to evolve as those data flows become clearer
 - balances can be entered on any date
 - dynamic values belong in summaries/tables, not option labels
 - money decimal points should align
