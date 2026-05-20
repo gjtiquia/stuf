@@ -1118,12 +1118,225 @@ esc       : back
 
 - deferred for this first slice
     - deleting account
-    - transactions
     - budgets
     - preserving dirty create drafts after esc
 
 
 ### monthly budgeting
+
+### transactions
+
+- transactions are optional explanatory records
+- balances remain the source of truth
+- transactions do not update account balances
+- incomplete or incorrect transactions should not corrupt balance-derived growth
+- transaction is familiar user-facing language, keep it
+- reports are read-only and consume transaction data
+- reports never mutate transaction data
+- reports may reveal missing data, but input should happen through explicit input flows
+- for v1, prioritize clean input flows over report-to-input shortcuts
+- income and expense are explicit transaction types for v1
+- amount is always positive
+- transaction type determines meaning
+- type is implied by add-income/add-expense flows and not shown as an editable field there
+- transfer transactions are deferred
+- users can often skip transfer entry entirely because balance snapshots anchor growth
+- global transaction creation is canonical
+- account-scoped transaction creation can exist later as a convenience shortcut
+- account-scoped forms pre-fill account
+- pre-filled account should still be editable
+- global and account-scoped flows write to the same transaction table
+- account detail should eventually expose transactions as an automatically filtered shortcut, but account-scoped mockups are deferred until the global flow is stable
+
+transaction references
+- transactions have an internal immutable database id
+- transactions have a user-facing reference id for URLs/history
+- transaction refs are sequential and stable
+- transaction refs look like tx-000001
+- transaction refs do not encode transaction date, account, type, or amount
+- editing transaction fields does not change the transaction ref
+- transaction ref is shown in URL/history, not as a detail field
+
+report integration
+- income transactions replace assumed income in reports
+- if no income transactions exist, income = growth `(assumed)`
+- if income transactions exist, expenses = income - growth `(derived)`
+- expense transactions are future drilldown detail
+- reports should not pressure users to enter every expense
+- future reports may offer shortcuts to source input flows
+- future report drilldown should support income/expense breakdowns
+- transaction links/parent-child relationships may allow recursive drilldown
+
+```
+# stuf
+
+/transactions/
+
+> 1) list
+  2) add income
+  3) add expense
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/transactions/list/
+
+> filter : (type anything...)
+
+  date       | type    | amount         | account  | notes
+> 2026-05-15 | income  | HKD 20,000.00  | hsbc-one | salary
+  2026-05-16 | expense | HKD    200.00  | hsbc-one | groceries
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing enter on a transaction opens the transaction detail page
+- add income and add expense use the same transaction form/input components
+- type is implied by the add flow
+- amount is entered as a positive value
+
+```
+# stuf
+
+/transactions/add-income/
+
+> 1) date    : 2026-05-21
+
+  2) amount  : (type amount...)
+
+  3) account : hsbc-one
+
+  4) tags    : []
+
+  5) notes   :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/transactions/add-expense/
+
+> 1) date    : 2026-05-21
+
+  2) amount  : (type amount...)
+
+  3) account : hsbc-one
+
+  4) tags    : []
+
+  5) notes   :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after add success, goes to /transactions/list/ automatically
+- history uses the transaction ref path
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:35 add /transactions/tx-000001
+
+# stuf
+
+date    : 2026-05-15
+type    : income
+amount  : HKD 20,000.00
+account : hsbc-one
+tags    : []
+notes   : salary
+
+/transactions/tx-000001/
+
+> 1) edit transaction
+  2) delete transaction
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- edit transaction reuses the add transaction form/input components
+- edit transaction is pre-filled with existing transaction data
+- transaction type is not editable in v1
+- if type is wrong, delete and add the transaction again
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:35 add /transactions/tx-000001
+
+# stuf
+
+/transactions/tx-000001/edit/
+
+> 1) date    : 2026-05-15
+
+  2) amount  : 20000.00
+
+  3) account : hsbc-one
+
+  4) tags    : []
+
+  5) notes   : salary
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- delete transaction happens immediately
+- no confirmation screen for delete transaction in v1
+- after delete, goes to /transactions/list/ automatically
+- ctrl-z undoes the latest visible history row
+
+transaction validation
+- date is required
+- amount is required
+- amount must be positive
+- fiat amounts accept up to 2 decimals for v1
+- account is required
+- tags are optional
+- notes are optional
+
+deferred transactions
+- transfer transactions
+- account-scoped transaction mockups
+- report-to-input shortcuts
+- report income/expense drilldown
+- recursive transaction links / parent-child transaction relationships
 
 ### reports
 
@@ -1133,14 +1346,16 @@ esc       : back
 - reports show growth group with on-budget, off-budget, and total
 - reports are calendar-period based where applicable
 - reports are the bird's eye view of the app
-- for now, reports are derived from accounts and balances only
+- for now, reports are derived from accounts, balances, and transactions only
 - as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
 - expect report screens to evolve as those data flows become clearer
+- reports are read-only for v1
+- reports consume input data but do not mutate it
 - balances can be entered on any date
 - dynamic values belong in summaries/tables, not option labels
 - money decimal points should align
 - use income/expenses
-- income entry route is deferred
+- income comes from income transactions
 - before income is entered, income equals growth and is marked `(assumed)`
 - before income is entered, expenses are 0
 - after income is entered, expenses = income - growth and can be marked `(derived)`
@@ -1288,11 +1503,12 @@ monthly report boundary rules
 - if one usable balance exists, assume flat
 
 deferred reports
-- income entry
 - annual detail screens
 - year-to-date detail screens
 - rolling report detail screens
 - source navigation from report row detail
+- report-to-input shortcuts
+- report income/expense drilldown
 
 ### yearly budgeting
 
