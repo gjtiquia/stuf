@@ -98,6 +98,10 @@ session action history / undo support
 - everytime a mutation occurs (create account / edit something), we log it above
 - this way, when Ctrl-C and exit, its easily searchable (eg. via tmux) previous actions
 - also super clear what Ctrl-Z does, it really just undoes the previous action
+- visible session history behaves like an undo stack
+- visible session history only contains undoable mutations from the current session
+- persisted history behaves like an audit/recovery log
+- undo stack and audit log can share the same action/mutation schema, but should not behave the same in the UI
 - this also means this needs to be a first class citizen, baked deep into the architecture
 - literally any mutation, needs a way to undo, and this needs to be backed by compile time checking of interface, and also sufficient unit testing coverage to ensure correctness
 - what this unlocks is efficiency gains. not afraid to do things fast because, u can easily edit or undo. 
@@ -595,13 +599,31 @@ esc         : back
 - here we should also be able to have a birds eye view of account stuff like totals
 
 - do note that history is added!
-- history above is shown for the current session only
-- however, history should also be stored in db, so that nothing is ever irrecoverable, tho for now we only support ctrl-z for current session actions for simplicity
-- and since history is stored in db, the db schema can also be much simpler, no need for each table to support soft deletes, as all deletes are soft by default, assuming all actions are undo-able
-- on undo any action, we return to the main menu and re-render, just to keep things simple for now and prevent any rendering bugs
+- visible history above is shown for the current session only
+- visible history is shown oldest at top, newest at bottom
+- visible history behaves like an undo stack
+- ctrl-z undoes the latest visible history row
+- after undo succeeds, remove that row from visible history
+- undo does not add a visible history row
+- visible history is cleared when the app exits
+- persisted history should still be stored in db, so that nothing is ever irrecoverable
+- persisted history behaves like an audit/recovery log
+- persisted history survives app restarts
+- persisted history stores old/new data for recovery, but v1 does not support ctrl-z for previous-session mutations
+- undo stack and audit log can use the same action/mutation schema, but should not behave the same in the UI
+- since history is stored in db, the db schema can also be much simpler, no need for each table to support soft deletes, as all deletes are soft by default, assuming all actions are undo-able
+- after successful undo, return to / and re-render, just to keep things simple for now and prevent any rendering bugs
 - the language we go for {date} {time} {verb} {path}, we can update further in the future
 - history db... should be sufficient to a point such that, even if all the tables are deleted, it can be recoverable via the history db
 - to keep things simple... store json data, like the create -> old is null, new has json, update -> old has json, new has json, represents the diff, delete -> old has json, new is null
+- ctrl-z example
+    - before ctrl-z
+        - 2026-05-17 17:30 create /accounts/hsbc-one
+        - 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+        - 2026-05-17 17:45 delete /accounts/hsbc-one/balances/2026-05-21
+    - after ctrl-z
+        - 2026-05-17 17:30 create /accounts/hsbc-one
+        - 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
 
 ```
 history (ctrl-z to undo)
@@ -940,7 +962,7 @@ esc     : back
 - delete balance happens immediately
 - no confirmation screen for delete balance in v1
 - after delete, goes to /accounts/hsbc-one/balances/ automatically
-- ctrl-z undoes the latest history mutation
+- ctrl-z undoes the latest visible history row
 
 ```
 history (ctrl-z to undo)
