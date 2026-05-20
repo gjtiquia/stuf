@@ -150,8 +150,12 @@ account flow decisions
 - creating an account does not ask for an opening balance
 - after creating an account, redirect to /accounts/list
 - mutation history is enough success feedback
-- esc means back everywhere except /, where it quits
+- esc means back everywhere except /, where it opens exit confirmation
 - esc from a create form discards the draft immediately
+- ctrl-c quits immediately and gracefully
+- quitting clears undo history
+- at /, exit confirmation replaces the normal home actions and defaults to no
+- only show "undo history will be cleared" in exit confirmation if current session undo history exists
 - q is not a shortcut for now
 - number hotkeys work only in menu screens
 - in forms, numbers are visual labels only
@@ -196,7 +200,10 @@ total       : HKD 0.00
 budgeted    : HKD 0.00
 
 period      : 2026-05
-net income  : HKD 0.00
+
+growth
+on-budget  : HKD 0.00
+total      : HKD 0.00
 
 you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
@@ -204,22 +211,95 @@ ppl owe you : HKD 0.00
 /
 
 > 1) accounts
-  2) budgets
-  3) transactions
-  4) backup
+  2) transactions
+  3) budgets
+  4) reports
   5) settings
+  6) backup
 
 ---
 up/down : navigate
 enter   : confirm
-esc     : quit
+esc     : exit app
 ?       : help
 ```
 
 - keyboard shortcuts shown are for basic navigation
     - j/k, tab/shift-tab can also navigate
-    - 1/2/3/4 hotkeys
+    - 1/2/3/4/5/6 hotkeys
     - number hotkeys only work in menu screens, not forms
+
+- at /, esc opens exit confirmation
+- exit confirmation replaces the normal home actions
+- no is selected by default
+- esc from exit confirmation cancels and returns to normal /
+- ctrl-c quits immediately and gracefully
+- quitting clears undo history
+- only show "undo history will be cleared" if current session undo history exists
+
+```
+# stuf
+
+total       : HKD 0.00
+budgeted    : HKD 0.00
+
+period      : 2026-05
+
+growth
+on-budget  : HKD 0.00
+total      : HKD 0.00
+
+you owe ppl : HKD 0.00
+ppl owe you : HKD 0.00
+
+/
+
+exit app?
+
+> 1) no
+  2) yes
+
+---
+up/down : navigate
+enter   : confirm
+esc     : cancel
+ctrl-c  : quit
+?       : help
+```
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+
+# stuf
+
+total       : HKD 0.00
+budgeted    : HKD 0.00
+
+period      : 2026-05
+
+growth
+on-budget  : HKD 0.00
+total      : HKD 0.00
+
+you owe ppl : HKD 0.00
+ppl owe you : HKD 0.00
+
+/
+
+exit app?
+undo history will be cleared
+
+> 1) no
+  2) yes
+
+---
+up/down : navigate
+enter   : confirm
+esc     : cancel
+ctrl-c  : quit
+?       : help
+```
 
 - pressing ? shows
     - short description of each action
@@ -238,7 +318,10 @@ total       : HKD 50,000.00
 budgeted    : HKD  3,000.00
 
 period      : 2026-05
-net income  : HKD   (200.00)
+
+growth
+on-budget  : HKD  5,200.00
+total      : HKD  6,200.00
 
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
@@ -635,7 +718,10 @@ total       : HKD 50,000.00
 budgeted    : HKD  3,000.00
 
 period      : 2026-05
-net income  : HKD   (200.00)
+
+growth
+on-budget  : HKD  5,200.00
+total      : HKD  6,200.00
 
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
@@ -1038,6 +1124,171 @@ esc       : back
 
 
 ### monthly budgeting
+
+### reports
+
+- use reports, not reviews
+- use net growth, not net income
+- dashboard shows growth group with on-budget and total
+- reports show growth group with on-budget, off-budget, and total
+- reports are calendar-period based where applicable
+- balances can be entered on any date
+- dynamic values belong in summaries/tables, not option labels
+- money decimal points should align
+- use income/expenses
+- income entry route is deferred
+- before income is entered, income equals growth and is marked `(assumed)`
+- before income is entered, expenses are 0
+- after income is entered, expenses = income - growth and can be marked `(derived)`
+
+report types
+- monthly = selected calendar month
+- rolling 3 months = latest 3 monthly periods including current report month
+- rolling 6 months = latest 6 monthly periods including current report month
+- rolling 12 months = latest 12 monthly periods including current report month
+- year-to-date = Jan 1 through current/latest period
+- annual = selected calendar year, Jan 1 -> Dec 31
+
+```
+# stuf
+
+growth
+
+monthly           : HKD  5,200.00
+rolling 3 months  : HKD  9,000.00
+rolling 6 months  : HKD 14,000.00
+rolling 12 months : HKD 18,000.00
+year-to-date      : HKD 12,400.00
+annual            : HKD 12,400.00
+
+/reports/
+
+> 1) monthly
+  2) rolling 3 months
+  3) rolling 6 months
+  4) rolling 12 months
+  5) year-to-date
+  6) annual
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- /reports/monthly/ shows a filterable table of monthly summaries
+- dynamic values are shown in the table, not in option labels
+
+```
+# stuf
+
+current month
+
+period   : 2026-05
+coverage : 2026-04-30 -> 2026-05-31
+
+growth
+on-budget  : HKD  5,200.00
+off-budget : HKD  1,000.00
+total      : HKD  6,200.00
+
+/reports/monthly/
+
+> filter : (type anything...)
+
+  month   | on-budget     | off-budget    | total
+> 2026-05 | HKD  5,200.00 | HKD  1,000.00 | HKD  6,200.00
+  2026-04 | HKD  1,200.00 | HKD      0.00 | HKD  1,200.00
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing enter on a month opens the monthly report detail
+- monthly report account list is filterable
+- monthly report account list is grouped into on-budget and off-budget accounts
+- left/right period navigation is dynamic
+
+```
+# stuf
+
+period   : 2026-05
+coverage : 2026-04-30 -> 2026-05-31
+
+growth
+on-budget  : HKD  5,200.00
+off-budget : HKD  1,000.00
+total      : HKD  6,200.00
+
+income     : HKD  5,200.00 (assumed)
+expenses   : HKD      0.00
+
+/reports/monthly/2026-05/
+
+> filter : (type anything...)
+
+  on-budget accounts
+  account  | start         | end           | growth
+> hsbc-one | HKD 44,800.00 | HKD 50,000.00 | HKD 5,200.00
+
+  off-budget accounts
+  account        | start          | end            | growth
+  investment-hkd | HKD 10,000.00  | HKD 11,000.00  | HKD 1,000.00
+
+---
+up/down : navigate
+left    : previous month
+right   : next month
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing enter on an account opens the account monthly report detail
+- this is the lowest-level report detail for now
+- no action list is shown at the lowest-level report detail
+- only navigation shortcuts are shown
+- source navigation from report row detail is deferred
+
+```
+# stuf
+
+account   : hsbc-one
+on-budget : true
+period    : 2026-05
+coverage  : 2026-04-30 -> 2026-05-31
+
+start     : HKD 44,800.00
+end       : HKD 50,000.00
+growth    : HKD  5,200.00
+
+/reports/monthly/2026-05/accounts/hsbc-one/
+
+---
+left  : previous month
+right : next month
+esc   : back
+?     : help
+```
+
+monthly report boundary rules
+- start = latest balance on or before first day of period
+- end = latest balance on or before last day of period
+- if no balance exists before start, start = 0
+- if no balance exists before end, end = start
+- if zero balances exist, use 0 -> 0
+- if one usable balance exists, assume flat
+
+deferred reports
+- income entry
+- annual detail screens
+- year-to-date detail screens
+- rolling report detail screens
+- source navigation from report row detail
 
 ### yearly budgeting
 
