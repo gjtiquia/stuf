@@ -153,6 +153,10 @@ account flow decisions
 - in forms, numbers are visual labels only
 - account names are strict slugs
 - fresh app does not seed tags
+- accounts have exactly one currency for v1
+- multi-currency institutions should be modeled as multiple accounts for v1
+- grouping related accounts can come later
+- balance entries inherit account currency
 
 language
 - create = make a new object/container
@@ -161,6 +165,19 @@ language
 - add balance
 - edit balance
 - delete balance
+
+history format
+- {date} {time} {verb} {path}
+- 2026-05-17 17:30 create /accounts/hsbc-one
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+- 2026-05-17 17:40 edit /accounts/hsbc-one/balances/2026-05-21
+- 2026-05-17 17:45 delete /accounts/hsbc-one
+
+money storage
+- do not store money as floats
+- store amount as integer + scale, even if v1 only accepts fiat 2-decimal balances
+- eg. HKD 50,000.00 -> amount = 5000000, scale = 2
+- eg. BTC 0.12345678 -> amount = 12345678, scale = 8
 
 ```
 # stuf
@@ -250,11 +267,13 @@ esc     : back
 
 > 1) name      : (type anything...)
 
-  2) on-budget : true
+  2) currency  : HKD
 
-  3) tags      : []
+  3) on-budget : true
 
-  4) notes     :
+  4) tags      : []
+
+  5) notes     :
 
   [confirm]
 
@@ -264,6 +283,41 @@ tab     : navigate
 enter   : confirm
 esc     : back
 ?       : help
+```
+
+- for currency input
+- select input component, multi-select = false, can-filter = true, can-create = false, default = app currency, show pagination = true
+- account balance entries inherit account currency
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+> 2) currency  : HKD
+
+     > HKD
+       USD
+       CAD
+
+  3) on-budget : true
+
+  4) tags      : []
+
+  5) notes     :
+
+  [confirm]
+
+---
+type       : filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+tab        : navigate
+esc        : back
+?          : help
 ```
 
 - for on-budget input
@@ -277,14 +331,16 @@ esc     : back
 
   1) name      : hsbc-one
 
-> 2) on-budget : true
+  2) currency  : HKD
+
+> 3) on-budget : true
 
      > true
        false
 
-  3) tags      : []
+  4) tags      : []
 
-  4) notes     :
+  5) notes     :
 
   [confirm]
 
@@ -311,9 +367,11 @@ esc     : back
 
   1) name      : hsbc-one
 
-  2) on-budget : true
+  2) currency  : HKD
 
-> 3) tags      : []
+  3) on-budget : true
+
+> 4) tags      : []
 
    > filter    : (type anything...)
 
@@ -328,7 +386,7 @@ esc     : back
 
      [08/12]
 
-  4) notes     :
+  5) notes     :
 
   [confirm]
 
@@ -347,7 +405,7 @@ esc        : back
 - if no exact match for filter, show create as the last option
 
 ```
-> 3) tags      : []
+> 4) tags      : []
 
    > filter    : ap
 
@@ -362,7 +420,7 @@ esc        : back
 - if have at least one tag, and nothing is typed in the filter, backspace deletes the last tag (keyboard shortcut only shows backspace if the conditions are met)
 
 ```
-> 3) tags      : [ap*]
+> 4) tags      : [ap*]
 
    > filter    : (type anything...)
 
@@ -389,7 +447,7 @@ esc        : back
 ```
 
 ```
-> 3) tags      : [ap*]
+> 4) tags      : [ap*]
 
    > filter    : app
 
@@ -403,7 +461,7 @@ esc        : back
 - note pagination should also update according to the tag list
 
 ```
-> 3) tags      : [ap*, app]
+> 4) tags      : [ap*, app]
 
    > filter    : (type anything...)
 
@@ -431,11 +489,13 @@ esc        : back
 
   1) name      : hsbc-one
 
-  2) on-budget : true
+  2) currency  : HKD
 
-  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+  3) on-budget : true
 
-> 4) notes     : (type anything...)
+  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+> 5) notes     : (type anything...)
 
   [confirm]
 
@@ -458,11 +518,13 @@ esc         : back
 
   1) name      : hsbc-one
 
-  2) on-budget : true
+  2) currency  : HKD
 
-  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+  3) on-budget : true
 
-  4) notes     :
+  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+  5) notes     :
 
 > [confirm]
 
@@ -491,11 +553,13 @@ esc       : back
 
   1) name      : hsbc-one-INVALIDCHARS!)(%@*)
 
-  2) on-budget : true
+  2) currency  : HKD
 
-  3) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+  3) on-budget : true
 
-  4) notes     :
+  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
+
+  5) notes     :
 
 > [confirm]
 
@@ -526,13 +590,13 @@ esc         : back
 - however, history should also be stored in db, so that nothing is ever irrecoverable, tho for now we only support ctrl-z for current session actions for simplicity
 - and since history is stored in db, the db schema can also be much simpler, no need for each table to support soft deletes, as all deletes are soft by default, assuming all actions are undo-able
 - on undo any action, we return to the main menu and re-render, just to keep things simple for now and prevent any rendering bugs
-- the language we go for {date} {time} {create/update/delete} {type} {name}, we can update further in the future
+- the language we go for {date} {time} {verb} {path}, we can update further in the future
 - history db... should be sufficient to a point such that, even if all the tables are deleted, it can be recoverable via the history db
 - to keep things simple... store json data, like the create -> old is null, new has json, update -> old has json, new has json, represents the diff, delete -> old has json, new is null
 
 ```
 history (ctrl-z to undo)
-- 2026-05-17 17:30 create account hsbc-one
+- 2026-05-17 17:30 create /accounts/hsbc-one
 
 # stuf
 
@@ -550,19 +614,19 @@ ppl owe you : HKD    456.00
 > filter : (type anything...)
 
     on-budget accounts
-    name           | balance          | notes
-    TOTAL          | HKD   50,000.00  |
+    name           | balance                         | notes
+    TOTAL          | HKD   50,000.00                 |
 
-  > hsbc-one       | HKD   35,000.00  | main chequing ac
-    hsbc-usd       | USD    1,000.00  |
-    hsbc-cad       | CAD      800.00  |
+  > hsbc-one       | HKD   35,000.00                 | main chequing ac
+    hsbc-usd       | HKD    7,800.00 (USD 1,000.00) |
+    hsbc-cad       | HKD    4,600.00 (CAD   800.00) |
 
     off-budget accounts
-    name           | balance
-    TOTAL          | HKD  (20,000.00) |
+    name           | balance                         | notes
+    TOTAL          | HKD  (20,000.00)                |
 
-    investment-hkd | HKD  182,000.00  |
-    student-loan   | HKD (200,000.00) | negative until fully paid
+    investment-hkd | HKD  182,000.00                 |
+    student-loan   | HKD (200,000.00)                | negative until fully paid
 
 ---
 up/down   : navigate
@@ -574,11 +638,13 @@ esc       : back
 
 - account balance is the latest added balance
 - if the account has no balances yet, the balance is shown as 0
+- accounts list shows app currency first for comparison
+- if account currency differs from app currency, show account currency in parentheses
 - pressing enter on an account opens the account detail page
 
 ```
 history (ctrl-z to undo)
-- 2026-05-17 17:30 create account hsbc-one
+- 2026-05-17 17:30 create /accounts/hsbc-one
 
 # stuf
 
@@ -608,7 +674,7 @@ esc     : back
 
 ```
 history (ctrl-z to undo)
-- 2026-05-17 17:30 create account hsbc-one
+- 2026-05-17 17:30 create /accounts/hsbc-one
 
 # stuf
 
@@ -630,6 +696,103 @@ esc     : back
 ?       : help
 ```
 
+- pressing 1 (add balance) opens the add balance flow
+- date defaults to today
+- date is required
+- balance is required
+- fiat balances accept up to 2 decimal places for v1
+- positive, zero, and negative balances are allowed
+- balances sort newest first
+- only one balance is allowed per account per date
+- duplicate account/date balances are rejected
+- user should edit the existing balance instead of replacing through add
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/hsbc-one
+
+# stuf
+
+name        : hsbc-one
+balance     : HKD 0.00
+as of       : never
+
+/accounts/hsbc-one/balances/add/
+
+> 1) date    : 2026-05-21
+
+  2) balance : (type amount...)
+
+  3) notes   :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after confirm success, goes to /accounts/hsbc-one/balances/ automatically
+- this confirms that the balance has been added successfully
+- this also makes it fast to add multiple historical balances
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:35 add /accounts/hsbc-one/balances/2026-05-21
+- 2026-05-17 17:30 create /accounts/hsbc-one
+
+# stuf
+
+name        : hsbc-one
+balance     : HKD 50,000.00
+as of       : 2026-05-21
+
+/accounts/hsbc-one/balances/
+
+  date       | balance       | notes
+> 2026-05-21 | HKD 50,000.00 | initial balance
+
+  1) add balance
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- if confirmed failed because a balance already exists for that account/date, show error but dont crash the app
+
+```
+# stuf
+
+name        : hsbc-one
+balance     : HKD 50,000.00
+as of       : 2026-05-21
+
+/accounts/hsbc-one/balances/add/
+
+  1) date    : 2026-05-21
+
+  2) balance : HKD 50,000.00
+
+  3) notes   : corrected balance
+
+> [confirm]
+
+  [!] ERROR: BALANCE ALREADY EXISTS FOR 2026-05-21
+      edit existing balance instead
+
+---
+shift-tab : navigate
+enter     : confirm
+esc       : back
+?         : help
+```
+
 - "no results" mockup
 
 ```
@@ -644,7 +807,6 @@ esc     : back
 - deferred for this first slice
     - editing account
     - deleting account
-    - adding balance
     - editing balance
     - transactions
     - budgets
@@ -678,4 +840,3 @@ esc     : back
 - pressing settings will... simply show path to current config file
 
 ## TUI mockup
-
