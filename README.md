@@ -139,17 +139,40 @@ journey
 - below is a quick draft
 - total would be 0, total of on-budget accounts, user would question it, then see the first action to be accounts
 
+account flow decisions
+- fresh dashboard shows real empty values, not demo data
+- account balance means the latest balance entry
+- if no balance has been added, balance is shown as 0
+- creating an account does not ask for an opening balance
+- after creating an account, redirect to /accounts/list
+- mutation history is enough success feedback
+- esc means back everywhere except /, where it quits
+- esc from a create form discards the draft immediately
+- q is not a shortcut for now
+- number hotkeys work only in menu screens
+- in forms, numbers are visual labels only
+- account names are strict slugs
+- fresh app does not seed tags
+
+language
+- create = make a new object/container
+- add = append a value/event/record to an existing object
+- create account
+- add balance
+- edit balance
+- delete balance
+
 ```
 # stuf
 
-total       : HKD 50,000.00
-budgeted    : HKD  3,000.00
+total       : HKD 0.00
+budgeted    : HKD 0.00
 
 period      : 2026-05
-net income  : HKD   (200.00)
+net income  : HKD 0.00
 
-you owe ppl : HKD     23.00
-ppl owe you : HKD    456.00
+you owe ppl : HKD 0.00
+ppl owe you : HKD 0.00
 
 /
 
@@ -168,8 +191,8 @@ esc     : quit
 
 - keyboard shortcuts shown are for basic navigation
     - j/k, tab/shift-tab can also navigate
-    - q can also quit
     - 1/2/3/4 hotkeys
+    - number hotkeys only work in menu screens, not forms
 
 - pressing ? shows
     - short description of each action
@@ -315,10 +338,12 @@ up/down    : move cursor
 left/right : next/prev page
 enter      : confirm
 tab        : navigate
-esc        : quit
+esc        : back
 ?          : help
 ```
 
+- fresh app does not seed tags
+- the above tag options are examples of a non-empty tag list
 - if no exact match for filter, show create as the last option
 
 ```
@@ -359,7 +384,7 @@ left/right : next/prev page
 enter      : confirm
 backspace  : delete last tag
 tab        : navigate
-esc        : quit
+esc        : back
 ?          : help
 ```
 
@@ -419,7 +444,7 @@ type        : enter text
 tab         : navigate
 enter       : confirm
 shift-enter : newline
-esc         : quit
+esc         : back
 ?           : help
 ```
 
@@ -444,7 +469,7 @@ esc         : quit
 ---
 shift-tab : navigate
 enter     : confirm
-esc       : quit
+esc       : back
 ?         : help
 ```
 
@@ -479,7 +504,7 @@ esc       : quit
 ---
 shift-tab   : navigate
 enter       : confirm
-esc         : quit
+esc         : back
 ?           : help
 ```
 
@@ -547,6 +572,64 @@ esc       : back
 ?         : help
 ```
 
+- account balance is the latest added balance
+- if the account has no balances yet, the balance is shown as 0
+- pressing enter on an account opens the account detail page
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create account hsbc-one
+
+# stuf
+
+name        : hsbc-one
+balance     : HKD 0.00
+as of       : never
+on-budget   : true
+tags        : []
+notes       :
+
+/accounts/hsbc-one/
+
+> 1) balances
+  2) edit account
+  3) delete account
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing 1 (balances) opens the account balances page
+- user-facing language should say balance, not snapshot
+- internally, these may still be implemented as balance snapshots
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create account hsbc-one
+
+# stuf
+
+name        : hsbc-one
+balance     : HKD 0.00
+as of       : never
+
+/accounts/hsbc-one/balances/
+
+  date       | balance      | notes
+  (no balances yet)
+
+> 1) add balance
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
 - "no results" mockup
 
 ```
@@ -557,6 +640,15 @@ esc       : back
   (no results)
 
 ```
+
+- deferred for this first slice
+    - editing account
+    - deleting account
+    - adding balance
+    - editing balance
+    - transactions
+    - budgets
+    - preserving dirty create drafts after esc
 
 
 ### monthly budgeting
@@ -586,5 +678,4 @@ esc       : back
 - pressing settings will... simply show path to current config file
 
 ## TUI mockup
-
 
