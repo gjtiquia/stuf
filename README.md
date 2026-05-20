@@ -1,6 +1,7 @@
 # stuf
 
 > ehh... apparently this name is taken... gotta think of a new project name...
+> perhaps kuka, kaku, kunga, ggaa, gungaa (管家)
 
 ```
 - [stu]ward [f]inance
