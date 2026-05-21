@@ -1122,7 +1122,347 @@ esc       : back
     - preserving dirty create drafts after esc
 
 
-### monthly budgeting
+### budgets
+
+- budgets are global envelope-style allocations
+- budgets are not monthly category budgets
+- budgets carry over by default
+- budgets give every dollar a job
+- budgets behave like proxy accounts for on-budget money
+- creating a budget is separate from allocating money to it
+- budgeted = sum of budget balances converted to app currency
+- available = on-budget balance - budgeted
+- available can be negative
+- negative available means money has been spent/allocated beyond current on-budget money
+- budget names are strict slugs
+- budget names are globally unique
+- budgets have exactly one currency
+- budget currency follows account-like rules
+- budget currency is fixed once allocations or linked transactions exist
+- budget list currency display follows account-list rules
+- budget detail does not show a separate currency field because money prefixes imply it
+- every budget belongs to exactly one category
+- budget categories use strict slugs
+- budget categories are globally unique
+- categories are user-created
+- categories can exist without budgets
+- categories are not hidden for v1
+- seed built-in category `uncategorized`
+- `uncategorized` cannot be deleted or renamed for v1
+- newly-created budgets default to `uncategorized`
+- normal categories are shown even when empty
+- `uncategorized` is hidden when empty
+- if category deletion is supported later, budgets in that category move to `uncategorized`
+
+hide lifecycle
+- accounts and budgets can be hidden
+- hidden items are excluded from default lists
+- hidden items preserve history and reports where relevant
+- hidden items can be shown/unhidden from hidden menus
+- deletion is deferred for v1
+
+```
+# stuf
+
+on-budget  : HKD 50,000.00
+budgeted   : HKD  3,000.00
+available  : HKD 47,000.00
+
+/budgets/
+
+> 1) overview
+  2) list
+  3) categories
+  4) hidden
+  5) create
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- budget list is grouped by category
+- budget list follows accounts-list currency display rules
+- `uncategorized` section is omitted when empty
+
+```
+# stuf
+
+/budgets/list/
+
+> filter : (type anything...)
+
+  daily
+  name      | balance       | notes
+> groceries | HKD 1,000.00  | daily food
+
+  travel
+  name       | balance                    | notes
+  japan-trip | HKD 5,000.00 (JPY 100,000) |
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+budget categories
+- category fields are name and notes
+- categories can be created inline from budget create/edit
+- category editing is supported from /budgets/categories/
+- category hiding is deferred
+- category deletion is deferred
+
+```
+# stuf
+
+/budgets/categories/
+
+> 1) list
+  2) create
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/categories/list/
+
+> filter : (type anything...)
+
+  name          | budgets | notes
+> daily         | 2       | recurring day-to-day
+  travel        | 1       | trips
+  future        | 0       | longer-term savings
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- if `uncategorized` has budgets, show it in category lists
+- if `uncategorized` has no budgets, omit it from category lists
+
+```
+  name          | budgets | notes
+> uncategorized | 1       | default category
+  daily         | 2       | recurring day-to-day
+  travel        | 1       | trips
+  future        | 0       | longer-term savings
+```
+
+```
+# stuf
+
+name    : daily
+budgets : 2
+notes   : recurring day-to-day
+
+/budgets/categories/daily/
+
+> 1) budgets
+  2) edit category
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/create/
+
+> 1) name     : (type anything...)
+
+  2) currency : HKD
+
+  3) category : uncategorized
+
+  4) notes    :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- currency cannot be created inline
+- currency options come from the currency table
+- category can be created inline
+- edit budget uses the same fields as create budget
+- edit budget is pre-filled with existing budget data
+- currency is locked if allocations or linked transactions exist
+
+```
+# stuf
+
+name      : groceries
+category  : daily
+allocated : HKD 1,000.00
+spent     : HKD   200.00
+balance   : HKD   800.00
+notes     : daily food
+
+/budgets/groceries/
+
+> 1) allocations
+  2) transactions
+  3) edit budget
+  4) hide budget
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- only show hidden field if true
+
+```
+# stuf
+
+name      : japan-trip
+category  : travel
+allocated : HKD 5,000.00 (JPY 100,000)
+spent     : HKD 5,000.00 (JPY 100,000)
+balance   : HKD     0.00 (JPY       0)
+hidden    : true
+notes     : completed trip
+
+/budgets/japan-trip/
+
+> 1) show budget
+  2) allocations
+  3) transactions
+  4) edit budget
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+allocations
+- allocation is separate from budget creation
+- allocation entries are deltas internally
+- UI supports set total, add money, remove money
+- set total calculates the corresponding delta internally
+- allocation date defaults to today
+- allocation history should show both change and resulting balance
+
+```
+# stuf
+
+/budgets/groceries/allocations/
+
+  date       | change        | balance       | notes
+> 2026-05-01 | HKD 1,000.00  | HKD 1,000.00  | paycheck
+  2026-05-10 | HKD  (200.00) | HKD   800.00  | correction
+
+> 1) allocate
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+current : HKD 800.00
+
+/budgets/groceries/allocations/add/
+
+> 1) action : set total
+
+  2) amount : (type amount...)
+
+  3) date   : 2026-05-21
+
+  4) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- allocation action options are set total, add money, remove money
+
+expense transactions reducing budgets
+- expense transactions can optionally link to a budget
+- linked expenses reduce budget balance
+- linked expenses contribute to spent
+- unlinked expenses do not reduce budgets
+- budget linkage is optional
+- this allows users to track only budgets they care about
+
+future transaction tree behavior
+- parent-child transaction trees can be used for deeper budget drilldown later
+- transaction tree depth can be unlimited
+- budget impact must avoid double counting
+- parent transactions may be unbudgeted while children split across budgets
+
+```
+# stuf
+
+/budgets/hidden/
+
+> filter : (type anything...)
+
+  name       | category | balance       | notes
+> japan-trip | travel   | HKD      0.00 | completed trip
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+future budget goals
+- support default allocation amounts for easy recurring allocations
+- support monthly allocation flows for monthly expenses
+- support monthly allocation flows for yearly expenses
+- support saving goals with target amount and timeframe
+- these should build on top of budget allocations rather than making budgets month-bound
+
+deferred budgets
+- budget deletion
+- category deletion
+- category hiding
+- detailed category management beyond create/edit
+- default allocation amount
+- recurring/monthly allocation flow
+- yearly expense allocation flow
+- saving goals with target amount/timeframe
+- parent-child transaction budget impact algorithm
+- budget report drilldowns
 
 ### transactions
 
