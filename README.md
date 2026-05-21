@@ -1518,13 +1518,17 @@ esc     : back
 
 /budgets/create/
 
-> 1) name     : (type anything...)
+> 1) name                   : (type anything...)
 
-  2) currency : HKD
+  2) currency               : HKD
 
-  3) category : uncategorized
+  3) category               : uncategorized
 
-  4) notes    :
+  4) has default allocation : false
+
+  5) has goal               : false
+
+  6) notes                  :
 
   [confirm]
 
@@ -1539,9 +1543,173 @@ esc     : back
 - currency cannot be created inline
 - currency options come from the currency table
 - category can be created inline
-- edit budget uses the same fields as create budget
+- create budget and edit budget share the same form/input components
+- create budget can configure optional default allocation and saving goal
+- setting default allocation does not create an allocation
+- setting a saving goal does not create an allocation
+- allocation itself is still separate from budget creation
 - edit budget is pre-filled with existing budget data
 - currency is locked if allocations or linked transactions exist
+- edit budget configures default allocation and saving goal for v1
+- has default allocation controls whether default allocation fields are shown
+- turning has default allocation from true to false removes the default allocation on confirm
+- has goal controls whether goal fields are shown
+- turning has goal from true to false removes the goal on confirm
+- has default allocation true requires default allocation monthly
+- has goal true requires goal target amount and goal target month
+- optional dependent fields are hidden when their toggle is false
+- apply default allocation is shown only when has default allocation is true
+
+```
+# stuf
+
+/budgets/create/
+
+  1) name                       : groceries
+
+  2) currency                   : HKD
+
+  3) category                   : daily
+
+> 4) has default allocation     : true
+
+  5) default allocation monthly : HKD 200.00
+
+  6) has goal                   : false
+
+  7) notes                      : supermarket spending
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/create/
+
+  1) name                       : japan-trip
+
+  2) currency                   : JPY
+
+  3) category                   : travel
+
+  4) has default allocation     : true
+
+  5) default allocation monthly : JPY 10,000
+
+> 6) has goal                   : true
+
+  7) goal target amount         : JPY 300,000
+
+  8) goal target month          : 2026-12
+
+  9) notes                      : japan trip
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/groceries/edit/
+
+> 1) name                   : groceries
+
+  2) currency               : HKD
+
+  3) category               : daily
+
+  4) has default allocation : false
+
+  5) has goal               : false
+
+  6) notes                  : supermarket spending
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/groceries/edit/
+
+  1) name                       : groceries
+
+  2) currency                   : HKD
+
+  3) category                   : daily
+
+> 4) has default allocation     : true
+
+  5) default allocation monthly : HKD 200.00
+
+  6) has goal                   : false
+
+  7) notes                      : supermarket spending
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/japan-trip/edit/
+
+  1) name                       : japan-trip
+
+  2) currency                   : JPY
+
+  3) category                   : travel
+
+  4) has default allocation     : true
+
+  5) default allocation monthly : JPY 10,000
+
+> 6) has goal                   : true
+
+  7) goal target amount         : JPY 300,000
+
+  8) goal target month          : 2026-12
+
+  9) notes                      : japan trip
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
 
 ```
 # stuf
@@ -1678,22 +1846,58 @@ esc     : back
 ?       : help
 ```
 
-future budget goals
-- support default allocation amounts for easy recurring allocations
-- support monthly allocation flows for monthly expenses
-- support monthly allocation flows for yearly expenses
-- support saving goals with target amount and timeframe
-- these should build on top of budget allocations rather than making budgets month-bound
+budget planning
+- saving goals and default allocations are separate concepts
+- saving goal = target amount + target month
+- default allocation = suggested monthly amount to allocate to a budget
+- both build on top of budget allocations rather than making budgets month-bound
+- default allocations support easy recurring allocations for monthly expenses
+- default allocations can also support recurring allocation toward yearly expenses and saving goals
+
+default allocations
+- default allocation is optional
+- default allocation is a suggested monthly amount
+- default allocation is in budget currency
+- default allocation does not auto-allocate money for v1
+- default allocation helps future monthly allocation flows
+- apply default allocation = creates an allocation using the configured default allocation amount
+
+```
+# stuf
+
+name      : groceries
+category  : daily
+allocated : HKD 200.00
+spent     : HKD 150.00
+balance   : HKD  50.00
+notes     : supermarket spending
+
+default allocation
+monthly   : HKD 200.00
+
+/budgets/groceries/
+
+> 1) allocations
+  2) transactions
+  3) apply default allocation
+  4) edit budget
+  5) hide budget
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
 
 deferred budgets
 - budget deletion
 - category deletion
 - category hiding
 - detailed category management beyond create/edit
-- default allocation amount
 - recurring/monthly allocation flow
 - yearly expense allocation flow
-- saving goals with target amount/timeframe
+- bulk apply default allocations flow
 - parent-child transaction budget impact algorithm
 - budget report drilldowns
 
@@ -2085,6 +2289,73 @@ deferred reports
 ### yearly budgeting
 
 ### saving goals
+
+- saving goals live under budgets
+- saving goal is optional
+- one active saving goal per budget for v1
+- saving goal currency is budget currency
+- saving goals do not make budgets month-bound
+- saving goals recommend allocations but do not auto-allocate money
+- saving goals are separate from default allocations
+- saving goal = where am i trying to get to?
+- default allocation = what do i normally put in each month?
+- apply default allocation = create an allocation using the configured default allocation amount
+- saving goals are configured through edit budget for v1
+- there is no separate goal action/page for v1
+- has goal toggles goal fields in edit budget
+- turning has goal from true to false removes the goal on confirm
+- target amount and target month are required
+- target month uses YYYY-MM
+
+goal formulas
+- remaining = target amount - budget balance
+- months left = number of months through target month
+- monthly needed = remaining / months left
+
+```
+# stuf
+
+name      : japan-trip
+category  : travel
+allocated : HKD 5,000.00 (JPY 100,000)
+spent     : HKD     0.00 (JPY       0)
+balance   : HKD 5,000.00 (JPY 100,000)
+notes     : japan trip
+
+goal
+target    : JPY 300,000
+by        : 2026-12
+remaining : JPY 200,000
+needed    : JPY  10,527 / month
+
+default allocation
+monthly   : JPY 10,000
+
+/budgets/japan-trip/
+
+> 1) allocations
+  2) transactions
+  3) apply default allocation
+  4) edit budget
+  5) hide budget
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- goal fields are shown on budget detail when has goal is true
+- goal fields are hidden on budget detail when has goal is false
+- edit budget is the create/edit/remove flow for saving goals in v1
+
+deferred saving goals
+- goals overview
+- multiple active goals per budget
+- maintain-balance goals
+- automatic recurring allocations
+- goal report drilldowns
 
 ### investment
 
