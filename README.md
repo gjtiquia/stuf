@@ -104,6 +104,16 @@ components
     - keyboard shortcuts can change depending on url
     - components can show depending on url
 
+scoped shortcuts
+- global actions are canonical
+- scoped shortcuts should reuse canonical action ids/forms
+- scoped routes pass context/defaults into canonical actions
+- menus should render from action ids so labels/order/key numbers do not drift
+- scoped list views are canonical list views with filters applied
+- scoped create flows are canonical create forms with pre-filled fields
+- pre-filled fields remain editable unless explicitly locked
+- labels can be context-aware, but label logic should live with the canonical action
+
 session action history / undo support
 - everytime a mutation occurs (create account / edit something), we log it above
 - this way, when Ctrl-C and exit, its easily searchable (eg. via tmux) previous actions
