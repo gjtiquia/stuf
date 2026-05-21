@@ -10,6 +10,15 @@
 
 a finance tool
 
+app promise
+- balance snapshots anchor the truth
+- detailed records can be incomplete
+- users should be able to go fast without fear
+- undo/history makes mutations safe
+- fresh balances can re-anchor messy records
+- backups and sqlite access prevent lock-in
+- the app should feel guilt-free, not like bookkeeping homework
+
 ## the idea
 
 - most finances are "bottom up"
@@ -130,6 +139,15 @@ session action history / undo support
 backups
 - its really just all about copying the sqlite
 - for now, for simplicity, we no need WAL, cuz its just one user, this also keeps backups simple, can scale later on in the future if needed
+
+database startup
+- active database file is db.sqlite in current working directory for v1
+- if db.sqlite does not exist, create it and run migrations
+- if db.sqlite exists, verify it is sqlite
+- verify it is a stuf database using app metadata/migration table
+- run pending migrations every startup
+- after migrations, validate required schema
+- if validation fails, stop with clear error
 
 ## user journey
 
@@ -2591,10 +2609,87 @@ deferred owed
 - but they should also be easily able to check each individual
 - probably need to make sure tags + queries can fit this use case...? or that the accounts overview tooling should support some sort of filtering (which is querying and tags)
 
-### customization
+### settings
 
-- .jsonc file
-- in development i will also use .jsonc as source of truth for defaults, so that the parsing is always verified, and that will be embeded in go binary
-- pressing settings will... simply show path to current config file
+- settings are edited through config file for v1
+- app currency is the only meaningful setting for now
+- date format is fixed ISO and not configurable
+- config path is not configurable from the app
+- local config in current working directory takes priority if present
+- otherwise use global config
+- if neither exists, create global config
+- config files should be safe to delete and regenerate
+- in development, use .jsonc as source of truth for defaults, so parsing is always verified and defaults can be embedded in the go binary
+- pressing settings shows active config path and app currency
+
+```
+# stuf
+
+/settings/
+
+config file : /Users/gjtiquia/.config/stuf/config.jsonc
+app currency: HKD
+
+edit settings by editing the config file directly
+
+---
+esc : back
+?   : help
+```
+
+### backup
+
+- active database file is db.sqlite in current working directory for v1
+- backup creates timestamped copy of db.sqlite
+- backup filename format is db.YYYY-MM-DD-HHMM.sqlite
+- no WAL for v1, keeping copy-based backup simple
+- restore is manual for v1
+- to restore, close stuf and replace db.sqlite with backup file renamed to db.sqlite
+- backup does not write undo history
+- after backup action, render latest created backup path
+
+```
+# stuf
+
+/backup/
+
+database    : /Users/gjtiquia/Documents/self/stuf/db.sqlite
+last backup : none
+
+> 1) create backup
+
+restore:
+close stuf, replace db.sqlite with your backup, then reopen stuf
+
+---
+enter : confirm
+esc   : back
+?     : help
+```
+
+```
+# stuf
+
+/backup/
+
+database    : /Users/gjtiquia/Documents/self/stuf/db.sqlite
+last backup : /Users/gjtiquia/Documents/self/stuf/db.2026-05-21-1730.sqlite
+
+> 1) create backup
+
+restore:
+close stuf, replace db.sqlite with your backup, then reopen stuf
+
+---
+enter : confirm
+esc   : back
+?     : help
+```
+
+### export
+
+- export is deferred
+- sqlite file is accessible directly for now
+- future exports may support csv/json/sqlite
 
 ## TUI mockup
