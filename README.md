@@ -340,7 +340,8 @@ ppl owe you : HKD    456.00
 
 > 1) overview
   2) list
-  3) create
+  3) hidden
+  4) create
 
 ---
 up/down : navigate
@@ -785,7 +786,9 @@ notes       :
 /accounts/hsbc-one/
 
 > 1) balances
-  2) edit account
+  2) transactions
+  3) edit account
+  4) hide account
 
 ---
 up/down : navigate
@@ -798,7 +801,15 @@ esc     : back
 - accidental newly-created accounts can be undone with ctrl-z if still the latest history action
 - existing accounts should be edited instead of deleted for v1
 - pressing 1 (balances) opens the account balances page
-- pressing 2 (edit account) opens the edit account flow
+- pressing 2 (transactions) opens an automatically filtered account transactions list
+- pressing 3 (edit account) opens the edit account flow
+- account transactions is an automatically filtered shortcut to global transactions
+- account-scoped transaction creation can pre-fill account later
+- full account-scoped transaction mockups are deferred
+- only show hidden field if true
+- hidden accounts are excluded from the default account list
+- hidden accounts preserve balances, transactions, history, and reports where relevant
+- hidden accounts can be shown/unhidden from hidden account detail
 - user-facing language should say balance, not snapshot
 - internally, these may still be implemented as balance snapshots
 
@@ -890,7 +901,9 @@ notes       :
 /accounts/hsbc-main/
 
 > 1) balances
-  2) edit account
+  2) transactions
+  3) edit account
+  4) hide account
 
 ---
 up/down : navigate
@@ -1126,6 +1139,50 @@ esc       : back
 
 ```
 
+- hidden accounts mockup
+
+```
+# stuf
+
+/accounts/hidden/
+
+> filter : (type anything...)
+
+  name        | balance      | notes
+> old-account | HKD    0.00 | closed account
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+name      : old-account
+balance   : HKD 0.00
+as of     : 2026-05-21
+on-budget : true
+hidden    : true
+tags      : []
+notes     : closed account
+
+/accounts/old-account/
+
+> 1) show account
+  2) balances
+  3) transactions
+  4) edit account
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
 - deferred for this first slice
     - deleting account
     - budgets
@@ -1282,10 +1339,86 @@ notes   : recurring day-to-day
 /budgets/categories/daily/
 
 > 1) budgets
-  2) edit category
+  2) create budget in category
+  3) edit category
 
 ---
 up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- global budget creation is canonical
+- category-scoped budget creation is a convenience shortcut
+- category-scoped forms pre-fill category
+- pre-filled category remains editable
+- both flows write to the same budget table
+
+```
+# stuf
+
+/budgets/categories/create/
+
+> 1) name  : (type anything...)
+
+  2) notes :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/categories/daily/create-budget/
+
+> 1) name     : (type anything...)
+
+  2) currency : HKD
+
+  3) category : daily
+
+  4) notes    :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- edit category is pre-filled with existing category data
+- category name is required
+- category name must remain unique
+- duplicate category name is rejected
+- keeping the same name while editing is allowed
+- after edit success, goes to the updated category detail page
+- `uncategorized` cannot be edited
+
+```
+# stuf
+
+/budgets/categories/daily/edit/
+
+> 1) name  : daily
+
+  2) notes : recurring day-to-day
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
 enter   : confirm
 esc     : back
 ?       : help
@@ -1943,6 +2076,15 @@ esc     : back
 
 - person names are strict slugs
 - people can represent humans or org-like entities
+- global owed item creation is canonical
+- person-scoped owed item creation is a convenience shortcut
+- person-scoped forms pre-fill person
+- pre-filled person remains editable
+- both flows write to the same owed item table
+- people have immutable internal party ids
+- person slug is user-facing and can change
+- owed items link to internal party id
+- renaming person updates related owed item displays
 
 ```
 # stuf
@@ -1958,6 +2100,182 @@ enter   : confirm
 esc     : back
 ?       : help
 ```
+
+- pressing enter on a person opens person detail
+
+```
+# stuf
+
+name     : alex
+you owe  : HKD 500.00
+owes you : HKD 300.00
+notes    : roommate
+
+/owed/people/alex/
+
+> 1) owed items
+  2) settled
+  3) add money you owe this person
+  4) add money this person owes you
+  5) edit person
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing 1 (owed items) opens a person-scoped owed item list
+- pressing 2 (settled) opens a person-scoped settled owed item list
+
+```
+# stuf
+
+name     : alex
+you owe  : HKD 500.00
+owes you : HKD 300.00
+
+/owed/people/alex/owed/
+
+> filter : (type anything...)
+
+  you owe
+  remaining    | notes
+> HKD 500.00   | netflix yearly
+
+  owes you
+  remaining    | notes
+  HKD 300.00   | dinner split
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+name     : alex
+you owe  : HKD 0.00
+owes you : HKD 0.00
+
+/owed/people/alex/settled/
+
+> filter : (type anything...)
+
+  settled
+  direction   | amount      | notes
+> you owe ppl | HKD 500.00 | netflix yearly
+  owes you    | HKD 300.00 | dinner split
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- person-scoped add flows use the same forms as global add flows
+- person field is pre-filled but still editable
+
+```
+# stuf
+
+/owed/people/alex/add-you-owe/
+
+> 1) date   : 2026-05-21
+
+  2) person : alex
+
+  3) amount : (type amount or =formula...)
+
+  4) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/people/alex/add-owes-you/
+
+> 1) date   : 2026-05-21
+
+  2) person : alex
+
+  3) amount : (type amount or =formula...)
+
+  4) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- edit person is pre-filled with existing person data
+- person name is required
+- person name must remain unique
+- duplicate person name is rejected
+- keeping the same name while editing is allowed
+- after edit success, goes to the updated person detail page
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:40 edit /owed/people/alex-wong
+
+# stuf
+
+/owed/people/alex/edit/
+
+> 1) name  : alex
+
+  2) notes : roommate
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/people/create/
+
+> 1) name  : (type anything...)
+
+  2) notes :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after person create success, goes to the person detail page
 
 ```
 # stuf
@@ -2054,6 +2372,35 @@ esc     : back
 ```
 
 - only show formula if amount was entered as formula
+- edit owed item reuses the add owed item form/input components
+- edit owed item is pre-filled with existing owed item data
+- person remains editable
+- editing formula recomputes amount
+- if amount is manually edited, formula is cleared
+- after edit success, goes to owed item detail
+
+```
+# stuf
+
+/owed/owed-000001/edit/
+
+> 1) date   : 2026-05-21
+
+  2) person : alex
+
+  3) amount : =1000/2
+
+  4) notes  : netflix yearly
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
 
 ```
 # stuf
@@ -2073,6 +2420,9 @@ esc     : back
 ```
 
 - settlement add defaults amount to remaining
+- settlements have refs like set-000001
+- settlement refs are shown in URL/history, not detail fields
+- pressing enter on a settlement opens settlement detail
 
 ```
 # stuf
@@ -2096,6 +2446,51 @@ enter   : confirm
 esc     : back
 ?       : help
 ```
+
+```
+# stuf
+
+date   : 2026-05-21
+amount : HKD 200.00
+notes  : paid by fps
+
+/owed/owed-000001/settlements/set-000001/
+
+> 1) edit settlement
+  2) delete settlement
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/owed-000001/settlements/set-000001/edit/
+
+> 1) date   : 2026-05-21
+
+  2) amount : HKD 200.00
+
+  3) notes  : paid by fps
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- delete settlement happens immediately
+- no confirmation screen for delete settlement in v1
+- deleting settlement increases owed remaining again
+- after edit/delete success, returns to settlements list
 
 deferred owed
 - related transaction UX
