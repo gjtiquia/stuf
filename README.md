@@ -71,6 +71,16 @@ basic top down flow
 - lump sum (eg. credit card payment) -> cash flow out sources, percentage of expense, tagging
 - transactions -> tagging and deeper analysis; should link to lump sum to prevent "double counting"
 
+lazy reconciliation
+- balance snapshots anchor everything
+- detailed records can be incomplete without ruining macro analysis
+- transactions, budgets, owed items, and settlements explain or plan around balances
+- transactions do not update balances
+- settlements do not update balances
+- budget allocations do not update balances
+- if things get messy, enter fresh balances and continue
+- the app should feel guilt-free, not like bookkeeping homework
+
 ## the implementation 
 
 stack
@@ -1131,9 +1141,10 @@ esc       : back
 - budgets behave like proxy accounts for on-budget money
 - creating a budget is separate from allocating money to it
 - budgeted = sum of budget balances converted to app currency
-- available = on-budget balance - budgeted
+- available = on-budget balance - budgeted - open you-owe remaining
 - available can be negative
-- negative available means money has been spent/allocated beyond current on-budget money
+- negative available means money has been spent/allocated/owed beyond current on-budget money
+- money ppl owe you does not increase available until it appears in on-budget balances
 - budget names are strict slugs
 - budget names are globally unique
 - budgets have exactly one currency
@@ -1858,9 +1869,241 @@ deferred reports
 
 ### owed money tracking
 
-- likely does not need a due date
-- think about it in terms of, either someone help paid a sum, or i help paid a sum (transaction + ppl owe me)
-- then need a way to be able to see my "expected totals" if all two-way debts are paid (better check how business/industries handles these...?)
+- product language uses people/person/ppl
+- internal data model can use party
+- owed items track obligations and receivables
+- owed items are independent records
+- money you owe ppl reduces available while open
+- money ppl owe you does not increase available while open
+- money ppl owe you only increases available once it appears in on-budget balances
+- settlements reduce owed remaining
+- settlements do not update balances
+- settlement records are independent from transactions for v1
+- related transaction links are deferred/context only
+- settled items are hidden from open lists, not deleted
+- status is inferred from remaining amount
+
+owed amount formulas
+- owed amount can be a plain amount or formula
+- formulas start with =
+- v1 formulas support numbers, decimals, +, -, *, /, parentheses
+- no percentages, variables, functions, or cell refs for v1
+- if formula exists, computed amount is used for totals
+- formula is self-documenting input, not separate notes
+
+settlements
+- settlements support partial settlement
+- settlement amount reduces remaining
+- settlement fields are date, amount, notes for v1
+- settlement date defaults to today
+- settlements do not have tags for v1
+
+```
+# stuf
+
+you owe ppl : HKD   500.00
+ppl owe you : HKD   300.00
+
+/owed/
+
+> 1) list
+  2) people
+  3) add money you owe ppl
+  4) add money ppl owe you
+  5) settled
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/list/
+
+> filter : (type anything...)
+
+  you owe ppl
+  person | remaining    | notes
+> alex   | HKD   500.00 | netflix yearly
+
+  ppl owe you
+  person | remaining    | notes
+  ben    | HKD   300.00 | dinner split
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- person names are strict slugs
+- people can represent humans or org-like entities
+
+```
+# stuf
+
+/owed/people/
+
+> 1) list
+  2) create
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/people/list/
+
+> filter : (type anything...)
+
+  name           | notes
+> alex           | roommate
+  netflix-family | shared subscription
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/add-you-owe/
+
+> 1) date   : 2026-05-21
+
+  2) person : alex
+
+  3) amount : (type amount or =formula...)
+
+  4) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/add-ppl-owe-you/
+
+> 1) date   : 2026-05-21
+
+  2) person : ben
+
+  3) amount : (type amount or =formula...)
+
+  4) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after confirm success, goes to /owed/list/ automatically
+- history uses the owed ref path
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:35 add /owed/owed-000001
+
+# stuf
+
+direction : you owe ppl
+person    : alex
+amount    : HKD 500.00
+settled   : HKD   0.00
+remaining : HKD 500.00
+formula   : =1000/2
+notes     : netflix yearly
+
+/owed/owed-000001/
+
+> 1) settlements
+  2) add settlement
+  3) edit owed item
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- only show formula if amount was entered as formula
+
+```
+# stuf
+
+/owed/owed-000001/settlements/
+
+  date       | amount       | notes
+> 2026-05-21 | HKD 200.00  | paid by fps
+
+> 1) add settlement
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- settlement add defaults amount to remaining
+
+```
+# stuf
+
+remaining : HKD 300.00
+
+/owed/owed-000001/settlements/add/
+
+> 1) date   : 2026-05-21
+
+  2) amount : HKD 300.00
+
+  3) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+deferred owed
+- related transaction UX
+- transaction-to-settlement shortcuts
+- settlement-to-transaction shortcuts
+- settlement tags
+- report integration
+- recursive transaction/owed drilldown
 
 ### shared finance tracking
 
