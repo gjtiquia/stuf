@@ -804,14 +804,75 @@ esc     : back
 - pressing 2 (transactions) opens an automatically filtered account transactions list
 - pressing 3 (edit account) opens the edit account flow
 - account transactions is an automatically filtered shortcut to global transactions
-- account-scoped transaction creation can pre-fill account later
-- full account-scoped transaction mockups are deferred
+- account-scoped transaction list is the global transaction list filtered by account
+- account-scoped transaction creation reuses global transaction forms
+- account-scoped transaction forms pre-fill account
+- pre-filled account remains editable
 - only show hidden field if true
 - hidden accounts are excluded from the default account list
 - hidden accounts preserve balances, transactions, history, and reports where relevant
 - hidden accounts can be shown/unhidden from hidden account detail
 - user-facing language should say balance, not snapshot
 - internally, these may still be implemented as balance snapshots
+
+```
+# stuf
+
+/accounts/hsbc-one/transactions/
+
+> 1) list
+  2) add income
+  3) add expense
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/accounts/hsbc-one/transactions/list/
+
+> filter : (type anything...)
+
+  date       | type    | amount         | notes
+> 2026-05-15 | income  | HKD 20,000.00  | salary
+  2026-05-16 | expense | HKD    200.00  | groceries
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/accounts/hsbc-one/transactions/add-expense/
+
+> 1) date    : 2026-05-21
+
+  2) amount  : (type amount...)
+
+  3) account : hsbc-one
+
+  4) tags    : []
+
+  5) notes   :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
 
 - edit account reuses the create account form/input components
 - edit account is pre-filled with existing account data
@@ -1817,7 +1878,6 @@ transaction validation
 
 deferred transactions
 - transfer transactions
-- account-scoped transaction mockups
 - report-to-input shortcuts
 - report income/expense drilldown
 - recursive transaction links / parent-child transaction relationships
@@ -2023,6 +2083,11 @@ owed amount formulas
 - no percentages, variables, functions, or cell refs for v1
 - if formula exists, computed amount is used for totals
 - formula is self-documenting input, not separate notes
+- formula fields show raw input while focused
+- formula fields show computed amount when not focused
+- if amount was entered with formula, show formula in parentheses after computed amount when not focused
+- if amount was entered manually, show only formatted amount when not focused
+- invalid formulas show a recoverable validation error
 
 settlements
 - settlements support partial settlement
@@ -2186,11 +2251,11 @@ esc     : back
 
 /owed/people/alex/add-you-owe/
 
-> 1) date   : 2026-05-21
+  1) date   : 2026-05-21
 
   2) person : alex
 
-  3) amount : (type amount or =formula...)
+> 3) amount : =1000/2
 
   4) notes  :
 
@@ -2202,6 +2267,16 @@ tab     : navigate
 enter   : confirm
 esc     : back
 ?       : help
+```
+
+```
+  1) date   : 2026-05-21
+
+  2) person : alex
+
+  3) amount : HKD 500.00 (=1000/2)
+
+> 4) notes  : netflix yearly
 ```
 
 ```
