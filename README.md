@@ -90,6 +90,20 @@ lazy reconciliation
 - if things get messy, enter fresh balances and continue
 - the app should feel guilt-free, not like bookkeeping homework
 
+account / transaction analogy
+- accounts are balance anchors
+- transactions explain account balance movement
+- budgets behave like proxy accounts for on-budget money
+- allocations and budget-linked transactions explain budget movement
+- owed items behave like proxy accounts for money between people
+- settlements explain owed item movement
+- account currency is the balance anchor currency
+- budget currency is the proxy account anchor currency
+- owed item currency is the proxy account anchor currency
+- transaction currency is the event currency
+- settlement currency is the payment event currency
+- child transactions and settlements convert into their parent/proxy anchor currency for remaining/balance math
+
 ## the implementation 
 
 stack
@@ -319,7 +333,12 @@ v1 edge rules before schema
 - different owed items can use different currencies
 - owed item currency defaults to app currency
 - dashboard owed totals convert open owed remaining amounts to app currency
-- settlements use owed item currency for v1
+- each settlement has exactly one currency
+- settlement currency defaults to owed item currency
+- settlement currency is editable in create/edit forms
+- settlement amount is entered in settlement currency
+- settlement amount converts into owed item currency to reduce remaining
+- missing settlement conversion blocks confirm
 - if no config exists, try location-based app currency
 - if location detection fails, use USD
 - if USD fallback is used, warn user that app currency defaulted to USD and can be changed in config
@@ -346,9 +365,10 @@ ppl owe you : HKD 0.00
 > 1) accounts
   2) transactions
   3) budgets
-  4) reports
-  5) settings
-  6) backup
+  4) owed
+  5) reports
+  6) settings
+  7) backup
 
 ---
 up/down : navigate
@@ -359,7 +379,7 @@ esc     : exit app
 
 - keyboard shortcuts shown are for basic navigation
     - j/k, tab/shift-tab can also navigate
-    - 1/2/3/4/5/6 hotkeys
+    - 1/2/3/4/5/6/7 hotkeys
     - number hotkeys only work in menu screens, not forms
 
 - at /, esc opens exit confirmation
@@ -764,7 +784,7 @@ history (ctrl-z to undo)
 
 name        : hsbc-one
 balance     : HKD 0.00
-as of       : never
+as of       : (no balance entered yet)
 on-budget   : true
 notes       :
 
@@ -939,7 +959,7 @@ history (ctrl-z to undo)
 
 name        : hsbc-main
 balance     : HKD 0.00
-as of       : never
+as of       : (no balance entered yet)
 on-budget   : true
 notes       :
 
@@ -965,7 +985,7 @@ history (ctrl-z to undo)
 
 name        : hsbc-one
 balance     : HKD 0.00
-as of       : never
+as of       : (no balance entered yet)
 
 /accounts/hsbc-one/balances/
 
@@ -1000,7 +1020,7 @@ history (ctrl-z to undo)
 
 name        : hsbc-one
 balance     : HKD 0.00
-as of       : never
+as of       : (no balance entered yet)
 
 /accounts/hsbc-one/balances/add/
 
@@ -1128,7 +1148,7 @@ history (ctrl-z to undo)
 
 name        : hsbc-one
 balance     : HKD 0.00
-as of       : never
+as of       : (no balance entered yet)
 
 /accounts/hsbc-one/balances/
 
@@ -2099,9 +2119,10 @@ esc     : back
 
 > filter : (type anything...)
 
-  date       | type    | amount         | account  | notes
-> 2026-05-15 | income  | HKD 20,000.00  | hsbc-one | salary
-  2026-05-16 | expense | HKD    200.00  | hsbc-one | groceries
+  date       | type    | amount                   | account  | notes
+> 2026-05-15 | income  | HKD 20,000.00            | hsbc-one | salary
+  2026-04-28 | expense | JPY 12,000 (HKD 620.00) | hsbc-one | ramen in tokyo
+  2026-05-16 | expense | HKD    200.00            | hsbc-one | groceries
 
 ---
 up/down : navigate
@@ -2114,6 +2135,9 @@ esc     : back
 - add income and add expense use the same transaction form/input components
 - type is implied by the add flow
 - amount is entered as a positive value
+- transaction lists show original transaction amount first
+- if transaction currency differs from app currency, show app-currency conversion in parentheses
+- if conversion is missing, show original currency and a warning marker instead of silently converting
 
 ```
 # stuf
@@ -2519,6 +2543,9 @@ deferred transactions
 - dynamic values belong in summaries/tables, not option labels
 - money decimal points should align
 - use income/expenses
+- reports only include effective rows whose transaction date is inside the coverage period
+- unexplained expenses are coverage-local
+- no explained-outside-period bucket for v1
 - income comes from income transactions
 - before income is entered, income equals growth and is marked `(assumed)`
 - before income is entered, expenses are 0
@@ -2535,6 +2562,7 @@ effective transaction rows
 - parent remaining row counts on the parent transaction date
 - child rows can appear in a different report period from their parent
 - coverage period determines inclusion, not only calendar month
+- unexplained expenses only compare derived expenses to explained expenses inside the same coverage period
 - parent remaining rows are virtual/read-only
 - parent remaining rows have no transaction ref
 - parent remaining rows keep the parent date/account/type/tags/notes
@@ -2916,7 +2944,12 @@ deferred saving goals
 - money ppl owe you only increases available once it appears in on-budget balances
 - settlements reduce owed remaining
 - settlements do not update balances
-- settlements use owed item currency for v1
+- each settlement has exactly one currency
+- settlement currency defaults to owed item currency
+- settlement currency is editable in create/edit forms
+- settlement amount is entered in settlement currency
+- settlement amount converts into owed item currency to reduce remaining
+- if settlement currency differs from owed item currency and conversion is missing, confirm is blocked
 - settlement records are independent from transactions for v1
 - related transaction links are deferred/context only
 - settled items are hidden from open lists, not deleted
@@ -2938,7 +2971,7 @@ owed amount formulas
 settlements
 - settlements support partial settlement
 - settlement amount reduces remaining
-- settlement fields are date, amount, notes for v1
+- settlement fields are date, amount, currency, notes for v1
 - settlement date defaults to today
 - settlements do not have tags for v1
 
@@ -3093,7 +3126,9 @@ esc     : back
 - person field is pre-filled but still editable
 - owed item currency defaults to app currency
 - owed item currency is editable in create/edit forms
-- settlements use owed item currency for v1
+- settlement currency defaults to owed item currency
+- settlement currency is editable in create/edit forms
+- settlement amount converts into owed item currency to reduce remaining
 
 ```
 # stuf
@@ -3357,6 +3392,8 @@ esc     : back
 ```
 
 - settlement add defaults amount to remaining
+- settlement currency defaults to owed item currency
+- settlement amount converts into owed item currency to reduce remaining
 - settlements have refs like set-000001
 - settlement refs are shown in URL/history, not detail fields
 - pressing enter on a settlement opens settlement detail
@@ -3372,7 +3409,9 @@ remaining : HKD 300.00
 
   2) amount : HKD 300.00
 
-  3) notes  :
+  3) currency : HKD
+
+  4) notes  :
 
   [confirm]
 
@@ -3389,6 +3428,7 @@ esc     : back
 
 date   : 2026-05-21
 amount : HKD 200.00
+currency : HKD
 notes  : paid by fps
 
 /owed/owed-000001/settlements/set-000001/
@@ -3412,7 +3452,9 @@ esc     : back
 
   2) amount : HKD 200.00
 
-  3) notes  : paid by fps
+  3) currency : HKD
+
+  4) notes  : paid by fps
 
   [confirm]
 
