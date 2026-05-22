@@ -167,14 +167,12 @@ journey
     - if none, 
         - create global config file
         - add comment which links to github repo for config docs
-        - init currency based on current location (uh if cant... prompt user?)
+        - try to init app currency based on current location
+        - if location detection fails, default app currency to USD and warn user
     - if have, 
         - validate
-        - throw error if invalid and irrecoverable
-            - eg. no currency will attempt to init currency
-            - if currency is not in currency db... (used for unit conversion...) then throw
-        - will suggest user to check, or delete
-            - implies that, config files should be safe to delete, always
+        - invalid config stops app startup with a clear error
+        - recovery path is to fix or delete the config file, then relaunch
 - user should be greeted with a dashboard which then shows different information, and action choices
 - the dashboard information should hint at what the users need to input, and users can easily see with the actions at the bottom
 - below is a quick draft
@@ -231,21 +229,27 @@ money storage
 - eg. BTC 0.12345678 -> amount = 12345678, scale = 8
 
 currency conversion
+- account currency = balance currency
+- transaction currency = event/explanation currency
+- app currency = dashboard/report display currency
+- parent transaction currency = explanation anchor currency for child totals
 - common currencies are seeded from app data
 - conversion rates are seeded from app data relative to USD
 - seeded currency data lives in the repo
+- seeded currency data is embedded in the app binary
 - updating the app can update seeded conversion rates
 - app startup seeds missing currency data into db.sqlite
 - no runtime network fetch is required for currency conversion in v1
 - app uses the latest available seeded/cached rate
 - missing conversion data should show original currency and omit converted totals with a clear warning
+- historical conversion snapshots are deferred for v1
 - manual conversion rate override is deferred for v1
 
 cross-cutting data rules
 - notes are plain text
 - notes can be multiline
 - notes have no markdown semantics for v1
-- tags are global
+- tags are transaction-only for v1
 - tag names are strict slugs
 - tags have immutable internal ids
 - tag names are globally unique
@@ -259,8 +263,8 @@ cross-cutting data rules
 - transaction tree depth is unlimited conceptually
 - transaction trees explain larger transactions, but do not update balances
 - reports and budget spent must avoid double counting transaction trees
-- if a transaction has children, reports count child transactions plus parent remainder, not parent plus children
-- parent amount = children total + remainder
+- if a transaction has children, reports count child transactions plus parent remaining, not parent plus children
+- parent amount = converted children total + remaining
 - child transaction forms default to parent date/account when useful, but defaults stay editable
 - transaction budget link is nullable in the data model
 - v1 UI only allows budget links for expense transactions
@@ -275,6 +279,52 @@ cross-cutting data rules
 - container/master records are not deleted for v1
 - accounts and budgets can be hidden
 - categories, people, and tags are editable but not hidden/deleted for v1
+
+v1 edge rules before schema
+- account currency = balance currency
+- transaction currency = event/explanation currency
+- app currency = dashboard/report display currency
+- parent transaction currency = explanation anchor currency for child totals
+- each transaction has exactly one currency
+- transaction currency defaults to selected account currency
+- transaction currency is editable in create/edit forms
+- amount is entered in transaction currency
+- transaction currency can differ from account currency
+- default currency/rate data lives in the repo and is embedded in the app binary
+- app startup seeds missing currency/rate data into db.sqlite for fast local lookup
+- latest seeded/cached rates are used for conversion in v1
+- historical conversion snapshots are deferred
+- manual conversion rate override is deferred
+- parent and child transactions can have different currencies
+- child amounts convert into parent currency for explained/remaining math
+- changing parent transaction currency does not change child transaction currencies
+- changing parent transaction currency recalculates explained/remaining with latest rates
+- parent remaining is calculated across all children regardless of report period
+- if conversion is missing, show the original currency and omit affected rows from converted totals with a warning
+- effective report rows count in the coverage period containing their own transaction date
+- parent remaining row counts on the parent transaction date
+- child rows can appear in a different report period from their parent
+- coverage period determines inclusion, not only calendar month
+- mixed-type children are blocked in v1 UI
+- expense parents can only have expense children in v1 UI
+- income parents can only have income children in v1 UI
+- deleting a transaction with children is blocked in v1
+- user must delete children before deleting the parent transaction
+- tags are transaction-only for v1
+- notes are the general breadcrumb field across records
+- tags are primarily for transaction filtering/querying
+- use transaction_tags join table for v1
+- future taggable records can add their own join tables
+- each owed item has exactly one currency
+- different owed items can use different currencies
+- owed item currency defaults to app currency
+- dashboard owed totals convert open owed remaining amounts to app currency
+- settlements use owed item currency for v1
+- if no config exists, try location-based app currency
+- if location detection fails, use USD
+- if USD fallback is used, warn user that app currency defaulted to USD and can be changed in config
+- invalid config stops app startup with a clear error
+- config recovery path is to fix or delete the config file, then relaunch
 
 ```
 # stuf
@@ -448,9 +498,7 @@ esc     : back
 
   3) on-budget : true
 
-  4) tags      : []
-
-  5) notes     :
+  4) notes     :
 
   [confirm]
 
@@ -484,9 +532,7 @@ esc     : back
 
   3) on-budget : true
 
-  4) tags      : []
-
-  5) notes     :
+  4) notes     :
 
   [confirm]
 
@@ -518,9 +564,7 @@ esc        : back
      > true
        false
 
-  4) tags      : []
-
-  5) notes     :
+  4) notes     :
 
   [confirm]
 
@@ -530,133 +574,6 @@ tab     : navigate
 enter   : confirm
 esc     : back
 ?       : help
-```
-
-- for tags input (this will be a select input component, options: multi-select = true, can-filter = true, can-create = true, default = [], show pagination = true)
-- can type anything to filter, fuzzy search
-- can move arrows up and down which moves the caret/cursor, but not j/k cuz need to type
-- enter to add tag, enter does NOT go to next field in this case
-- tags sort order... alphabetical by default, can add to config options (eg. last created / last used / most used)
-- show pagination at the bottom (8 max cuz... keep it single digit, starts with 1, 9 is ugly, 8 is nicer as a power of two aesthetically)
-- tags no need numbering cuz... typing any number should be going into the filter text input anyways, numbers are just unnecessary noise
-
-```
-# stuf
-
-/accounts/create/
-
-  1) name      : hsbc-one
-
-  2) currency  : HKD
-
-  3) on-budget : true
-
-> 4) tags      : []
-
-   > filter    : (type anything...)
-
-     > app
-       apple
-       bank
-       cad
-       canada
-       credit-card
-       debit-card
-       hkd
-
-     [08/12]
-
-  5) notes     :
-
-  [confirm]
-
----
-type       : filter
-up/down    : move cursor
-left/right : next/prev page
-enter      : confirm
-tab        : navigate
-esc        : back
-?          : help
-```
-
-- fresh app does not seed tags
-- the above tag options are examples of a non-empty tag list
-- if no exact match for filter, show create as the last option
-- inline-created tags use the typed slug and empty notes
-- edit tag later to add breadcrumb notes
-
-```
-> 4) tags      : []
-
-   > filter    : ap
-
-     > app
-       apple
-       (create new "ap")
-
-     [02/02]
-```
-
-- add asterik for new tags *
-- if have at least one tag, and nothing is typed in the filter, backspace deletes the last tag (keyboard shortcut only shows backspace if the conditions are met)
-
-```
-> 4) tags      : [ap*]
-
-   > filter    : (type anything...)
-
-     > app
-       apple
-       bank
-       cad
-       canada
-       credit-card
-       debit-card
-       hkd
-
-     [08/12]
-
----
-type       : filter
-up/down    : move cursor
-left/right : next/prev page
-enter      : confirm
-backspace  : delete last tag
-tab        : navigate
-esc        : back
-?          : help
-```
-
-```
-> 4) tags      : [ap*]
-
-   > filter    : app
-
-     > app
-       apple
-
-     [02/02]
-```
-
-- tags already added should not show up in the tag list
-- note pagination should also update according to the tag list
-
-```
-> 4) tags      : [ap*, app]
-
-   > filter    : (type anything...)
-
-     > apple
-       bank
-       cad
-       canada
-       credit-card
-       debit-card
-       hkd
-       hong-kong
-
-     [08/11]
 ```
 
 - notes is also a text input, like name
@@ -675,9 +592,7 @@ esc        : back
 
   3) on-budget : true
 
-  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
-
-> 5) notes     : (type anything...)
+> 4) notes     : (type anything...)
 
   [confirm]
 
@@ -704,9 +619,7 @@ esc         : back
 
   3) on-budget : true
 
-  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
-
-  5) notes     :
+  4) notes     :
 
 > [confirm]
 
@@ -739,9 +652,7 @@ esc       : back
 
   3) on-budget : true
 
-  4) tags      : [ap*, app, bank, debit-card, hkd, hong-kong]
-
-  5) notes     :
+  4) notes     :
 
 > [confirm]
 
@@ -855,7 +766,6 @@ name        : hsbc-one
 balance     : HKD 0.00
 as of       : never
 on-budget   : true
-tags        : []
 notes       :
 
 /accounts/hsbc-one/
@@ -933,11 +843,15 @@ esc     : back
 
   2) amount  : (type amount...)
 
-  3) account : hsbc-one
+  3) currency: HKD
 
-  4) tags    : []
+  4) account : hsbc-one
 
-  5) notes   :
+  5) budget  : (none)
+
+  6) tags    : []
+
+  7) notes   :
 
   [confirm]
 
@@ -975,9 +889,7 @@ history (ctrl-z to undo)
 
   3) on-budget : true
 
-  4) tags      : []
-
-  5) notes     :
+  4) notes     :
 
   [confirm]
 
@@ -1006,9 +918,7 @@ history (ctrl-z to undo)
 
   3) on-budget : true
 
-  4) tags      : []
-
-  5) notes     :
+  4) notes     :
 
   [confirm]
 
@@ -1031,7 +941,6 @@ name        : hsbc-main
 balance     : HKD 0.00
 as of       : never
 on-budget   : true
-tags        : []
 notes       :
 
 /accounts/hsbc-main/
@@ -1302,7 +1211,6 @@ balance   : HKD 0.00
 as of     : 2026-05-21
 on-budget : true
 hidden    : true
-tags      : []
 notes     : closed account
 
 /accounts/old-account/
@@ -1327,7 +1235,9 @@ esc     : back
 
 ### tags
 
-- tags are global breadcrumbs that can attach to records across the app
+- tags are transaction breadcrumbs for v1
+- notes are the general breadcrumb field across records
+- tags are primarily for transaction filtering/querying
 - fresh app does not seed tags
 - tag names are strict slugs
 - tag names are globally unique
@@ -1336,6 +1246,8 @@ esc     : back
 - tags have plain-text multiline notes
 - tags are not hidden for v1
 - tag deletion is deferred for v1
+- transaction_tags join table is enough for v1
+- future taggable records can add their own join tables
 - tag management is not shown on the dashboard for v1
 - tag routes are still direct URL/path targets
 
@@ -1994,13 +1906,13 @@ expense transactions reducing budgets
 - this allows users to track only budgets they care about
 - child expense transactions can link to different budgets
 - parent transactions may be unbudgeted while children split across budgets
-- budget spent uses the transaction tree explained/remainder model
+- budget spent uses the transaction tree explained/remaining model
 
 transaction tree budget behavior
 - parent-child transaction trees support deeper budget drilldown
 - transaction tree depth can be unlimited conceptually
 - budget impact must avoid double counting
-- if a parent transaction has children, budget spent counts child expenses plus any budget-linked parent remainder
+- if a parent transaction has children, budget spent counts child expenses plus any budget-linked parent remaining
 - budget spent never counts parent plus children together
 
 ```
@@ -2089,6 +2001,11 @@ deferred budgets
 - amount is always positive
 - transaction type determines meaning
 - type is implied by add-income/add-expense flows and not shown as an editable field there
+- transactions have exactly one currency
+- transaction currency defaults to selected account currency
+- transaction currency is editable in create/edit forms
+- transaction amount is entered in transaction currency
+- transaction currency can differ from account currency
 - transfer transactions are deferred
 - users can often skip transfer entry entirely because balance snapshots anchor growth
 - global transaction creation is canonical
@@ -2108,20 +2025,26 @@ transaction trees
 - parent and child transactions do not update balances
 - parent amount remains its own amount
 - child amounts explain some or all of the parent amount
-- parent amount = children total + remainder
-- if children total exceeds parent amount, show negative remainder instead of blocking v1 input
-- negative remainder means the explanation currently exceeds the parent amount and should be reviewed
+- child amounts convert into parent currency for explained/remaining math
+- parent amount = converted children total + remaining
+- if converted children total exceeds parent amount, show negative remaining instead of blocking v1 input
+- negative remaining means the explanation currently exceeds the parent amount and should be reviewed
+- changing parent transaction currency does not change child transaction currencies
+- changing parent transaction currency recalculates explained/remaining with latest rates
 - child transaction forms default to parent date/account
 - child transaction date/account defaults remain editable
 - child transactions use the same income/expense transaction form components
 - child expense transactions can link to budgets
+- mixed-type children are blocked in v1 UI
+- deleting a transaction with children is blocked in v1
 
 transaction tree double counting
-- reports count child transactions plus parent remainder, not parent plus children
+- reports count child transactions plus parent remaining, not parent plus children
 - budget spent uses the same double-count-safe tree logic
 - if a parent has no children, reports count the parent transaction normally
-- if a parent has children, reports count the children and the unexplained parent remainder
+- if a parent has children, reports count the children and the unexplained parent remaining
 - if a child has children, apply the same rule recursively
+- parent remaining is calculated across all children regardless of report period
 - this allows partial explanation of large transactions without losing the original parent transaction
 
 transaction references
@@ -2201,11 +2124,13 @@ esc     : back
 
   2) amount  : (type amount...)
 
-  3) account : hsbc-one
+  3) currency: HKD
 
-  4) tags    : []
+  4) account : hsbc-one
 
-  5) notes   :
+  5) tags    : []
+
+  6) notes   :
 
   [confirm]
 
@@ -2226,13 +2151,15 @@ esc     : back
 
   2) amount  : (type amount...)
 
-  3) account : hsbc-one
+  3) currency: HKD
 
-  4) budget  : (none)
+  4) account : hsbc-one
 
-  5) tags    : []
+  5) budget  : (none)
 
-  6) notes   :
+  6) tags    : []
+
+  7) notes   :
 
   [confirm]
 
@@ -2249,6 +2176,140 @@ esc     : back
 - budget field is shown only for expense transactions in v1 UI
 - budget is optional
 
+transaction tag input
+- tags input is a select input component
+- multi-select = true
+- can-filter = true
+- can-create = true
+- default = []
+- show pagination = true
+- can type anything to filter, fuzzy search
+- up/down moves the caret/cursor in the tag option list, not j/k because users need to type
+- enter adds the selected tag and does not go to the next field
+- tags sort alphabetically by default
+- tag sort options can come later, for example last created / last used / most used
+- show pagination at the bottom
+- use 8 items per page so pagination stays single digit for most lists
+- tags do not need number shortcuts because numbers should go into the filter input
+- fresh app does not seed tags
+- tag options in these mockups are examples of a non-empty tag list
+- if no exact match for filter, show create as the last option
+- inline-created tags use the typed slug and empty notes
+- edit tag later to add breadcrumb notes
+- add asterisk for new tags
+- if at least one tag exists and the filter is empty, backspace deletes the last tag
+- tags already added should not show up in the tag option list
+- pagination should update according to the filtered tag list
+
+```
+# stuf
+
+/transactions/add-expense/
+
+  1) date    : 2026-05-21
+
+  2) amount  : 200.00
+
+  3) currency: HKD
+
+  4) account : hsbc-one
+
+  5) budget  : groceries
+
+> 6) tags    : []
+
+   > filter  : (type anything...)
+
+     > credit-card
+       groceries
+       hkd
+       recurring
+       supermarket
+       travel
+       visa
+       weekend
+
+     [08/12]
+
+  7) notes   :
+
+  [confirm]
+
+---
+type       : filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+tab        : navigate
+esc        : back
+?          : help
+```
+
+```
+> 6) tags    : []
+
+   > filter  : groc
+
+     > groceries
+       (create new "groc")
+
+     [02/02]
+```
+
+```
+> 6) tags    : [groc*]
+
+   > filter  : (type anything...)
+
+     > credit-card
+       groceries
+       hkd
+       recurring
+       supermarket
+       travel
+       visa
+       weekend
+
+     [08/12]
+
+---
+type       : filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+backspace  : delete last tag
+tab        : navigate
+esc        : back
+?          : help
+```
+
+```
+> 6) tags    : [groc*]
+
+   > filter  : groceries
+
+     > groceries
+       grocery-store
+
+     [02/02]
+```
+
+```
+> 6) tags    : [groc*, groceries]
+
+   > filter  : (type anything...)
+
+     > credit-card
+       hkd
+       recurring
+       supermarket
+       travel
+       visa
+       weekend
+
+     [07/10]
+```
+
 ```
 history (ctrl-z to undo)
 - 2026-05-17 17:35 add /transactions/tx-000001
@@ -2258,6 +2319,7 @@ history (ctrl-z to undo)
 date    : 2026-05-15
 type    : income
 amount  : HKD 20,000.00
+currency: HKD
 account : hsbc-one
 tags    : []
 notes   : salary
@@ -2267,8 +2329,7 @@ notes   : salary
 > 1) edit transaction
   2) children
   3) add child income
-  4) add child expense
-  5) delete transaction
+  4) delete transaction
 
 ---
 up/down : navigate
@@ -2282,7 +2343,8 @@ esc     : back
 - transaction type is not editable in v1
 - if type is wrong, delete and add the transaction again
 - children opens the transaction's child transaction list
-- add child income and add child expense use the same canonical transaction form with parent defaults
+- add child income uses the same canonical transaction form with parent defaults
+- mixed-type children are blocked in v1 UI
 
 ```
 # stuf
@@ -2290,10 +2352,11 @@ esc     : back
 date      : 2026-05-16
 type      : expense
 amount    : HKD 10,000.00
+currency  : HKD
 account   : hsbc-one
 budget    : (none)
 children  : HKD  3,500.00
-remainder : HKD  6,500.00
+remaining : HKD  6,500.00
 tags      : [bank]
 notes     : credit card payment
 
@@ -2301,9 +2364,8 @@ notes     : credit card payment
 
 > 1) edit transaction
   2) children
-  3) add child income
-  4) add child expense
-  5) delete transaction
+  3) add child expense
+  4) delete transaction
 
 ---
 up/down : navigate
@@ -2318,6 +2380,7 @@ esc     : back
 larger expense
 date      : 2026-05-16
 amount    : HKD 10,000.00
+currency  : HKD
 account   : hsbc-one
 budget    : (none)
 tags      : [bank, credit-card]
@@ -2331,8 +2394,7 @@ remaining : HKD  6,500.00
 > 2026-05-16 | expense | HKD 1,200.00  | hsbc-one | groceries   | supermarket
   2026-05-16 | expense | HKD 2,300.00  | hsbc-one | restaurants | dinner
 
-  1) add child income
-  2) add child expense
+  1) add child expense
 
 ---
 up/down : navigate
@@ -2347,6 +2409,7 @@ esc     : back
 larger expense
 date      : 2026-05-16
 amount    : HKD 10,000.00
+currency  : HKD
 account   : hsbc-one
 budget    : (none)
 tags      : [bank, credit-card]
@@ -2359,13 +2422,15 @@ remaining : HKD  6,500.00
 
   2) amount  : (type amount...)
 
-  3) account : hsbc-one
+  3) currency: HKD
 
-  4) budget  : groceries
+  4) account : hsbc-one
 
-  5) tags    : []
+  5) budget  : groceries
 
-  6) notes   :
+  6) tags    : []
+
+  7) notes   :
 
   [confirm]
 
@@ -2393,11 +2458,13 @@ history (ctrl-z to undo)
 
   2) amount  : 20000.00
 
-  3) account : hsbc-one
+  3) currency: HKD
 
-  4) tags    : []
+  4) account : hsbc-one
 
-  5) notes   : salary
+  5) tags    : []
+
+  6) notes   : salary
 
   [confirm]
 
@@ -2411,6 +2478,8 @@ esc     : back
 
 - delete transaction happens immediately
 - no confirmation screen for delete transaction in v1
+- delete transaction is blocked if the transaction has children
+- user must delete children before deleting the parent transaction
 - after delete, goes to /transactions/list/ automatically
 - ctrl-z undoes the latest visible history row
 
@@ -2419,6 +2488,9 @@ transaction validation
 - amount is required
 - amount must be positive
 - fiat amounts accept up to 2 decimals for v1
+- currency is required
+- currency defaults to selected account currency
+- transaction currency is editable
 - account is required
 - budget is optional
 - budget can only be selected for expense transactions in v1 UI
@@ -2456,13 +2528,17 @@ effective transaction rows
 - input screens show original transactions
 - reports use effective transaction rows
 - if a transaction has no children, it contributes itself as an effective row
-- if a transaction has children, it contributes child effective rows plus one parent remainder row when remainder is not 0
+- if a transaction has children, it contributes child effective rows plus one parent remaining row when remaining is not 0
 - apply the same rule recursively for deeper transaction trees
 - effective rows prevent parent + child double counting
-- parent remainder rows are virtual/read-only
-- parent remainder rows have no transaction ref
-- parent remainder rows keep the parent date/account/type/tags/notes
-- parent remainder rows use the parent budget link if present
+- effective rows count in the coverage period containing their own transaction date
+- parent remaining row counts on the parent transaction date
+- child rows can appear in a different report period from their parent
+- coverage period determines inclusion, not only calendar month
+- parent remaining rows are virtual/read-only
+- parent remaining rows have no transaction ref
+- parent remaining rows keep the parent date/account/type/tags/notes
+- parent remaining rows use the parent budget link if present
 - report content should not show transaction refs or implementation details
 - transaction refs can stay visible in URLs/history only
 - opening original transaction from report detail is deferred for v1
@@ -2638,7 +2714,7 @@ esc     : back
 ```
 
 - expense explanation rows are effective transaction rows
-- remainder rows are virtual/read-only rows
+- remaining rows are virtual/read-only rows
 - report expense rows do not show transaction refs or implementation details
 - pressing enter on a normal expense row opens the report expense row detail
 - pressing enter on an unexplained part opens the remaining expense row detail
@@ -2703,7 +2779,7 @@ esc     : back
 ```
 
 - remaining expense row detail is read-only for v1
-- remaining is user-facing language for the parent remainder row
+- remaining is user-facing language for the parent unexplained part
 - the rendered content does not show the parent transaction ref
 - the URL uses the parent transaction ref plus /remainder/
 - opening original transactions from report detail is deferred for v1
@@ -2831,11 +2907,16 @@ deferred saving goals
 - internal data model can use party
 - owed items track obligations and receivables
 - owed items are independent records
+- each owed item has exactly one currency
+- different owed items can use different currencies
+- owed item currency defaults to app currency
+- dashboard owed totals convert open owed remaining amounts to app currency
 - money you owe ppl reduces available while open
 - money ppl owe you does not increase available while open
 - money ppl owe you only increases available once it appears in on-budget balances
 - settlements reduce owed remaining
 - settlements do not update balances
+- settlements use owed item currency for v1
 - settlement records are independent from transactions for v1
 - related transaction links are deferred/context only
 - settled items are hidden from open lists, not deleted
@@ -3010,6 +3091,9 @@ esc     : back
 
 - person-scoped add flows use the same forms as global add flows
 - person field is pre-filled but still editable
+- owed item currency defaults to app currency
+- owed item currency is editable in create/edit forms
+- settlements use owed item currency for v1
 
 ```
 # stuf
@@ -3022,7 +3106,9 @@ esc     : back
 
 > 3) amount : =1000/2
 
-  4) notes  :
+  4) currency : HKD
+
+  5) notes  :
 
   [confirm]
 
@@ -3041,7 +3127,9 @@ esc     : back
 
   3) amount : HKD 500.00 (=1000/2)
 
-> 4) notes  : netflix yearly
+  4) currency : HKD
+
+> 5) notes  : netflix yearly
 ```
 
 ```
@@ -3055,7 +3143,9 @@ esc     : back
 
   3) amount : (type amount or =formula...)
 
-  4) notes  :
+  4) currency : HKD
+
+  5) notes  :
 
   [confirm]
 
@@ -3146,7 +3236,9 @@ esc     : back
 
   3) amount : (type amount or =formula...)
 
-  4) notes  :
+  4) currency : HKD
+
+  5) notes  :
 
   [confirm]
 
@@ -3169,7 +3261,9 @@ esc     : back
 
   3) amount : (type amount or =formula...)
 
-  4) notes  :
+  4) currency : HKD
+
+  5) notes  :
 
   [confirm]
 
@@ -3193,6 +3287,7 @@ history (ctrl-z to undo)
 direction : you owe ppl
 person    : alex
 amount    : HKD 500.00
+currency  : HKD
 settled   : HKD   0.00
 remaining : HKD 500.00
 formula   : =1000/2
@@ -3230,7 +3325,9 @@ esc     : back
 
   3) amount : =1000/2
 
-  4) notes  : netflix yearly
+  4) currency : HKD
+
+  5) notes  : netflix yearly
 
   [confirm]
 
@@ -3344,7 +3441,7 @@ deferred owed
 
 - a couple may be sharing the same account as it makes sense to see total net worth tgt
 - but they should also be easily able to check each individual
-- probably need to make sure tags + queries can fit this use case...? or that the accounts overview tooling should support some sort of filtering (which is querying and tags)
+- probably need to make sure notes, transaction tags, and queries can fit this use case...? or that the accounts overview tooling should support some sort of filtering
 
 ### settings
 
@@ -3355,6 +3452,11 @@ deferred owed
 - local config in current working directory takes priority if present
 - otherwise use global config
 - if neither exists, create global config
+- new config tries to set app currency from current location
+- if location detection fails, app currency defaults to USD
+- if USD fallback is used, warn user that app currency can be changed in config
+- invalid config stops app startup with a clear error
+- config recovery path is to fix or delete the config file, then relaunch
 - config files should be safe to delete and regenerate
 - in development, use .jsonc as source of truth for defaults, so parsing is always verified and defaults can be embedded in the go binary
 - pressing settings shows active config path and app currency
