@@ -2133,6 +2133,15 @@ transaction references
 - editing transaction fields does not change the transaction ref
 - transaction ref is shown in URL/history, not as a detail field
 
+transaction identity
+- transactions do not have titles
+- users should use tags for reusable meaning
+- users should use notes when tags are not enough
+- tags are better than titles for querying and cross-cutting analysis
+- notes are breadcrumbs, not required names
+- transaction detail screens identify transactions by date, amount, account, budget, tags, and notes
+- transaction refs are for URLs/history only and should not be shown as content fields
+
 report integration
 - income transactions replace assumed income in reports
 - if no income transactions exist, income = growth `(assumed)`
@@ -2306,10 +2315,15 @@ esc     : back
 ```
 # stuf
 
-parent    : tx-000002
+larger expense
+date      : 2026-05-16
 amount    : HKD 10,000.00
+account   : hsbc-one
+budget    : (none)
+tags      : [bank, credit-card]
+notes     : credit card payment
 explained : HKD  3,500.00
-remainder : HKD  6,500.00
+remaining : HKD  6,500.00
 
 /transactions/tx-000002/children/
 
@@ -2330,8 +2344,14 @@ esc     : back
 ```
 # stuf
 
-parent    : tx-000002
-remaining : HKD 6,500.00
+larger expense
+date      : 2026-05-16
+amount    : HKD 10,000.00
+account   : hsbc-one
+budget    : (none)
+tags      : [bank, credit-card]
+notes     : credit card payment
+remaining : HKD  6,500.00
 
 /transactions/tx-000002/children/add-expense/
 
@@ -2357,7 +2377,7 @@ esc     : back
 ?       : help
 ```
 
-- parent field is shown as context, not an editable form field
+- larger expense context is shown above child lists/forms, not as editable form fields
 - remaining is advisory and does not block entry for v1
 - child add success goes to /transactions/tx-000002/children/ automatically
 
@@ -2458,9 +2478,9 @@ expense explanation
 ```
 original transaction tree
 
-tx-000002 expense HKD 10,000.00 credit card payment
-- tx-000003 expense HKD 1,200.00 groceries
-- tx-000004 expense HKD 2,300.00 restaurants
+2026-05-16 expense HKD 10,000.00 [bank, credit-card] credit card payment
+- 2026-05-16 expense HKD 1,200.00 [groceries] supermarket
+- 2026-05-16 expense HKD 2,300.00 [restaurants] dinner
 
 effective report rows
 
