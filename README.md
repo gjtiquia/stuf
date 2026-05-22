@@ -2137,11 +2137,12 @@ report integration
 - income transactions replace assumed income in reports
 - if no income transactions exist, income = growth `(assumed)`
 - if income transactions exist, expenses = income - growth `(derived)`
-- expense transactions are future drilldown detail
+- expense transactions explain derived expenses in reports
+- reports consume effective transaction rows, not raw parent + child rows
 - reports should not pressure users to enter every expense
 - future reports may offer shortcuts to source input flows
-- future report drilldown should support income/expense breakdowns
-- transaction links/parent-child relationships may allow recursive drilldown
+- report drilldown should show income/expense explanation without mutating source data
+- transaction links/parent-child relationships allow recursive drilldown
 
 ```
 # stuf
@@ -2407,7 +2408,6 @@ transaction validation
 deferred transactions
 - transfer transactions
 - report-to-input shortcuts
-- report income/expense drilldown
 - parent-child tree visualizations beyond list/detail screens
 
 ### reports
@@ -2431,6 +2431,41 @@ deferred transactions
 - before income is entered, income equals growth and is marked `(assumed)`
 - before income is entered, expenses are 0
 - after income is entered, expenses = income - growth and can be marked `(derived)`
+
+effective transaction rows
+- input screens show original transactions
+- reports use effective transaction rows
+- if a transaction has no children, it contributes itself as an effective row
+- if a transaction has children, it contributes child effective rows plus one parent remainder row when remainder is not 0
+- apply the same rule recursively for deeper transaction trees
+- effective rows prevent parent + child double counting
+- parent remainder rows are virtual/read-only
+- parent remainder rows have no transaction ref
+- parent remainder rows keep the parent date/account/type/tags/notes
+- parent remainder rows use the parent budget link if present
+- source navigation from a parent remainder row goes to the parent transaction detail later
+
+expense explanation
+- expense explanation order is derived, explained, unexplained
+- derived expenses come from balance growth and entered income
+- explained expenses come from effective expense transaction rows
+- unexplained expenses = derived expenses - explained expenses
+- unexplained expenses are the remaining expense amount not explained by transactions
+- use unexplained, not unknown, because balances are known but details may not be explained yet
+
+```
+original transaction tree
+
+tx-000002 expense HKD 10,000.00 credit card payment
+- tx-000003 expense HKD 1,200.00 groceries
+- tx-000004 expense HKD 2,300.00 restaurants
+
+effective report rows
+
+tx-000003 expense HKD 1,200.00 groceries
+tx-000004 expense HKD 2,300.00 restaurants
+remainder expense HKD 6,500.00 unexplained remainder from tx-000002
+```
 
 report types
 - monthly = selected calendar month
@@ -2539,8 +2574,55 @@ esc     : back
 ?       : help
 ```
 
+- monthly report detail shows balance-derived growth first
+- transaction explanation comes after account growth so the report still starts from balance truth
+- expense explanation uses derived, explained, unexplained order
+
+```
+# stuf
+
+period   : 2026-05
+coverage : 2026-04-30 -> 2026-05-31
+
+growth
+on-budget  : HKD  5,200.00
+off-budget : HKD  1,000.00
+total      : HKD  6,200.00
+
+income
+entered : HKD 20,000.00
+
+expenses
+derived     : HKD 14,800.00
+explained   : HKD  8,000.00
+unexplained : HKD  6,800.00
+
+/reports/monthly/2026-05/expenses/
+
+> filter : (type anything...)
+
+  source    | amount        | budget      | notes
+> tx-000003 | HKD 1,200.00  | groceries   | supermarket
+  tx-000004 | HKD 2,300.00  | restaurants | dinner
+  remainder | HKD 6,500.00  | (none)      | unexplained remainder from tx-000002
+
+---
+up/down : navigate
+left    : previous month
+right   : next month
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- expense explanation rows are effective transaction rows
+- remainder rows are virtual/read-only rows
+- pressing enter on a transaction-backed row can open source transaction detail later
+- pressing enter on a remainder row can open parent transaction detail later
+- source navigation from expense explanation rows is deferred for v1
+
 - pressing enter on an account opens the account monthly report detail
-- this is the lowest-level report detail for now
+- account monthly report detail is the lowest-level account growth detail for now
 - no action list is shown at the lowest-level report detail
 - only navigation shortcuts are shown
 - source navigation from report row detail is deferred
@@ -2579,8 +2661,9 @@ deferred reports
 - year-to-date detail screens
 - rolling report detail screens
 - source navigation from report row detail
+- source navigation from effective expense rows
+- rich transaction tree visualizations in reports
 - report-to-input shortcuts
-- report income/expense drilldown
 
 ### yearly budgeting
 
