@@ -2,6 +2,7 @@
 
 > ehh... apparently this name is taken... gotta think of a new project name...
 > perhaps kuka, kaku, kunga, kwunka, ggaa, gungaa (管家)
+> or steph!
 
 ```
 - [stu]ward [f]inance
