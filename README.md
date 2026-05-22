@@ -163,7 +163,6 @@ journey
         - if none, create one, and seed default currencies conversion rates (relative to USD)
         - if have,
             - run migrations (if any)
-            - if have network, update cache (eg. currency conversion rates)
     - look for config file (empty counts too, eg. current dir)
     - if none, 
         - create global config file
@@ -230,6 +229,52 @@ money storage
 - store amount as integer + scale, even if v1 only accepts fiat 2-decimal balances
 - eg. HKD 50,000.00 -> amount = 5000000, scale = 2
 - eg. BTC 0.12345678 -> amount = 12345678, scale = 8
+
+currency conversion
+- common currencies are seeded from app data
+- conversion rates are seeded from app data relative to USD
+- seeded currency data lives in the repo
+- updating the app can update seeded conversion rates
+- app startup seeds missing currency data into db.sqlite
+- no runtime network fetch is required for currency conversion in v1
+- app uses the latest available seeded/cached rate
+- missing conversion data should show original currency and omit converted totals with a clear warning
+- manual conversion rate override is deferred for v1
+
+cross-cutting data rules
+- notes are plain text
+- notes can be multiline
+- notes have no markdown semantics for v1
+- tags are global
+- tag names are strict slugs
+- tags have immutable internal ids
+- tag names are globally unique
+- tags can be renamed
+- tags have notes
+- fresh app does not seed tags
+- tag hiding is deferred for v1
+- tag deletion is deferred for v1
+- transaction parent is nullable
+- any transaction can have a parent transaction
+- transaction tree depth is unlimited conceptually
+- transaction trees explain larger transactions, but do not update balances
+- reports and budget spent must avoid double counting transaction trees
+- if a transaction has children, reports count child transactions plus parent remainder, not parent plus children
+- parent amount = children total + remainder
+- child transaction forms default to parent date/account when useful, but defaults stay editable
+- transaction budget link is nullable in the data model
+- v1 UI only allows budget links for expense transactions
+- one transaction links to at most one budget for v1
+- child expense transactions can link to different budgets
+- common currencies are seeded from app data
+- conversion rates are seeded from app data relative to USD
+- conversion data lives in the repo and updates with app releases for v1
+- runtime network currency refresh is deferred for v1
+- manual conversion rate override is deferred for v1
+- event/child records can be deleted undoably for v1
+- container/master records are not deleted for v1
+- accounts and budgets can be hidden
+- categories, people, and tags are editable but not hidden/deleted for v1
 
 ```
 # stuf
@@ -538,6 +583,8 @@ esc        : back
 - fresh app does not seed tags
 - the above tag options are examples of a non-empty tag list
 - if no exact match for filter, show create as the last option
+- inline-created tags use the typed slug and empty notes
+- edit tag later to add breadcrumb notes
 
 ```
 > 4) tags      : []
@@ -1278,6 +1325,127 @@ esc     : back
     - preserving dirty create drafts after esc
 
 
+### tags
+
+- tags are global breadcrumbs that can attach to records across the app
+- fresh app does not seed tags
+- tag names are strict slugs
+- tag names are globally unique
+- tags have immutable internal ids
+- renaming a tag updates displays because records link to the immutable tag id
+- tags have plain-text multiline notes
+- tags are not hidden for v1
+- tag deletion is deferred for v1
+- tag management is not shown on the dashboard for v1
+- tag routes are still direct URL/path targets
+
+```
+# stuf
+
+/tags/
+
+> 1) list
+  2) create
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/tags/list/
+
+> filter : (type anything...)
+
+  name        | notes
+> bank        | bank-related records
+  recurring   | repeated records
+  travel      | travel breadcrumbs
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- pressing enter on a tag opens the tag detail page
+- tag list sorts alphabetically by default
+- tag sort options can come later if needed
+
+```
+# stuf
+
+/tags/create/
+
+> 1) name  : (type slug...)
+
+  2) notes :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+name  : bank
+notes : bank-related records
+
+/tags/bank/
+
+> 1) edit tag
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/tags/bank/edit/
+
+> 1) name  : bank
+
+  2) notes : bank-related records
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+tag validation
+- name is required
+- name must be a strict slug
+- name must be globally unique
+- notes are optional
+
+deferred tags
+- tag deletion
+- tag hiding
+- tag merge
+- tag usage counts
+- tag detail backlinks to tagged records
+
+
 ### budgets
 
 - budgets are global envelope-style allocations
@@ -1816,18 +1984,24 @@ esc     : back
 - allocation action options are set total, add money, remove money
 
 expense transactions reducing budgets
-- expense transactions can optionally link to a budget
+- transaction budget link is nullable in the data model
+- v1 UI only allows expense transactions to link to a budget
+- one transaction links to at most one budget for v1
 - linked expenses reduce budget balance
 - linked expenses contribute to spent
 - unlinked expenses do not reduce budgets
 - budget linkage is optional
 - this allows users to track only budgets they care about
-
-future transaction tree behavior
-- parent-child transaction trees can be used for deeper budget drilldown later
-- transaction tree depth can be unlimited
-- budget impact must avoid double counting
+- child expense transactions can link to different budgets
 - parent transactions may be unbudgeted while children split across budgets
+- budget spent uses the transaction tree explained/remainder model
+
+transaction tree budget behavior
+- parent-child transaction trees support deeper budget drilldown
+- transaction tree depth can be unlimited conceptually
+- budget impact must avoid double counting
+- if a parent transaction has children, budget spent counts child expenses plus any budget-linked parent remainder
+- budget spent never counts parent plus children together
 
 ```
 # stuf
@@ -1898,7 +2072,6 @@ deferred budgets
 - recurring/monthly allocation flow
 - yearly expense allocation flow
 - bulk apply default allocations flow
-- parent-child transaction budget impact algorithm
 - budget report drilldowns
 
 ### transactions
@@ -1919,11 +2092,37 @@ deferred budgets
 - transfer transactions are deferred
 - users can often skip transfer entry entirely because balance snapshots anchor growth
 - global transaction creation is canonical
-- account-scoped transaction creation can exist later as a convenience shortcut
+- account-scoped transaction creation exists as a convenience shortcut
 - account-scoped forms pre-fill account
 - pre-filled account should still be editable
 - global and account-scoped flows write to the same transaction table
-- account detail should eventually expose transactions as an automatically filtered shortcut, but account-scoped mockups are deferred until the global flow is stable
+- account detail exposes transactions as an automatically filtered shortcut to global transactions
+
+transaction trees
+- transactions can form parent-child trees
+- transaction parent is nullable
+- any transaction can have a parent transaction
+- transactions without a parent are root transactions
+- transaction tree depth is unlimited conceptually
+- parent and child transactions are explanatory records
+- parent and child transactions do not update balances
+- parent amount remains its own amount
+- child amounts explain some or all of the parent amount
+- parent amount = children total + remainder
+- if children total exceeds parent amount, show negative remainder instead of blocking v1 input
+- negative remainder means the explanation currently exceeds the parent amount and should be reviewed
+- child transaction forms default to parent date/account
+- child transaction date/account defaults remain editable
+- child transactions use the same income/expense transaction form components
+- child expense transactions can link to budgets
+
+transaction tree double counting
+- reports count child transactions plus parent remainder, not parent plus children
+- budget spent uses the same double-count-safe tree logic
+- if a parent has no children, reports count the parent transaction normally
+- if a parent has children, reports count the children and the unexplained parent remainder
+- if a child has children, apply the same rule recursively
+- this allows partial explanation of large transactions without losing the original parent transaction
 
 transaction references
 - transactions have an internal immutable database id
@@ -2019,9 +2218,11 @@ esc     : back
 
   3) account : hsbc-one
 
-  4) tags    : []
+  4) budget  : (none)
 
-  5) notes   :
+  5) tags    : []
+
+  6) notes   :
 
   [confirm]
 
@@ -2035,6 +2236,8 @@ esc     : back
 
 - after add success, goes to /transactions/list/ automatically
 - history uses the transaction ref path
+- budget field is shown only for expense transactions in v1 UI
+- budget is optional
 
 ```
 history (ctrl-z to undo)
@@ -2052,7 +2255,10 @@ notes   : salary
 /transactions/tx-000001/
 
 > 1) edit transaction
-  2) delete transaction
+  2) children
+  3) add child income
+  4) add child expense
+  5) delete transaction
 
 ---
 up/down : navigate
@@ -2065,6 +2271,94 @@ esc     : back
 - edit transaction is pre-filled with existing transaction data
 - transaction type is not editable in v1
 - if type is wrong, delete and add the transaction again
+- children opens the transaction's child transaction list
+- add child income and add child expense use the same canonical transaction form with parent defaults
+
+```
+# stuf
+
+date      : 2026-05-16
+type      : expense
+amount    : HKD 10,000.00
+account   : hsbc-one
+budget    : (none)
+children  : HKD  3,500.00
+remainder : HKD  6,500.00
+tags      : [bank]
+notes     : credit card payment
+
+/transactions/tx-000002/
+
+> 1) edit transaction
+  2) children
+  3) add child income
+  4) add child expense
+  5) delete transaction
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+parent    : tx-000002
+amount    : HKD 10,000.00
+explained : HKD  3,500.00
+remainder : HKD  6,500.00
+
+/transactions/tx-000002/children/
+
+  date       | type    | amount        | account  | budget      | notes
+> 2026-05-16 | expense | HKD 1,200.00  | hsbc-one | groceries   | supermarket
+  2026-05-16 | expense | HKD 2,300.00  | hsbc-one | restaurants | dinner
+
+  1) add child income
+  2) add child expense
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+parent    : tx-000002
+remaining : HKD 6,500.00
+
+/transactions/tx-000002/children/add-expense/
+
+> 1) date    : 2026-05-16
+
+  2) amount  : (type amount...)
+
+  3) account : hsbc-one
+
+  4) budget  : groceries
+
+  5) tags    : []
+
+  6) notes   :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- parent field is shown as context, not an editable form field
+- remaining is advisory and does not block entry for v1
+- child add success goes to /transactions/tx-000002/children/ automatically
 
 ```
 history (ctrl-z to undo)
@@ -2105,6 +2399,8 @@ transaction validation
 - amount must be positive
 - fiat amounts accept up to 2 decimals for v1
 - account is required
+- budget is optional
+- budget can only be selected for expense transactions in v1 UI
 - tags are optional
 - notes are optional
 
@@ -2112,7 +2408,7 @@ deferred transactions
 - transfer transactions
 - report-to-input shortcuts
 - report income/expense drilldown
-- recursive transaction links / parent-child transaction relationships
+- parent-child tree visualizations beyond list/detail screens
 
 ### reports
 
