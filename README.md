@@ -2443,7 +2443,9 @@ effective transaction rows
 - parent remainder rows have no transaction ref
 - parent remainder rows keep the parent date/account/type/tags/notes
 - parent remainder rows use the parent budget link if present
-- source navigation from a parent remainder row goes to the parent transaction detail later
+- report content should not show transaction refs or implementation details
+- transaction refs can stay visible in URLs/history only
+- opening original transaction from report detail is deferred for v1
 
 expense explanation
 - expense explanation order is derived, explained, unexplained
@@ -2462,9 +2464,9 @@ tx-000002 expense HKD 10,000.00 credit card payment
 
 effective report rows
 
-tx-000003 expense HKD 1,200.00 groceries
-tx-000004 expense HKD 2,300.00 restaurants
-remainder expense HKD 6,500.00 unexplained remainder from tx-000002
+2026-05-16 expense HKD 1,200.00 groceries supermarket
+2026-05-16 expense HKD 2,300.00 restaurants dinner
+2026-05-16 expense HKD 6,500.00 unexplained part of credit card payment
 ```
 
 report types
@@ -2601,10 +2603,10 @@ unexplained : HKD  6,800.00
 
 > filter : (type anything...)
 
-  source    | amount        | budget      | notes
-> tx-000003 | HKD 1,200.00  | groceries   | supermarket
-  tx-000004 | HKD 2,300.00  | restaurants | dinner
-  remainder | HKD 6,500.00  | (none)      | unexplained remainder from tx-000002
+  date       | amount        | budget      | notes
+> 2026-05-16 | HKD 1,200.00  | groceries   | supermarket
+  2026-05-16 | HKD 2,300.00  | restaurants | dinner
+  2026-05-16 | HKD 6,500.00  | (none)      | unexplained part of credit card payment
 
 ---
 up/down : navigate
@@ -2617,15 +2619,80 @@ esc     : back
 
 - expense explanation rows are effective transaction rows
 - remainder rows are virtual/read-only rows
-- pressing enter on a transaction-backed row can open source transaction detail later
-- pressing enter on a remainder row can open parent transaction detail later
-- source navigation from expense explanation rows is deferred for v1
+- report expense rows do not show transaction refs or implementation details
+- pressing enter on a normal expense row opens the report expense row detail
+- pressing enter on an unexplained part opens the remaining expense row detail
+- row detail URLs can include transaction refs, but the rendered content should not show them
+
+```
+# stuf
+
+date    : 2026-05-16
+amount  : HKD 1,200.00
+account : hsbc-one
+budget  : groceries
+tags    : []
+notes   : supermarket
+
+/reports/monthly/2026-05/expenses/tx-000003/
+
+---
+left  : previous expense
+right : next expense
+esc   : back
+?     : help
+```
+
+- normal expense row detail is read-only for v1
+- no action list is shown on expense row detail for v1
+- left/right navigate to previous/next expense row in the current monthly expense list
+- if the expense list is filtered, left/right follow the filtered list order
+- hide or disable left/right dynamically when there is no previous/next row
+- esc returns to /reports/monthly/2026-05/expenses/
+
+```
+# stuf
+
+date    : 2026-05-16
+amount  : HKD 6,500.00
+account : hsbc-one
+budget  : (none)
+tags    : [bank]
+notes   : credit card payment
+
+this is the part of a larger expense that has not been explained yet
+
+larger expense
+amount    : HKD 10,000.00
+explained : HKD  3,500.00
+remaining : HKD  6,500.00
+
+explained by
+date       | amount        | budget      | notes
+2026-05-16 | HKD 1,200.00  | groceries   | supermarket
+2026-05-16 | HKD 2,300.00  | restaurants | dinner
+
+/reports/monthly/2026-05/expenses/tx-000002/remainder/
+
+---
+up/down : navigate
+left    : previous expense
+right   : next expense
+esc     : back
+?       : help
+```
+
+- remaining expense row detail is read-only for v1
+- remaining is user-facing language for the parent remainder row
+- the rendered content does not show the parent transaction ref
+- the URL uses the parent transaction ref plus /remainder/
+- opening original transactions from report detail is deferred for v1
 
 - pressing enter on an account opens the account monthly report detail
 - account monthly report detail is the lowest-level account growth detail for now
 - no action list is shown at the lowest-level report detail
 - only navigation shortcuts are shown
-- source navigation from report row detail is deferred
+- opening original records from account report detail is deferred
 
 ```
 # stuf
@@ -2660,8 +2727,8 @@ deferred reports
 - annual detail screens
 - year-to-date detail screens
 - rolling report detail screens
-- source navigation from report row detail
-- source navigation from effective expense rows
+- opening original transactions from report expense detail
+- grouped expense views
 - rich transaction tree visualizations in reports
 - report-to-input shortcuts
 
