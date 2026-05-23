@@ -46,7 +46,7 @@ answers that `stuf` should be able to answer:
 things that `stuf` should be able to support
 - accounts (on-budget and off-budget)
 - multi-currency
-- multi-person (can be separate profiles, can be together in one profile, can be "hybrid")
+- shared/local household setup
 - zero-based / envelop budgeting
     - being one month ahead (or more)
 - tagging
@@ -260,6 +260,14 @@ currency conversion
 - historical conversion snapshots are deferred for v1
 - manual conversion rate override is deferred for v1
 
+historical conversion rationale
+- stuf is balance-anchored, not transaction-ledger-perfect
+- latest balances are the truth
+- converted totals are present-day approximations for analysis
+- old detailed records can be fragmented without corrupting balance-derived growth
+- latest seeded/cached rates are enough for v1 current views
+- if exact historical fx matters later, add per-transaction/per-settlement rate snapshots
+
 cross-cutting data rules
 - notes are plain text
 - notes can be multiline
@@ -271,7 +279,8 @@ cross-cutting data rules
 - tags can be renamed
 - tags have notes
 - fresh app does not seed tags
-- tag hiding is deferred for v1
+- tags are not hidden for v1
+- tag hiding is not planned unless real usage shows a need
 - tag deletion is deferred for v1
 - transaction parent is nullable
 - any transaction can have a parent transaction
@@ -310,6 +319,8 @@ v1 edge rules before schema
 - latest seeded/cached rates are used for conversion in v1
 - historical conversion snapshots are deferred
 - manual conversion rate override is deferred
+- historical conversion snapshots are not needed for v1 because balance snapshots anchor truth
+- converted totals are present-day approximations for analysis, not exact historical ledgers
 - parent and child transactions can have different currencies
 - child amounts convert into parent currency for explained/remaining math
 - changing parent transaction currency does not change child transaction currencies
@@ -1266,6 +1277,11 @@ esc     : back
 - renaming a tag updates displays because records link to the immutable tag id
 - tags have plain-text multiline notes
 - tags are not hidden for v1
+- tag hiding is not planned unless real usage shows a need
+- tags are expected to grow in quantity
+- filtering/search/sort/querying are the intended way to manage tag volume
+- accounts and budgets can be hidden because their lists are small and stale entries create significant noise
+- tags are high-volume metadata, so hiding them would add lifecycle complexity without clear value
 - tag deletion is deferred for v1
 - transaction_tags join table is enough for v1
 - future taggable records can add their own join tables
@@ -1373,7 +1389,6 @@ tag validation
 
 deferred tags
 - tag deletion
-- tag hiding
 - tag merge
 - tag usage counts
 - tag detail backlinks to tagged records
@@ -2027,8 +2042,12 @@ deferred budgets
 - transaction currency is editable in create/edit forms
 - transaction amount is entered in transaction currency
 - transaction currency can differ from account currency
-- transfer transactions are deferred
+- explicit transfer transactions are not needed for v1
 - users can often skip transfer entry entirely because balance snapshots anchor growth
+- balance snapshots capture the result of transfers
+- users do not need to manually input two transactions for a transfer
+- fresh balances lazy-reconcile messy transfer details
+- explicit transfer support can be added later if transfer-specific reporting becomes useful
 - global transaction creation is canonical
 - account-scoped transaction creation exists as a convenience shortcut
 - account-scoped forms pre-fill account
@@ -2523,7 +2542,7 @@ transaction validation
 - notes are optional
 
 deferred transactions
-- transfer transactions
+- explicit transfer transaction support
 - report-to-input shortcuts
 - parent-child tree visualizations beyond list/detail screens
 
@@ -2859,6 +2878,12 @@ deferred reports
 
 ### yearly budgeting
 
+- yearly budgeting is handled through saving goals and default allocations for v1
+- a yearly expense is modeled as a budget with target amount and target month
+- monthly needed tells the user how much to allocate
+- budgets remain global/carry-over, not month-bound
+- no separate yearly budget object is needed for v1
+
 ### saving goals
 
 - saving goals live under budgets
@@ -2929,6 +2954,12 @@ deferred saving goals
 - goal report drilldowns
 
 ### investment
+
+- investment tracking is open/deferred
+- stuf can track investment account balances as off-budget accounts today
+- performance analysis, holdings, cost basis, dividends, and market prices are not v1
+- unclear if deep investment tooling belongs inside stuf or as a separate tool
+- for v1, investment accounts still contribute to total/off-budget balance snapshots and growth reports
 
 ### owed money tracking
 
@@ -3482,9 +3513,14 @@ deferred owed
 
 ### shared finance tracking
 
-- a couple may be sharing the same account as it makes sense to see total net worth tgt
-- but they should also be easily able to check each individual
-- probably need to make sure notes, transaction tags, and queries can fit this use case...? or that the accounts overview tooling should support some sort of filtering
+- shared finance is mostly a data setup choice for v1
+- one db can contain accounts for multiple people if users want shared household visibility
+- separate finances can use separate working directories because db.sqlite is local to the current working directory
+- truly separate profiles can just be separate folders
+- multi-currency is first-class, so separate dbs are not needed just to work around currency limitations
+- no first-class owner field is needed for v1
+- users can encode ownership in account names and notes if needed
+- future account filters/queries can support owner-like views without adding ownership to v1 schema
 
 ### settings
 
