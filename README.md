@@ -150,6 +150,10 @@ session action history / undo support
 - literally any mutation, needs a way to undo, and this needs to be backed by compile time checking of interface, and also sufficient unit testing coverage to ensure correctness
 - what this unlocks is efficiency gains. not afraid to do things fast because, u can easily edit or undo. 
 - keeps things "simple" as well, we can skip confirmation pages for a lot of otherwise seemingly destructive actions
+- on undo, the corresponding history row is silently deleted, not marked or appended to
+- this is intentional: history must reflect what is actually in effect, not what was ever done
+- this keeps history accurate and avoids confusing audit trails
+- future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
 
 backups
 - its really just all about copying the sqlite
