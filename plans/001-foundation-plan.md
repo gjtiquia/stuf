@@ -31,6 +31,14 @@ service_test ──uses──> mock repos
 repo_test ──uses──> real SQLite (temp file)
 ```
 
+Models must not hold database connections or repos directly. They receive service interfaces and own only UI state: current URL/path, config, route/session state, undo stack, visible session history, focused component state, and recoverable display errors.
+
+### Mutation & Undo Boundary
+
+All service-level mutations must go through a shared mutation/history boundary. That boundary records old/new JSON data, writes persisted effective history, and returns/registers a current-session undo operation. Undo reverses the DB mutation, removes the visible session history row, and deletes the corresponding persisted history row.
+
+Tests must cover that each mutation records effective history and can be reversed through the undo path. Service interfaces should make mutation/undo participation hard to skip; direct repo writes from models are not allowed.
+
 ### Directory Structure
 
 ```
@@ -135,7 +143,8 @@ stuf/
 - All integer types are `INTEGER` (SQLite does not differentiate BIGINT/INT)
 - Booleans stored as `INTEGER` (1=true, 0=false)
 - Dates stored as `TEXT` (YYYY-MM-DD, YYYY-MM, ISO 8601 datetimes), validated Go-side
-- Refs derived from auto-increment ID: `tx-000001`, `owed-000001`, `set-000001`
+- Refs derived from never-reused auto-increment IDs: `tx-000001`, `owed-000001`, `set-000001`
+- Tables with user-facing refs (`transactions`, `owed_items`, `settlements`) use `INTEGER PRIMARY KEY AUTOINCREMENT` so refs stay stable and are not reused after deletes
 
 ### Tables
 
@@ -260,11 +269,13 @@ Currency for allocations/goals inherits from budget. No separate currency column
 
 Allocated amount = SUM(delta_amount) filtered by budget_id. Budget balance is allocated minus budget-linked effective expense rows. **INDEX(budget_id, date)**.
 
+Default allocation action: when `has_default_allocation=1`, budget detail may show `apply default allocation`. Confirming it creates one allocation dated today with `delta_amount=default_allocation_amount` in the budget currency, then redirects to `/budgets/{name}/allocations/`. Bulk default allocation, automatic recurring allocation, and monthly allocation flows remain deferred.
+
 #### `transactions`
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | INTEGER | PRIMARY KEY | Internal |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | Internal |
 | ref | TEXT | UNIQUE NOT NULL | Derived: tx-{zero-padded id} |
 | date | TEXT | NOT NULL | YYYY-MM-DD |
 | type | TEXT | NOT NULL CHECK(type IN ('income', 'expense')) | |
@@ -303,7 +314,7 @@ Allocated amount = SUM(delta_amount) filtered by budget_id. Budget balance is al
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | INTEGER | PRIMARY KEY | Internal |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | Internal |
 | ref | TEXT | UNIQUE NOT NULL | Derived: owed-{zero-padded id} |
 | direction | TEXT | NOT NULL CHECK(direction IN ('you_owe', 'owes_you')) | |
 | party_id | INTEGER | REFERENCES parties(id) NOT NULL | |
@@ -322,7 +333,7 @@ Remaining = amount - SUM(settlements converted to owed item currency). Computed 
 
 | Column | Type | Constraints | Notes |
 |--------|------|-------------|-------|
-| id | INTEGER | PRIMARY KEY | Internal |
+| id | INTEGER | PRIMARY KEY AUTOINCREMENT | Internal |
 | ref | TEXT | UNIQUE NOT NULL | Derived: set-{zero-padded id} |
 | owed_item_id | INTEGER | REFERENCES owed_items(id) NOT NULL | |
 | date | TEXT | NOT NULL | YYYY-MM-DD |
@@ -390,6 +401,13 @@ currencies ←──────────────────────
 | Parent remaining | parent amount - SUM(child amounts converted to parent currency) |
 | Goal remaining | goal target amount - budget balance (both in budget currency) |
 | Goal monthly needed | remaining / months left (months through target month, inclusive) |
+
+### Currency Conversion Failure Semantics
+
+- Missing display conversion data shows the original currency amount and a clear warning instead of silently converting.
+- Converted totals that depend on missing rates omit the affected converted amount and show a warning.
+- Missing settlement-to-owed-item conversion blocks confirmation because settlement remaining math must be exact in the owed item currency.
+- No runtime network fetch or silent fallback conversion is used in v1.
 
 ### Effective Transaction Rows
 
@@ -480,9 +498,9 @@ Minimal for v1. Just app currency. Date format is fixed ISO.
 
 ## Phase 5: TUI Shell (Minimal)
 
-The initial TUI shell just proves the app boots, connects to DB, and shows the dashboard structure. Real feature screens come in subsequent plans.
+The initial TUI shell proves the app boots, connects to DB, and shows the dashboard structure. This foundation plan also includes the accounts vertical slice as the first real feature, so the repo/service/model/form/history/undo stack is proven end-to-end. Other feature screens come in subsequent plans.
 
-- Bubbletea `Model` struct holds: current URL/path, DB connection, config, undo stack, visible session history
+- Bubbletea `Model` struct holds: current URL/path, service interfaces, config, route/session state, undo stack, visible session history, focused component state, recoverable display errors
 - URL-based routing: `/`, `/accounts/`, `/accounts/create/`, etc.
 - Global keybinds: `ctrl-c` quit, `ctrl-z` undo, `esc` back/exit, `?` help
 - Number hotkeys work only in menu screens, not in forms
@@ -515,6 +533,7 @@ After a successful mutation, redirect to the appropriate list or detail page:
 | Create budget | `/budgets/list/` |
 | Edit budget | `/budgets/{name}/` |
 | Add allocation | `/budgets/{name}/allocations/` |
+| Apply default allocation | `/budgets/{name}/allocations/` |
 | Create transaction | `/transactions/list/` |
 | Edit transaction | `/transactions/{ref}/` |
 | Delete transaction | `/transactions/list/` |

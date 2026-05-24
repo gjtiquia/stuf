@@ -148,6 +148,8 @@ session action history / undo support
 - current-session undo history and persisted effective history can share the same action/mutation schema, but should not behave the same in the UI
 - this also means this needs to be a first class citizen, baked deep into the architecture
 - literally any mutation, needs a way to undo, and this needs to be backed by compile time checking of interface, and also sufficient unit testing coverage to ensure correctness
+- service-level mutations should go through a shared mutation/history boundary so history and undo behavior are not optional per screen
+- models should call services, not repos/db directly, so UI paths cannot bypass mutation history
 - what this unlocks is efficiency gains. not afraid to do things fast because, u can easily edit or undo. 
 - keeps things "simple" as well, we can skip confirmation pages for a lot of otherwise seemingly destructive actions
 - persisted history is not an audit log
@@ -2097,6 +2099,7 @@ transaction references
 - transactions have an internal immutable database id
 - transactions have a user-facing reference id for URLs/history
 - transaction refs are sequential and stable
+- transaction refs must not be reused after deletes
 - transaction refs look like tx-000001
 - transaction refs do not encode transaction date, account, type, or amount
 - editing transaction fields does not change the transaction ref
@@ -3347,6 +3350,7 @@ esc     : back
 
 - after confirm success, goes to /owed/list/ automatically
 - history uses the owed ref path
+- owed item refs are sequential, stable, and must not be reused after deletes
 
 ```
 history (ctrl-z to undo)
@@ -3430,6 +3434,7 @@ esc     : back
 - settlement currency defaults to owed item currency
 - settlement amount converts into owed item currency to reduce remaining
 - settlements have refs like set-000001
+- settlement refs are sequential, stable, and must not be reused after deletes
 - settlement refs are shown in URL/history, not detail fields
 - pressing enter on a settlement opens settlement detail
 
