@@ -649,17 +649,22 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/"
 	view := app.View()
-	for _, want := range []string{"name        : cash", "balance     : HKD 0.00", "date       | balance", "(no balances yet)", "> 1) add balance"} {
+	for _, want := range []string{"name        : cash", "balance     : HKD 0.00", "/accounts/cash/balances/", "> 1) list", "2) add balance"} {
 		if !strings.Contains(view, want) {
-			t.Fatalf("empty balances missing %q:\n%s", want, view)
+			t.Fatalf("empty balances menu missing %q:\n%s", want, view)
 		}
+	}
+	app.Path = "/accounts/cash/balances/list/"
+	view = app.View()
+	if !strings.Contains(view, "(no balances yet)") {
+		t.Fatalf("empty balances list missing no-results state:\n%s", view)
 	}
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
 		t.Fatal(err)
 	}
-	app.Path = "/accounts/cash/balances/"
+	app.Path = "/accounts/cash/balances/list/"
 	view = app.View()
-	for _, want := range []string{"> 2026-05-21 | HKD 50,000.00", "initial balance", "  1) add balance"} {
+	for _, want := range []string{"> 2026-05-21 | HKD 50,000.00", "initial balance", "/accounts/cash/balances/list/"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balances list missing %q:\n%s", want, view)
 		}
@@ -976,7 +981,7 @@ func TestBalanceAddEnterOnConfirmSubmits(t *testing.T) {
 
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("enter on confirm should submit and return to balances list, got %s", app.Path)
 	}
 	if app.Form["balance"] != "" {
@@ -1011,7 +1016,7 @@ func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/2026-05-21/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/2026-05-21/edit/", Menu: 0},
 	)
@@ -1030,7 +1035,7 @@ func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
 	app.Field = 3
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("enter on confirm should submit edit and return to balances list, got %s", app.Path)
 	}
 	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-21")
@@ -1155,11 +1160,11 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
 		t.Fatal(err)
 	}
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/list/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	view := app.View()
-	if !strings.Contains(view, "> 2026-05-01") || strings.Contains(view, "> 1) add balance") {
+	if !strings.Contains(view, "> 2026-05-01") || strings.Contains(view, "> 2026-06-01") {
 		t.Fatalf("balance list marker out of sync:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1174,7 +1179,7 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("delete should return to balances list, got %s", app.Path)
 	}
 	if _, err := store.Bal.GetByAccountDate(ctx, acct.ID, "2026-05-01"); err == nil {
@@ -1383,10 +1388,10 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 	if app.Path != "/accounts/cash/balances/" {
 		t.Fatalf("balances path = %s", app.Path)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	app = m.(App)
 	if app.Path != "/accounts/cash/balances/add/" {
-		t.Fatalf("empty balances enter should add balance, got %s", app.Path)
+		t.Fatalf("add balance menu should open add form, got %s", app.Path)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
@@ -1398,7 +1403,7 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		app = m.(App)
 	}
-	if app.Path != "/accounts/cash/balances/" || !strings.Contains(app.View(), "HKD 123.45") {
+	if app.Path != "/accounts/cash/balances/list/" || !strings.Contains(app.View(), "HKD 123.45") {
 		t.Fatalf("balance flow failed path=%s view:\n%s", app.Path, app.View())
 	}
 }
@@ -1474,7 +1479,7 @@ func TestMenuCursorRestoresOnBackFromBalanceDetail(t *testing.T) {
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
 		t.Fatal(err)
 	}
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/list/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1484,7 +1489,7 @@ func TestMenuCursorRestoresOnBackFromBalanceDetail(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("expected balances list, got %s", app.Path)
 	}
 	if view := app.View(); !strings.Contains(view, "> 2026-05-01") || strings.Contains(view, "> 2026-06-01") {

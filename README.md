@@ -138,6 +138,17 @@ scoped shortcuts
 - pre-filled fields remain editable unless explicitly locked
 - labels can be context-aware, but label logic should live with the canonical action
 
+resource route shape
+- resource routes are menus, not mixed list/action screens
+- list/history browsing lives under `/list/`
+- append/create forms live under explicit action routes like `/add/`, `/create/`, or domain verbs
+- after successful add/edit/delete, return to the relevant `/list/` page when that page confirms the result
+- use `create` for new containers/objects and `add`/`allocate` for appending records/events to existing objects
+- examples:
+    - `/accounts/{account}/balances/` branches to `list` and `add balance`
+    - `/budgets/{budget}/allocations/` branches to `list` and `allocate`
+    - `/owed/{owed-ref}/settlements/` branches to `list` and `add settlement`
+
 session action history / undo support
 - everytime a mutation occurs (create account / edit something), we log it above
 - this way, when Ctrl-C and exit, its easily searchable (eg. via tmux) previous actions
@@ -836,7 +847,7 @@ esc     : back
 - account deletion is deferred for v1
 - accidental newly-created accounts can be undone with ctrl-z if still the latest history action
 - existing accounts should be edited instead of deleted for v1
-- pressing 1 (balances) opens the account balances page
+- pressing 1 (balances) opens the account balances menu
 - pressing 2 (transactions) opens an automatically filtered account transactions list
 - pressing 3 (edit account) opens the edit account flow
 - account transactions is an automatically filtered shortcut to global transactions
@@ -1020,10 +1031,8 @@ as of       : (no balance entered yet)
 
 /accounts/hsbc-one/balances/
 
-  date       | balance      | notes
-  (no balances yet)
-
-> 1) add balance
+> 1) list
+  2) add balance
 
 ---
 up/down : navigate
@@ -1032,7 +1041,8 @@ esc     : back
 ?       : help
 ```
 
-- pressing 1 (add balance) opens the add balance flow
+- pressing 1 (list) opens the account balances list
+- pressing 2 (add balance) opens the add balance flow
 - date defaults to today
 - date is required
 - balance is required
@@ -1071,7 +1081,7 @@ esc     : back
 ?       : help
 ```
 
-- after confirm success, goes to /accounts/hsbc-one/balances/ automatically
+- after confirm success, goes to /accounts/hsbc-one/balances/list/ automatically
 - this confirms that the balance has been added successfully
 - this also makes it fast to add multiple historical balances
 
@@ -1086,12 +1096,10 @@ name        : hsbc-one
 balance     : HKD 50,000.00
 as of       : 2026-05-21
 
-/accounts/hsbc-one/balances/
+/accounts/hsbc-one/balances/list/
 
   date       | balance       | notes
 > 2026-05-21 | HKD 50,000.00 | initial balance
-
-  1) add balance
 
 ---
 up/down : navigate
@@ -1163,10 +1171,10 @@ esc     : back
 ?       : help
 ```
 
-- after edit success, goes to /accounts/hsbc-one/balances/ automatically
+- after edit success, goes to /accounts/hsbc-one/balances/list/ automatically
 - delete balance happens immediately
 - no confirmation screen for delete balance in v1
-- after delete, goes to /accounts/hsbc-one/balances/ automatically
+- after delete, goes to /accounts/hsbc-one/balances/list/ automatically
 - ctrl-z undoes the latest visible history row
 
 ```
@@ -1181,12 +1189,10 @@ name        : hsbc-one
 balance     : HKD 0.00
 as of       : (no balance entered yet)
 
-/accounts/hsbc-one/balances/
+/accounts/hsbc-one/balances/list/
 
   date       | balance      | notes
   (no balances yet)
-
-> 1) add balance
 
 ---
 up/down : navigate
@@ -1910,11 +1916,24 @@ allocations
 
 /budgets/groceries/allocations/
 
+> 1) list
+  2) allocate
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/budgets/groceries/allocations/list/
+
   date       | change        | balance       | notes
 > 2026-05-01 | HKD 1,000.00  | HKD 1,000.00  | paycheck
   2026-05-10 | HKD  (200.00) | HKD   800.00  | correction
-
-> 1) allocate
 
 ---
 up/down : navigate
@@ -1949,6 +1968,7 @@ esc     : back
 ```
 
 - allocation action options are set total, add money, remove money
+- after confirm success, goes to /budgets/groceries/allocations/list/ automatically
 
 expense transactions reducing budgets
 - transaction budget link is nullable in the data model
@@ -3436,10 +3456,23 @@ esc     : back
 
 /owed/owed-000001/settlements/
 
+> 1) list
+  2) add settlement
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/owed-000001/settlements/list/
+
   date       | amount       | notes
 > 2026-05-21 | HKD 200.00  | paid by fps
-
-> 1) add settlement
 
 ---
 up/down : navigate
@@ -3527,7 +3560,7 @@ esc     : back
 - delete settlement happens immediately
 - no confirmation screen for delete settlement in v1
 - deleting settlement increases owed remaining again
-- after edit/delete success, returns to settlements list
+- after edit/delete success, returns to /owed/owed-000001/settlements/list/
 
 deferred owed
 - related transaction UX

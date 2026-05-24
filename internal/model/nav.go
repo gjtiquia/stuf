@@ -54,22 +54,22 @@ func (a App) menuCountFor(path string) int {
 		if _, ok := accountDetailName(path); ok {
 			return 4
 		}
-		if _, _, ok := balanceDetailName(path); ok {
+		if _, ok := balancesName(path); ok {
 			return 2
 		}
-		if name, ok := balancesName(path); ok {
+		if name, ok := balanceListName(path); ok {
 			acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 			if err != nil {
-				return 1
+				return 0
 			}
 			rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
 			if err != nil {
-				return 1
+				return 0
 			}
-			if len(rows) == 0 {
-				return 1
-			}
-			return len(rows) + 1
+			return len(rows)
+		}
+		if _, _, ok := balanceDetailName(path); ok {
+			return 2
 		}
 	}
 	return 1

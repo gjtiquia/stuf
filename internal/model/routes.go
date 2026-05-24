@@ -17,7 +17,8 @@ const (
 
 func accountPath(name string) string             { return "/accounts/" + name + "/" }
 func accountEditPathFor(name string) string     { return "/accounts/" + name + "/edit/" }
-func accountBalancesPath(name string) string    { return "/accounts/" + name + "/balances/" }
+func accountBalancesPath(name string) string      { return "/accounts/" + name + "/balances/" }
+func accountBalanceListPath(name string) string   { return "/accounts/" + name + "/balances/list/" }
 func accountBalancePath(name, date string) string { return "/accounts/" + name + "/balances/" + date + "/" }
 func accountBalanceAddPath(name string) string    { return "/accounts/" + name + "/balances/add/" }
 func accountBalanceEditPath(name, date string) string {
@@ -60,6 +61,20 @@ func balancesName(path string) (string, bool) {
 		return "", false
 	}
 	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/balances/")
+	if strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, name != ""
+}
+
+func balanceListName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/balances/list/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/balances/list/")
+	if strings.Contains(name, "/") {
+		return "", false
+	}
 	return name, name != ""
 }
 
@@ -81,7 +96,7 @@ func balanceDetailName(path string) (string, string, bool) {
 		return "", "", false
 	}
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/accounts/"), "/"), "/")
-	if len(parts) == 3 && parts[1] == "balances" && parts[2] != "add" {
+	if len(parts) == 3 && parts[1] == "balances" && parts[2] != "add" && parts[2] != "list" {
 		return parts[0], parts[2], true
 	}
 	return "", "", false

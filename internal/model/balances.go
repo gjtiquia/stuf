@@ -26,10 +26,20 @@ func (a App) balanceAddKey(s, name string) App {
 	next.Field = 0
 	next.Error = ""
 	next.Nav.Pop()
-	return next.syncFromNav()
+	return next.navReplace(accountBalanceListPath(name), 0)
 }
 
-func (a App) balanceListKey(s, name string) App {
+func (a App) balanceMenuKey(s, name string) App {
+	routes := []string{accountBalanceListPath(name), accountBalanceAddPath(name)}
+	a = a.menuKey(s, routes)
+	if a.Path == accountBalanceAddPath(name) {
+		a.Form = map[string]string{"date": Today()}
+		a.Field = 0
+	}
+	return a
+}
+
+func (a App) balanceListTableKey(s, name string) App {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		a.Error = err.Error()
@@ -40,17 +50,26 @@ func (a App) balanceListKey(s, name string) App {
 		a.Error = err.Error()
 		return a
 	}
-	var routes []string
-	for _, row := range rows {
-		routes = append(routes, accountBalancePath(name, row.Date))
+	switch s {
+	case "up", "k", "shift+tab":
+		if len(rows) > 0 {
+			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
+		}
+		return a
+	case "down", "j", "tab":
+		if len(rows) > 0 {
+			a = a.navSetMenu((a.Menu + 1) % len(rows))
+		}
+		return a
+	case "enter":
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		return a.navPush(accountBalancePath(name, rows[a.Menu].Date), 0)
+	default:
+		return a
 	}
-	routes = append(routes, accountBalanceAddPath(name))
-	a = a.menuKey(s, routes)
-	if a.Path == accountBalanceAddPath(name) {
-		a.Form = map[string]string{"date": Today()}
-		a.Field = 0
-	}
-	return a
 }
 
 func (a App) balanceDetailKey(s, name, date string) App {
@@ -167,7 +186,7 @@ func (a App) balanceEditScreen(name, date string) screen {
 	}
 }
 
-func (a App) balanceList(name string) string {
+func (a App) balanceListTable(name string) string {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
@@ -178,8 +197,7 @@ func (a App) balanceList(name string) string {
 	}
 	lines := []string{strings.TrimRight(a.balanceSummary(name), "\n"), "", "  date       | balance      | notes"}
 	if len(rows) == 0 {
-		lines = append(lines, "  (no balances yet)", "")
-		lines = append(lines, menuItems([]string{"add balance"}, a.Menu))
+		lines = append(lines, "  (no balances yet)")
 		return strings.Join(lines, "\n") + "\n"
 	}
 	for i, row := range rows {
@@ -189,11 +207,6 @@ func (a App) balanceList(name string) string {
 		}
 		lines = append(lines, fmt.Sprintf("%s%s | %-12s | %s", prefix, row.Date, row.Amount.Format(acct.Code), row.Notes))
 	}
-	selectedAction := -1
-	if a.Menu == len(rows) {
-		selectedAction = 0
-	}
-	lines = append(lines, "", menuItems([]string{"add balance"}, selectedAction))
 	return strings.Join(lines, "\n") + "\n"
 }
 

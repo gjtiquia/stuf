@@ -128,8 +128,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.balanceEditKey(s, name, date)
 		} else if name, date, ok := balanceDetailName(a.Path); ok {
 			a = a.balanceDetailKey(s, name, date)
+		} else if name, ok := balanceListName(a.Path); ok {
+			a = a.balanceListTableKey(s, name)
 		} else if name, ok := balancesName(a.Path); ok {
-			a = a.balanceListKey(s, name)
+			a = a.balanceMenuKey(s, name)
 		} else if name, ok := accountEditName(a.Path); ok {
 			a = a.accountEditKey(s, name)
 		}
@@ -270,7 +272,14 @@ func (a App) screen() screen {
 			return a.accountDetailScreen(name)
 		}
 		if name, ok := balancesName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.balanceList(name)}
+			return screen{
+				Path:    accountBalancesPath(name),
+				Body:    strings.TrimRight(a.balanceSummary(name), "\n"),
+				Actions: []string{"list", "add balance"},
+			}
+		}
+		if name, ok := balanceListName(a.Path); ok {
+			return screen{Path: a.Path, Body: a.balanceListTable(name), Help: listHelp()}
 		}
 		if name, ok := balanceAddName(a.Path); ok {
 			return a.balanceAddScreen(name)
