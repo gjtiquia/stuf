@@ -340,12 +340,16 @@ Remaining = amount - SUM(settlements converted to owed item currency). Computed 
 |--------|------|-------------|-------|
 | id | INTEGER | PRIMARY KEY | |
 | timestamp | TEXT | NOT NULL | ISO 8601 |
-| action | TEXT | NOT NULL | 'create', 'update', 'delete' |
+| action | TEXT | NOT NULL CHECK(action IN ('create', 'add', 'edit', 'delete')) | |
 | path | TEXT | NOT NULL | e.g. /accounts/hsbc-one |
 | old_data | TEXT | | JSON, null for creates |
 | new_data | TEXT | | JSON, null for deletes |
 
 Write-only audit log. On undo during a session: reverse the DB mutation, then **silently delete** the corresponding history row. This is intentional — history must reflect what is actually in effect, not what was ever done. **INDEX(timestamp)**.
+
+History action verbs: `create` for new containers (account, budget, party, tag, category), `add` for new entries (balance, allocation, transaction, owed item, settlement), `edit` for modifications, `delete` for deletions. Matches user-facing history language.
+
+After a successful undo, return to `/` and re-render. This keeps rendering simple and prevents stale state bugs.
 
 ### Data Relationships
 
@@ -374,13 +378,52 @@ currencies ←──────────────────────
 |-------|-------------|
 | Account current balance | Latest balance entry for that account |
 | Budget balance | SUM(allocations delta_amount) by budget_id |
-| Budget spent | SUM of effective expense transaction amounts linked to budget |
-| Budget available | on-budget balances - budgeted - open you-owe remaining |
+| Budget spent | SUM of effective expense transaction amounts linked to budget (see Effective Transaction Rows) |
+| Budget available | on-budget balances converted to app currency - SUM(budget balances converted to app currency) - SUM(open you-owe remaining converted to app currency). Money ppl owe you does not increase available until it appears in on-budget balances. |
 | Owed remaining | owed amount - SUM(settlements converted to owed item currency) |
+| Owed status | inferred: if remaining = 0, the item is settled. Settled items are hidden from open owed lists. Computed at query time, not stored. |
 | Report growth | end balance - start balance for period |
-| Report income | SUM of effective income rows in period, or growth if none |
-| Report expenses | income - growth (derived), explained by transactions |
+| Report income | SUM of effective income rows in period, or growth if none (marked `(assumed)`) |
+| Report expenses | income - growth (derived, marked `(derived)`), explained by effective expense transaction rows |
 | Parent remaining | parent amount - SUM(child amounts converted to parent currency) |
+| Goal remaining | goal target amount - budget balance (both in budget currency) |
+| Goal monthly needed | remaining / months left (months through target month, inclusive) |
+
+### Effective Transaction Rows
+
+Reports and budget-spent calculations use effective rows, not raw parent + child rows. This prevents double counting.
+
+- If a transaction has no children → it contributes itself as a single effective row.
+- If a transaction has children → it contributes child effective rows **plus** one **parent remaining** row if remaining ≠ 0.
+- Apply recursively for deeper transaction trees.
+- Parent remaining = parent amount - Σ(child amounts converted to parent currency).
+- Parent remaining rows are virtual/read-only — they have no transaction ref, keep the parent date/account/type/tags/notes.
+- Budget spent uses the same effective-row logic.
+- If converted children total exceeds parent amount, remaining becomes negative (advisory, does not block input).
+- **V1 constraint**: deleting a transaction that has children is blocked. Children must be deleted first.
+- **V1 constraint**: mixed-type children (income child under expense parent, or vice versa) are blocked at the UI/validation layer.
+- Effective rows count in the coverage period containing their own transaction date.
+- Parent remaining row counts on the parent transaction date.
+- Child rows can appear in a different report period from their parent.
+
+### Expense Explanation
+
+In reports, expenses are displayed in this order:
+
+1. **Derived** — income - growth (or growth assumed-as-income when no income transactions exist)
+2. **Explained** — SUM of effective expense transaction rows in the period
+3. **Unexplained** — derived - explained (the remaining expense amount not explained by transactions)
+
+### Report Period Boundaries
+
+| Rule | Definition |
+|------|-----------|
+| Start balance | Latest balance on or before first day of period |
+| End balance | Latest balance on or before last day of period |
+| No start balance | Start = 0 |
+| No end balance | End = start |
+| Zero balances | Use 0 → 0 |
+| One usable balance | Assume flat (start = end = that balance) |
 
 ## Phase 3: Money Type
 
@@ -443,6 +486,58 @@ The initial TUI shell just proves the app boots, connects to DB, and shows the d
 - Number hotkeys work only in menu screens, not in forms
 - All rendering via in-house string formatting, no lipgloss
 
+### Keybind Behavior
+
+- `ctrl-c` quits immediately and gracefully, no confirmation. Quitting clears undo history.
+- `esc` at `/` opens exit confirmation (defaults to "no", shows "undo history will be cleared" if session undo history exists). `esc` from exit confirmation cancels and returns to normal `/`.
+- `esc` from a create form discards the draft immediately.
+- `esc` everywhere else goes back one level.
+- `ctrl-z` undoes the latest visible history row, then removes that row from visible history, then returns to `/` and re-renders.
+- `?` shows context-sensitive help. Press `?` again or `esc` to exit help.
+- `j/k`, `tab/shift-tab` navigate menu items. `enter` confirms.
+- Arrow keys (`up/down`) navigate in menu and list screens. `left/right` paginate or navigate periods.
+
+### Post-Mutation Navigation
+
+After a successful mutation, redirect to the appropriate list or detail page:
+
+| Action | Redirect |
+|--------|----------|
+| Create account | `/accounts/list/` |
+| Edit account | `/accounts/{name}/` (updated name if changed) |
+| Add balance | `/accounts/{name}/balances/` |
+| Edit balance | `/accounts/{name}/balances/` |
+| Delete balance | `/accounts/{name}/balances/` |
+| Create tag | `/tags/list/` |
+| Edit tag | `/tags/{name}/` |
+| Create budget | `/budgets/list/` |
+| Edit budget | `/budgets/{name}/` |
+| Add allocation | `/budgets/{name}/allocations/` |
+| Create transaction | `/transactions/list/` |
+| Edit transaction | `/transactions/{ref}/` |
+| Delete transaction | `/transactions/list/` |
+| Add child transaction | `/transactions/{ref}/children/` |
+| Create owed item | `/owed/list/` |
+| Edit owed item | `/owed/{ref}/` |
+| Add settlement | `/owed/{ref}/settlements/` |
+| Edit settlement | `/owed/{ref}/settlements/` |
+| Delete settlement | `/owed/{ref}/settlements/` |
+| Create person | `/owed/people/{name}/` |
+| Edit person | `/owed/people/{name}/` (updated name if changed) |
+
+### Error Display Behavior
+
+- Errors remain visible as long as the user is still on the current page.
+- Errors disappear when the user navigates back (the error is no longer relevant).
+- Errors disappear after a successful action on the same page.
+- Errors should not crash the app. Recoverable errors show a clear message.
+- Backend validation errors (e.g., duplicate name) supplement frontend validation.
+
+### Backup & Settings Screens
+
+- `/backup/` — shows database path, last backup path, and a "create backup" action. Backup creates `db.YYYY-MM-DD-HHMM.sqlite`. Backup does not write undo history.
+- `/settings/` — shows active config path and app currency. Read-only. Editing happens via the config file directly.
+
 ## Phase 6: Config & Seeding — Test Coverage
 
 ### Config Tests
@@ -472,3 +567,21 @@ The initial TUI shell just proves the app boots, connects to DB, and shows the d
 9. **`service` package** — business logic per domain. **TDD: unit tests with mock repos**
 10. **Bubbletea shell** — boot, connect, dashboard render, nav framework. **TDD: model tests**
 11. **First feature: accounts** — prove the full stack works end-to-end. **TDD**
+
+## v1 Scope Exclusions
+
+The following are explicitly **not v1** per the README. Do not build these.
+
+**Deletions**: account deletion, tag deletion, budget deletion, category deletion (use undo for accidental creates; edit or hide existing items instead)
+
+**Transactions**: explicit transfer transactions, rich tree visualizations in reports, report-to-input shortcuts, preserving dirty create drafts after esc, opening original records from report detail
+
+**Budgets**: recurring/monthly allocation flow, yearly expense allocation flow, bulk apply default allocations, automatic recurring allocations
+
+**Saving goals**: multiple active goals per budget, maintain-balance goals, goal report drilldowns
+
+**Owed**: related transaction UX, transaction-settlement shortcuts, settlement tags, owed report integration
+
+**Tags**: tag merge, tag usage counts, tag detail backlinks
+
+**Other**: custom currency creation, WAL mode, historical currency rate snapshots, manual currency rate overrides, config editing UI, export UI (sqlite file is directly accessible), investment-specific features

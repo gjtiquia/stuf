@@ -2872,9 +2872,6 @@ monthly report boundary rules
 - if one usable balance exists, assume flat
 
 deferred reports
-- annual detail screens
-- year-to-date detail screens
-- rolling report detail screens
 - opening original transactions from report expense detail
 - grouped expense views
 - rich transaction tree visualizations in reports
