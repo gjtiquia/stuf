@@ -1,0 +1,8 @@
+[
+  {"code":"USD","name":"US Dollar","scale":2,"rate_to_usd_amount":1,"rate_to_usd_scale":0},
+  {"code":"HKD","name":"Hong Kong Dollar","scale":2,"rate_to_usd_amount":128,"rate_to_usd_scale":3},
+  {"code":"EUR","name":"Euro","scale":2,"rate_to_usd_amount":109,"rate_to_usd_scale":2},
+  {"code":"GBP","name":"British Pound","scale":2,"rate_to_usd_amount":127,"rate_to_usd_scale":2},
+  {"code":"JPY","name":"Japanese Yen","scale":0,"rate_to_usd_amount":64,"rate_to_usd_scale":4},
+  {"code":"PHP","name":"Philippine Peso","scale":2,"rate_to_usd_amount":171,"rate_to_usd_scale":4}
+]

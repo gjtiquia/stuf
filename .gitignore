@@ -1,0 +1,5 @@
+.gocache/
+stuf
+db.sqlite
+db.*.sqlite
+config.jsonc

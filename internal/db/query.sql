@@ -1,0 +1,1 @@
+-- sqlc placeholder; repositories currently use hand-written SQL while the schema settles.
