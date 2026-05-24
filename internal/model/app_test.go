@@ -434,6 +434,77 @@ func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	}
 }
 
+func TestSanitizeSlug(t *testing.T) {
+	tests := map[string]string{
+		"HSBC One":           "hsbc-one",
+		"foo  bar":           "foo-bar",
+		"foo---bar":          "foo-bar",
+		"__Foo!! Bar//Baz🙂":  "foo-barbaz",
+		"  ---Leading Space": "leading-space",
+		"already-good-123":   "already-good-123",
+		"trailing space ":    "trailing-space-",
+		"under_score":        "underscore",
+	}
+	for input, want := range tests {
+		if got := sanitizeSlug(input); got != want {
+			t.Fatalf("sanitizeSlug(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestAccountNameInputSanitizesOnlyName(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	for _, r := range "HSBC  One!!/🙂" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if view := app.View(); !strings.Contains(view, "name     : hsbc-one") {
+		t.Fatalf("typed account name was not sanitized:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=Bad Name!!")})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "name     : bad-name") {
+		t.Fatalf("set name was not sanitized:\n%s", view)
+	}
+	app.Field = 3
+	for _, r := range "Hello World! 管家" {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if got := app.Form["notes"]; got != "Hello World! 管家" {
+		t.Fatalf("notes should preserve raw input, got %q", got)
+	}
+}
+
+func TestSanitizedNameSubmitsAndEditRedirectsToNewSlug(t *testing.T) {
+	app, store := testApp(t)
+	app.Path = "/accounts/create/"
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=My Cash!!")})
+	app = m.(App)
+	app.Field = 4
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("sanitized create did not submit: %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "my-cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/my-cash/edit/"
+	app.Form = map[string]string{"name": acct.Name, "currency": "HKD", "on-budget": "true"}
+	app.Field = 0
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=New CASH Account!!")})
+	app = m.(App)
+	app.Field = 4
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/new-cash-account/" {
+		t.Fatalf("edit did not redirect to sanitized slug: %s\n%s", app.Path, app.View())
+	}
+}
+
 func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()
@@ -477,7 +548,7 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app, store := testApp(t)
 	app.Path = "/accounts/create/"
-	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=Bad Name")})
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=!!!")})
 	app = m.(App)
 	app.Field = 4
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})

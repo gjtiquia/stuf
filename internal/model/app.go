@@ -475,7 +475,7 @@ func (a App) formKey(s string, fields []string) App {
 	if strings.HasPrefix(s, "set ") {
 		parts := strings.SplitN(strings.TrimPrefix(s, "set "), "=", 2)
 		if len(parts) == 2 {
-			a.Form[parts[0]] = parts[1]
+			a.Form[parts[0]] = normalizeFieldInput(parts[0], "", parts[1])
 		}
 		return a
 	}
@@ -497,8 +497,9 @@ func (a App) formKey(s string, fields []string) App {
 			a.Form[field] = a.Form[field][:len(a.Form[field])-1]
 		}
 	default:
-		if len(s) == 1 && a.Field < len(fields) {
-			a.Form[fields[a.Field]] += s
+		if isTextInputKey(s) && a.Field < len(fields) {
+			field := fields[a.Field]
+			a.Form[field] = normalizeFieldInput(field, a.Form[field], s)
 		}
 	}
 	return a
@@ -940,6 +941,46 @@ func placeholderFor(field string) string {
 	default:
 		return ""
 	}
+}
+
+func normalizeFieldInput(field, current, input string) string {
+	if field != "name" {
+		return current + input
+	}
+	return sanitizeSlug(current + input)
+}
+
+func isTextInputKey(input string) bool {
+	switch input {
+	case "", "left", "right", "up", "down", "enter", "esc", "tab", "shift+tab", "backspace", "ctrl+c", "ctrl+z":
+		return false
+	default:
+		return true
+	}
+}
+
+func sanitizeSlug(input string) string {
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range input {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+			lastHyphen = false
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r == '-' || r == ' ' || r == '\t' || r == '\n' || r == '\r':
+			if b.Len() > 0 && !lastHyphen {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+	}
+	return b.String()
 }
 
 func parseBoolDefault(value string, fallback bool) bool {
