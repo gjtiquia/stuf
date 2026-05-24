@@ -16,7 +16,7 @@ This plan intentionally keeps the executable schema small. Future domains such a
 - SQLite startup: create/open `db.sqlite`, verify stuf metadata, run migrations, validate required schema
 - Embedded goose migrations
 - Embedded currency/rate seed data
-- Config loading/creation with app currency
+- JSONC config loading/creation with app currency
 - Money primitives: integer+scale storage, parsing, formatting, arithmetic, deterministic conversion
 - Repository/service/model boundaries
 - Shared mutation/history/undo boundary
@@ -26,6 +26,7 @@ This plan intentionally keeps the executable schema small. Future domains such a
 - Balances vertical slice
 - Current-session visible history and `ctrl-z` undo for account/balance mutations
 - Persisted effective history rows for account/balance mutations
+- Read-only settings screen and local SQLite backup creation
 - Tests across money, config, seeding, startup, repos, services, model behavior, and undo
 
 ### Out of Scope for 001
@@ -156,6 +157,7 @@ Future domain packages/files should be added by future plans when their workflow
 - `modernc.org/sqlite` — pure-Go SQLite driver
 - `github.com/pressly/goose/v3` — migrations
 - `github.com/sqlc-dev/sqlc` — query generation (dev dependency)
+- `github.com/tailscale/hujson` — JSONC config parsing
 - Standard library for JSON, formatting, file paths, time, and testing
 
 ### Makefile Targets
@@ -285,6 +287,8 @@ Foundation action verbs:
 
 `INDEX(timestamp)`.
 
+Visible current-session history renders as `YYYY-MM-DD HH:MM <verb> <path>`, oldest at the top and newest at the bottom. `ctrl-z` undoes the newest/bottom row, removes that visible row, deletes the corresponding persisted history row, and does not append an undo history row.
+
 ### Foundation Data Relationships
 
 ```text
@@ -360,7 +364,7 @@ Formula parsing is deferred unless implementation naturally needs it for amount 
 5. Run pending migrations.
 6. Validate required foundation schema.
 7. Seed missing currency/rate data from embedded data.
-8. Load config from local `config.jsonc` in cwd, then fallback to global `~/.config/stuf/config.jsonc`.
+8. Load JSONC config from local `config.jsonc` in cwd, then fallback to global `~/.config/stuf/config.jsonc`.
 9. If no config exists, create global config with detected currency or USD.
 10. If USD fallback is used, show a startup warning that app currency defaulted to USD and can be changed in config.
 11. Start Bubble Tea program.
@@ -370,11 +374,24 @@ Formula parsing is deferred unless implementation naturally needs it for amount 
 ```jsonc
 {
   // stuf config
-  "currency": "HKD"
+  // docs: README.md#config
+  "currency": "HKD",
 }
 ```
 
 Minimal for v1. Date format is fixed ISO. Editing config from the UI is deferred.
+
+Config files are JSONC, not plain JSON. Parsing must support `//` line comments, `/* */` block comments, and trailing commas by normalizing JSONC to JSON before unmarshalling into the config struct.
+
+Config precedence:
+
+- Use local `./config.jsonc` if it exists.
+- Otherwise use global `~/.config/stuf/config.jsonc` if it exists.
+- If neither exists, create the global config with detected currency or USD.
+
+An empty config file counts as present but invalid, not missing. Startup must fail with a clear error for empty config, malformed JSONC, valid JSONC with invalid shape, missing/empty `currency`, or unknown currency code after database seeding. The recovery path is to fix or delete the config file, then relaunch.
+
+Generated global config must be valid JSONC, include a short comment linking to config docs or README, and use the detected currency if available. If location detection fails, generate USD and show the startup warning.
 
 ## Phase 5: TUI Shell and Accounts Slice
 
@@ -388,6 +405,8 @@ The initial TUI shell proves the app boots, connects to DB, and shows dashboard/
 - Number hotkeys work only in menu screens, not in forms.
 - All rendering uses in-house string formatting, no lipgloss.
 - `/reports/`, `/budgets/`, `/transactions/`, and `/owed/` are not real workflows in `001`. They may be hidden or shown as placeholders, but must not pretend to be implemented.
+
+Visible current-session history, when present, is shown above the main screen as `history (ctrl-z to undo)`. Rows render as `YYYY-MM-DD HH:MM <verb> <path>`, oldest at the top and newest at the bottom.
 
 ### Dashboard in 001
 
@@ -455,6 +474,7 @@ Account behavior:
 
 - Creating an account does not ask for an opening balance.
 - Account names are strict slugs.
+- A strict slug contains only lowercase ASCII letters, digits, and hyphens; must start and end with a letter or digit; and must not be empty or contain spaces, underscores, uppercase letters, slashes, or other path separators.
 - Account name is user-facing and editable.
 - Internal account ID is immutable.
 - Account currency defaults to app currency.
@@ -466,6 +486,8 @@ Account behavior:
 - Hidden accounts are excluded from the default account list.
 - Hidden accounts preserve balances, history, and future report relevance.
 - Account deletion is deferred for v1.
+
+Transaction actions/routes are not implemented in `001`. If account detail shows a transaction action or route, it must route only to an explicit `coming later` screen and must not expose fake transaction workflows.
 
 ### Balances Requirements
 
@@ -510,7 +532,9 @@ After a successful mutation, redirect as follows:
 - `/settings/` shows active config path and app currency. Read-only. Editing happens via the config file directly.
 - `/backup/` shows database path, last backup path if known, and a `create backup` action.
 - Backup creates `db.YYYY-MM-DD-HHMM.sqlite` beside the active DB.
-- Backup does not write undo history.
+- Backup copies the active SQLite database file and preserves database contents.
+- Backup does not write visible undo history or persisted effective history.
+- Backup failures are recoverable display errors with clear messages.
 
 ## Phase 6: Test Coverage
 
@@ -527,10 +551,18 @@ After a successful mutation, redirect as follows:
 
 ### Config Tests
 
-- Parse valid config.
-- Reject invalid config with clear error.
+- Parse valid JSONC config.
+- Parse JSONC with line comments.
+- Parse JSONC with block comments.
+- Parse JSONC with trailing commas.
+- Reject empty config as invalid.
+- Reject malformed JSONC with clear error.
+- Reject valid JSONC with invalid shape.
+- Reject missing/empty `currency`.
+- Reject unknown currency code after DB seeding.
 - Create default config when none exists.
 - Location detection fallback to USD.
+- Generated default config is valid JSONC and includes comments/docs link.
 
 ### Startup and Seeding Tests
 
@@ -541,6 +573,13 @@ After a successful mutation, redirect as follows:
 - Fresh DB has expected currencies.
 - Re-running seeding is idempotent.
 - Currency rates are seeded correctly.
+
+### Backup Tests
+
+- Timestamped backup copy is created beside the active DB.
+- Backup preserves database contents.
+- Backup does not write visible undo history or persisted effective history.
+- Backup reports clear errors for copy/open failures.
 
 ### Repo Tests
 
@@ -556,6 +595,9 @@ After a successful mutation, redirect as follows:
 
 - Account mutations validate input and record history.
 - Balance mutations validate input and record history.
+- Dashboard/account totals omit converted amounts when conversion data is missing.
+- Original currency amounts remain visible when conversion data is missing.
+- Missing conversion data produces a clear warning and does not crash rendering.
 - Undo reverses account create where valid.
 - Undo reverses account edit/hide/show.
 - Undo reverses balance add/edit/delete.
@@ -569,6 +611,10 @@ After a successful mutation, redirect as follows:
 - Account list/detail rendering.
 - Balance add/edit/delete navigation.
 - Recoverable errors remain on page and clear correctly.
+- Visible history renders as `YYYY-MM-DD HH:MM <verb> <path>`.
+- Visible history renders oldest at top and newest at bottom.
+- `ctrl-z` undoes and removes the newest visible history row.
+- Undo does not append a visible undo history row.
 - `esc`, `ctrl-c`, `ctrl-z`, and `?` behavior.
 
 ## Execution Order
@@ -584,7 +630,8 @@ After a successful mutation, redirect as follows:
 9. **Service package** — account, balance, currency, and history services. Unit tests with mock repos.
 10. **Bubble Tea shell** — boot, dashboard render, routing, keybind framework. Model tests.
 11. **Accounts/balances UI flows** — create/list/detail/edit/hide/show accounts; add/list/detail/edit/delete balances. Model tests.
-12. **Verification** — `make generate`, `make test`, `make build`, and a manual smoke run.
+12. **Settings/backup screens** — read-only settings display and backup creation flow. Model/service tests.
+13. **Verification** — `make generate`, `make test`, `make build`, and a manual smoke run.
 
 ## Expected Result After 001
 
@@ -601,6 +648,7 @@ After this plan is executed, a user should be able to:
 - See visible session history for mutations.
 - Press `ctrl-z` to undo the latest current-session mutation.
 - Quit without losing persisted database state.
+- Create a timestamped SQLite backup from the TUI.
 - Copy the SQLite database directly for backup or inspection.
 
 ## Deferred Domain Design Notes
