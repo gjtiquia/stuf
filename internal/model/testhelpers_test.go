@@ -20,6 +20,18 @@ func assertOrdered(t *testing.T, body string, earlier string, later string) {
 	}
 }
 
+func assertRenderOrder(t *testing.T, view string, segments ...string) {
+	t.Helper()
+	pos := 0
+	for _, segment := range segments {
+		idx := strings.Index(view[pos:], segment)
+		if idx == -1 {
+			t.Fatalf("render order missing %q after position %d in:\n%s", segment, pos, view)
+		}
+		pos += idx + len(segment)
+	}
+}
+
 func assertViewContains(t *testing.T, view string, wants ...string) {
 	t.Helper()
 	for _, want := range wants {

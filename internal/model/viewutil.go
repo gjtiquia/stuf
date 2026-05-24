@@ -42,10 +42,14 @@ func normalizeFieldInput(field, current, input string) string {
 }
 
 func normalizeFieldValue(field, value string) string {
-	if field != "name" {
+	switch field {
+	case "name":
+		return sanitizeSlug(value)
+	case "date":
+		return sanitizeDateInput(value)
+	default:
 		return value
 	}
-	return sanitizeSlug(value)
 }
 
 func isTextInputKey(input string) bool {
@@ -63,6 +67,33 @@ func trimLastRune(s string) string {
 	}
 	runes := []rune(s)
 	return string(runes[:len(runes)-1])
+}
+
+func sanitizeDateInput(input string) string {
+	var digits strings.Builder
+	for _, r := range input {
+		if r >= '0' && r <= '9' {
+			if digits.Len() >= 8 {
+				continue
+			}
+			digits.WriteRune(r)
+		}
+	}
+	d := digits.String()
+	switch len(d) {
+	case 0:
+		return ""
+	case 1, 2, 3, 4:
+		return d
+	case 5:
+		return d[:4] + "-" + d[4:5]
+	case 6:
+		return d[:4] + "-" + d[4:6]
+	case 7:
+		return d[:4] + "-" + d[4:6] + "-" + d[6:7]
+	default:
+		return d[:4] + "-" + d[4:6] + "-" + d[6:8]
+	}
 }
 
 func sanitizeSlug(input string) string {

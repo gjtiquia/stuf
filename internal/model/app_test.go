@@ -377,6 +377,11 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 			t.Fatalf("balance add form missing %q:\n%s", want, view)
 		}
 	}
+	assertRenderOrder(t, view,
+		"name        : cash",
+		"/accounts/cash/balances/add/",
+		"> 1) date",
+	)
 }
 
 func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
@@ -589,6 +594,52 @@ func TestAccountEditSelectToggleAndLockedCurrencyOptions(t *testing.T) {
 	}
 }
 
+func TestBalanceAddScreenRenderOrder(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/add/"
+	app.Form = map[string]string{"date": "2026-05-24"}
+	view := app.View()
+	assertRenderOrder(t, view,
+		"# stuf",
+		"name        : cash",
+		"balance     : HKD 0.00",
+		"as of       : (no balance entered yet)",
+		"/accounts/cash/balances/add/",
+		"> 1) date",
+		"[confirm]",
+		"---",
+	)
+}
+
+func TestBalanceEditScreenRenderOrder(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/2026-05-21/edit/"
+	app.Form = map[string]string{"date": "2026-05-21", "balance": "50000.00", "notes": "initial balance"}
+	view := app.View()
+	assertRenderOrder(t, view,
+		"# stuf",
+		"name        : cash",
+		"balance     : HKD 50000.00",
+		"as of       : 2026-05-21",
+		"/accounts/cash/balances/2026-05-21/edit/",
+		"> 1) date",
+		"[confirm]",
+		"---",
+	)
+}
+
 func TestBalancesScreensReadmeShape(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -628,6 +679,11 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 			t.Fatalf("balance edit missing %q:\n%s", want, view)
 		}
 	}
+	assertRenderOrder(t, view,
+		"name        : cash",
+		"/accounts/cash/balances/2026-05-21/edit/",
+		"> 1) date",
+	)
 }
 
 func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
@@ -811,6 +867,40 @@ func TestAccountNameInputSanitizesOnlyName(t *testing.T) {
 	}
 	if got := app.Form["notes"]; got != "Hello World! 管家" {
 		t.Fatalf("notes should preserve raw input, got %q", got)
+	}
+}
+
+func TestBalanceDateInputSanitizesOnTypingAndSet(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/add/"
+	app.Form = map[string]string{"date": ""}
+	app.Field = 0
+	for _, r := range "2026/05/24" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if got := app.Form["date"]; got != "2026-05-24" {
+		t.Fatalf("typed balance date was not sanitized, got %q", got)
+	}
+	if view := app.View(); !strings.Contains(view, "date     : 2026-05-24|") {
+		t.Fatalf("sanitized date caret should reset to end:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set date=2026 05 xx 24")})
+	app = m.(App)
+	if got := app.Form["date"]; got != "2026-05-24" {
+		t.Fatalf("set date was not sanitized, got %q", got)
+	}
+	app.Field = 2
+	for _, r := range "Hello World" {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if got := app.Form["notes"]; got != "Hello World" {
+		t.Fatalf("balance notes should preserve raw input, got %q", got)
 	}
 }
 

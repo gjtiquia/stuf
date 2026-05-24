@@ -194,7 +194,7 @@ func (a App) formKey(s string, fields []string) App {
 			runes := []rune(current)
 			next := string(runes[:cursor]) + s + string(runes[cursor:])
 			a.Form[field] = normalizeFieldValue(field, next)
-			if field == "name" {
+			if field == "name" || field == "date" {
 				a.resetTextCursor(field)
 			} else {
 				a.setTextCursor(field, cursor+len([]rune(s)))

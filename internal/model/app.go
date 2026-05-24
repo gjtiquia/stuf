@@ -38,6 +38,7 @@ type App struct {
 type screen struct {
 	Path    string
 	Body    string
+	Options string
 	Actions []string
 	Help    []string
 }
@@ -271,14 +272,14 @@ func (a App) screen() screen {
 		if name, ok := balancesName(a.Path); ok {
 			return screen{Path: a.Path, Body: a.balanceList(name)}
 		}
-		if _, ok := balanceAddName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: a.formHelp([]string{"date", "balance", "notes"})}
+		if name, ok := balanceAddName(a.Path); ok {
+			return a.balanceAddScreen(name)
 		}
 		if name, date, ok := balanceDetailName(a.Path); ok {
 			return a.balanceDetailScreen(name, date)
 		}
-		if _, _, ok := balanceEditName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: a.formHelp([]string{"date", "balance", "notes"})}
+		if name, date, ok := balanceEditName(a.Path); ok {
+			return a.balanceEditScreen(name, date)
 		}
 		if _, ok := accountEditName(a.Path); ok {
 			return a.accountEditScreen()
@@ -316,10 +317,14 @@ func (a App) render(s screen) string {
 		}
 		b.WriteString(s.Path + "\n")
 	}
-	if len(s.Actions) > 0 {
-		if s.Path != "" {
+	if s.Options != "" {
+		if s.Path != "" || s.Body != "" {
 			b.WriteString("\n")
-		} else if s.Body != "" {
+		}
+		b.WriteString(strings.TrimRight(s.Options, "\n") + "\n")
+	}
+	if len(s.Actions) > 0 {
+		if s.Path != "" || s.Options != "" || s.Body != "" {
 			b.WriteString("\n")
 		}
 		b.WriteString(menuItems(s.Actions, a.Menu))

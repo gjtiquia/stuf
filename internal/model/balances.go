@@ -114,12 +114,8 @@ func (a App) balanceEditKey(s, name, date string) App {
 	return a.formKey(s, []string{"date", "balance", "notes"})
 }
 
-func (a App) balanceList(name string) string {
+func (a App) balanceSummary(name string) string {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
-	if err != nil {
-		return "error: " + err.Error() + "\n"
-	}
-	rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
@@ -130,13 +126,39 @@ func (a App) balanceList(name string) string {
 		amount = bal.Amount.Format(acct.Code)
 		asOf = bal.Date
 	}
-	lines := []string{
-		fmt.Sprintf("name        : %s", acct.Name),
-		fmt.Sprintf("balance     : %s", amount),
-		fmt.Sprintf("as of       : %s", asOf),
-		"",
-		"  date       | balance      | notes",
+	return fmt.Sprintf("name        : %s\nbalance     : %s\nas of       : %s\n", acct.Name, amount, asOf)
+}
+
+func (a App) balanceAddScreen(name string) screen {
+	fields := []string{"date", "balance", "notes"}
+	return screen{
+		Path:    accountBalanceAddPath(name),
+		Body:    a.balanceSummary(name),
+		Options: a.formView(fields, nil),
+		Help:    a.formHelp(fields),
 	}
+}
+
+func (a App) balanceEditScreen(name, date string) screen {
+	fields := []string{"date", "balance", "notes"}
+	return screen{
+		Path:    accountBalanceEditPath(name, date),
+		Body:    a.balanceSummary(name),
+		Options: a.formView(fields, nil),
+		Help:    a.formHelp(fields),
+	}
+}
+
+func (a App) balanceList(name string) string {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return "error: " + err.Error() + "\n"
+	}
+	rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
+	if err != nil {
+		return "error: " + err.Error() + "\n"
+	}
+	lines := []string{strings.TrimRight(a.balanceSummary(name), "\n"), "", "  date       | balance      | notes"}
 	if len(rows) == 0 {
 		lines = append(lines, "  (no balances yet)", "")
 		lines = append(lines, menuItems([]string{"add balance"}, a.Menu))
