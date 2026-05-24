@@ -214,20 +214,33 @@ func accountSummary(rows []accountListRow, appCurrency string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (a App) accountList(includeHidden bool) string {
+func (a App) accountListContext(includeHidden bool) string {
+	if includeHidden {
+		return ""
+	}
 	allRows, err := a.accountListRowsWithFilter(includeHidden, "")
 	if err != nil {
-		return "error: " + err.Error() + "\n"
+		return "error: " + err.Error()
 	}
+	return accountSummary(allRows, a.Config.Config.Currency)
+}
+
+func (a App) accountList(includeHidden bool) string {
+	context := a.accountListContext(includeHidden)
+	body := a.accountListBody(includeHidden)
+	if context == "" {
+		return body
+	}
+	return context + "\n\n" + body
+}
+
+func (a App) accountListBody(includeHidden bool) string {
 	visible, err := a.accountListRows(includeHidden)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
 	filter := a.listFilter()
 	var lines []string
-	if !includeHidden {
-		lines = append(lines, accountSummary(allRows, a.Config.Config.Currency), "")
-	}
 	lines = append(lines, "> filter : "+placeholder(filter, "(type anything...)"), "")
 	if len(visible) == 0 {
 		lines = append(lines, "  (no results)")
@@ -392,7 +405,7 @@ func (a App) accountDetailScreen(name string) screen {
 	}
 	return screen{
 		Path:    accountPath(name),
-		Body:    fmt.Sprintf("name      : %s\nbalance   : %s\nas of     : %s\non-budget : %t\n%snotes     : %s\n", acct.Name, amount, asOf, acct.OnBudget, hidden, acct.Notes),
+		Context: strings.TrimRight(fmt.Sprintf("name      : %s\nbalance   : %s\nas of     : %s\non-budget : %t\n%snotes     : %s", acct.Name, amount, asOf, acct.OnBudget, hidden, acct.Notes), "\n"),
 		Actions: actions,
 	}
 }

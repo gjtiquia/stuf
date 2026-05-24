@@ -37,6 +37,7 @@ type App struct {
 
 type screen struct {
 	Path    string
+	Context string
 	Body    string
 	Options string
 	Actions []string
@@ -252,9 +253,14 @@ func (a App) screen() screen {
 		s.Actions = []string{"list", "hidden", "create"}
 		return s
 	case a.Path == routeAccountList:
-		return screen{Path: routeAccountList, Body: a.accountList(false), Help: listHelp()}
+		context, err := a.dashboardContext()
+		if err != nil {
+			return screen{Path: routeAccountList, Body: "error: " + err.Error() + "\n"}
+		}
+		body := strings.TrimRight(a.accountListContext(false)+"\n\n"+strings.TrimRight(a.accountListBody(false), "\n"), "\n")
+		return screen{Path: routeAccountList, Context: context, Body: body, Help: listHelp()}
 	case a.Path == routeAccountHidden:
-		return screen{Path: routeAccountHidden, Body: a.accountList(true), Help: listHelp()}
+		return screen{Path: routeAccountHidden, Body: a.accountListBody(true), Help: listHelp()}
 	case a.Path == routeAccountCreate:
 		return screen{Path: routeAccountCreate, Body: a.accountFormView(nil), Help: a.accountFormHelp()}
 	case a.Path == routeSettings:
@@ -274,12 +280,17 @@ func (a App) screen() screen {
 		if name, ok := balancesName(a.Path); ok {
 			return screen{
 				Path:    accountBalancesPath(name),
-				Body:    strings.TrimRight(a.balanceSummary(name), "\n"),
+				Context: strings.TrimRight(a.balanceSummary(name), "\n"),
 				Actions: []string{"list", "add balance"},
 			}
 		}
 		if name, ok := balanceListName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.balanceListTable(name), Help: listHelp()}
+			return screen{
+				Path:    a.Path,
+				Context: strings.TrimRight(a.balanceSummary(name), "\n"),
+				Body:    a.balanceListBody(name),
+				Help:    listHelp(),
+			}
 		}
 		if name, ok := balanceAddName(a.Path); ok {
 			return a.balanceAddScreen(name)
@@ -317,23 +328,29 @@ func (a App) render(s screen) string {
 		return b.String() + "help\n" + strings.Join(a.helpLines(s), "\n") + "\n"
 	}
 	b.WriteString("# stuf\n\n")
-	if s.Body != "" {
-		b.WriteString(strings.TrimRight(s.Body, "\n") + "\n")
+	if s.Context != "" {
+		b.WriteString(strings.TrimRight(s.Context, "\n") + "\n")
 	}
 	if s.Path != "" {
-		if s.Body != "" {
+		if s.Context != "" {
 			b.WriteString("\n")
 		}
 		b.WriteString(s.Path + "\n")
 	}
+	if s.Body != "" {
+		if s.Context != "" || s.Path != "" {
+			b.WriteString("\n")
+		}
+		b.WriteString(strings.TrimRight(s.Body, "\n") + "\n")
+	}
 	if s.Options != "" {
-		if s.Path != "" || s.Body != "" {
+		if s.Context != "" || s.Path != "" || s.Body != "" {
 			b.WriteString("\n")
 		}
 		b.WriteString(strings.TrimRight(s.Options, "\n") + "\n")
 	}
 	if len(s.Actions) > 0 {
-		if s.Path != "" || s.Options != "" || s.Body != "" {
+		if s.Context != "" || s.Path != "" || s.Body != "" || s.Options != "" {
 			b.WriteString("\n")
 		}
 		b.WriteString(menuItems(s.Actions, a.Menu))

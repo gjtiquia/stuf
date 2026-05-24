@@ -128,6 +128,18 @@ components
     - keyboard shortcuts can change depending on url
     - components can show depending on url
 
+screen layout
+- the URL is the boundary between context and page content
+- context summaries render above the URL
+- lists, forms, and actions render below the URL
+- the renderer should enforce this order by default so new screens do not manually place URLs
+- typical shape:
+    - title
+    - context summary, optional
+    - `/path/`
+    - main content, optional
+    - options/actions, optional
+
 scoped shortcuts
 - global actions are canonical
 - scoped shortcuts should reuse canonical action ids/forms

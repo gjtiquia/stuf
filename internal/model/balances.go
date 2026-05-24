@@ -166,7 +166,7 @@ func (a App) balanceAddScreen(name string) screen {
 	fields := []string{"date", "balance", "notes"}
 	return screen{
 		Path:    accountBalanceAddPath(name),
-		Body:    a.balanceSummary(name),
+		Context: strings.TrimRight(a.balanceSummary(name), "\n"),
 		Options: a.balanceFormView(acct.Code),
 		Help:    a.formHelp(fields),
 	}
@@ -180,13 +180,13 @@ func (a App) balanceEditScreen(name, date string) screen {
 	fields := []string{"date", "balance", "notes"}
 	return screen{
 		Path:    accountBalanceEditPath(name, date),
-		Body:    a.balanceSummary(name),
+		Context: strings.TrimRight(a.balanceSummary(name), "\n"),
 		Options: a.balanceFormView(acct.Code),
 		Help:    a.formHelp(fields),
 	}
 }
 
-func (a App) balanceListTable(name string) string {
+func (a App) balanceListBody(name string) string {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
@@ -195,7 +195,7 @@ func (a App) balanceListTable(name string) string {
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
-	lines := []string{strings.TrimRight(a.balanceSummary(name), "\n"), "", "  date       | balance      | notes"}
+	lines := []string{"  date       | balance      | notes"}
 	if len(rows) == 0 {
 		lines = append(lines, "  (no balances yet)")
 		return strings.Join(lines, "\n") + "\n"
@@ -210,6 +210,15 @@ func (a App) balanceListTable(name string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+func (a App) balanceListTable(name string) string {
+	context := strings.TrimRight(a.balanceSummary(name), "\n")
+	body := a.balanceListBody(name)
+	if context == "" {
+		return body
+	}
+	return context + "\n\n" + body
+}
+
 func (a App) balanceDetailScreen(name, date string) screen {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
@@ -221,7 +230,7 @@ func (a App) balanceDetailScreen(name, date string) screen {
 	}
 	return screen{
 		Path:    accountBalancePath(name, date),
-		Body:    fmt.Sprintf("account : %s\ndate    : %s\nbalance : %s\nnotes   : %s\n", name, date, bal.Amount.Format(acct.Code), bal.Notes),
+		Context: fmt.Sprintf("account : %s\ndate    : %s\nbalance : %s\nnotes   : %s", name, date, bal.Amount.Format(acct.Code), bal.Notes),
 		Actions: []string{"edit balance", "delete balance"},
 	}
 }

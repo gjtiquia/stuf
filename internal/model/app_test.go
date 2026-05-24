@@ -52,6 +52,32 @@ func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	}
 }
 
+func TestDashboardRendersGrowthFromBalanceSnapshots(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-02", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	view := app.View()
+	for _, want := range []string{
+		"total       : HKD 150.00",
+		"growth",
+		"on-budget  : HKD 50.00",
+		"total      : HKD 50.00",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("dashboard growth missing %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestURLRendersImmediatelyAboveActions(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
@@ -60,6 +86,48 @@ func TestURLRendersImmediatelyAboveActions(t *testing.T) {
 	app = m.(App)
 	view = app.View()
 	assertOrdered(t, view, "ppl owe you : HKD 0.00", "\n/accounts/\n\n> 1) list")
+}
+
+func TestAccountListRenderOrder(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = routeAccountList
+	view := app.View()
+	assertRenderOrder(t, view,
+		"# stuf",
+		"total       : HKD 0.00",
+		"growth",
+		"on-budget  : HKD 0.00",
+		"total      : HKD 0.00",
+		"/accounts/list/",
+		"on-budget   : HKD 0.00",
+		"off-budget  : HKD 0.00",
+		"> filter : (type anything...)",
+		"---",
+	)
+}
+
+func TestBalanceListRenderOrder(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/list/"
+	view := app.View()
+	assertRenderOrder(t, view,
+		"# stuf",
+		"name        : cash",
+		"balance     : HKD 50,000.00",
+		"as of       : 2026-05-21",
+		"/accounts/cash/balances/list/",
+		"  date       | balance      | notes",
+		"> 2026-05-21 | HKD 50,000.00",
+		"---",
+	)
 }
 
 func TestMenuNavigationMovesVisibleSelection(t *testing.T) {
@@ -125,7 +193,8 @@ func TestAccountsListSummaryNavigation(t *testing.T) {
 			t.Fatalf("list summary empty state missing %q:\n%s", want, view)
 		}
 	}
-	assertOrdered(t, view, "off-budget  : HKD 0.00", "\n\n> filter : (type anything...)")
+	assertOrdered(t, view, "total      : HKD 0.00", "\n/accounts/list/\n\ntotal       : HKD 0.00")
+	assertOrdered(t, view, "off-budget  : HKD 0.00", "\n> filter : (type anything...)")
 }
 
 func TestAccountsListSummaryTotals(t *testing.T) {
