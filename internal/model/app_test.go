@@ -205,7 +205,7 @@ func TestAccountsListSummaryTotals(t *testing.T) {
 	for _, want := range []string{
 		"total       : HKD 575.00",
 		"on-budget   : HKD 600.00",
-		"off-budget  : HKD -25.00",
+		"off-budget  : HKD (25.00)",
 		"> filter : (type anything...)",
 	} {
 		if !strings.Contains(view, want) {
@@ -423,7 +423,7 @@ func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 		"> cash",
 		"usd-savings",
 		"HKD 500.00 (USD 50.00)",
-		"| HKD -25.00",
+		"| HKD (25.00)",
 		"student-loan",
 		"negative until fully paid",
 	} {
@@ -431,6 +431,36 @@ func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 			t.Fatalf("account list totals/conversion missing %q:\n%s", want, view)
 		}
 	}
+}
+
+func TestNegativeBalanceDisplayUsesBracketsEditUsesMinus(t *testing.T) {
+	app, store := testApp(t)
+	seedStandardAccounts(t, app, store)
+	app.Path = routeAccountList
+	view := app.View()
+	for _, want := range []string{"student-loan", "HKD (25.00)"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("rendered negative balance missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "HKD -25.00") {
+		t.Fatalf("rendered view should use brackets, not minus:\n%s", view)
+	}
+
+	app.Path = "/accounts/student-loan/balances/2026-05-21/edit/"
+	app.Form = map[string]string{"date": "2026-05-21", "balance": "-25.00", "notes": ""}
+	app.Field = 1
+	view = app.View()
+	if !strings.Contains(view, "balance  : HKD -25.00|") {
+		t.Fatalf("edit form should keep minus sign for raw input:\n%s", view)
+	}
+	if strings.Contains(view, "balance  : HKD (25.00)") {
+		t.Fatalf("edit form field should not use bracket notation:\n%s", view)
+	}
+	if !strings.Contains(view, "balance     : HKD (25.00)") {
+		t.Fatalf("context summary should use bracket notation:\n%s", view)
+	}
+	_ = store
 }
 
 func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {

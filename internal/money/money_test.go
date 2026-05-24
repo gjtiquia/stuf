@@ -10,7 +10,7 @@ func TestParseFormatAndArithmetic(t *testing.T) {
 	if m.Amount != -12345 || m.Scale != 2 {
 		t.Fatalf("unexpected parse: %+v", m)
 	}
-	if got := m.Format("HKD"); got != "HKD -123.45" {
+	if got := m.Format("HKD"); got != "HKD (123.45)" {
 		t.Fatalf("format = %q", got)
 	}
 	sum, err := Money{Amount: 100, Scale: 1}.Add(Money{Amount: 25, Scale: 2})
@@ -51,7 +51,7 @@ func TestFormatWithThousandsSeparators(t *testing.T) {
 		want string
 	}{
 		{Money{Amount: 0, Scale: 2}, "HKD", "HKD 0.00"},
-		{Money{Amount: -12345, Scale: 2}, "HKD", "HKD -123.45"},
+		{Money{Amount: -12345, Scale: 2}, "HKD", "HKD (123.45)"},
 		{Money{Amount: 5000000, Scale: 2}, "HKD", "HKD 50,000.00"},
 		{Money{Amount: 999900, Scale: 2}, "HKD", "HKD 9,999.00"},
 		{Money{Amount: 1000000, Scale: 0}, "USD", "USD 1,000,000"},

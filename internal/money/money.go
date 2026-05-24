@@ -35,19 +35,24 @@ func Parse(input string) (Money, error) {
 }
 
 func (m Money) Format(currencyCode string) string {
-	sign := ""
+	negative := m.Amount < 0
 	amount := m.Amount
-	if amount < 0 {
-		sign = "-"
+	if negative {
 		amount = -amount
 	}
+	var formatted string
 	if m.Scale == 0 {
-		return fmt.Sprintf("%s %s%s", currencyCode, sign, addThousandsSeparators(strconv.FormatInt(amount, 10)))
+		formatted = addThousandsSeparators(strconv.FormatInt(amount, 10))
+	} else {
+		div := pow10(m.Scale)
+		whole := amount / div
+		frac := amount % div
+		formatted = fmt.Sprintf("%s.%0*d", addThousandsSeparators(strconv.FormatInt(whole, 10)), m.Scale, frac)
 	}
-	div := pow10(m.Scale)
-	whole := amount / div
-	frac := amount % div
-	return fmt.Sprintf("%s %s%s.%0*d", currencyCode, sign, addThousandsSeparators(strconv.FormatInt(whole, 10)), m.Scale, frac)
+	if negative {
+		return fmt.Sprintf("%s (%s)", currencyCode, formatted)
+	}
+	return fmt.Sprintf("%s %s", currencyCode, formatted)
 }
 
 // FormatDecimalText formats a sanitized decimal amount string with thousands separators.
