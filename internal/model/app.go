@@ -147,30 +147,31 @@ func (a App) menuKey(s string, routes []string) App {
 }
 
 func (a App) accountCreateKey(s string) App {
-	if s == "enter" {
-		name := strings.TrimSpace(a.Form["name"])
-		currency := strings.TrimSpace(a.Form["currency"])
-		onBudget := parseBoolDefault(a.Form["on-budget"], true)
-		acct, entry, err := a.Svc.Accounts.Create(a.ctx, name, currency, onBudget, a.Form["notes"])
-		if err != nil {
-			a.Error = err.Error()
-			return a
-		}
-		a.History = append(a.History, entry)
-		a.SelectedAccount = acct.Name
-		a.Form = map[string]string{}
-		a.Field = 0
-		a.Error = ""
-		a.Path = "/accounts/list/"
-		return a
-	}
 	if a.Form["currency"] == "" {
 		a.Form["currency"] = a.Config.Config.Currency
 	}
 	if a.Form["on-budget"] == "" {
 		a.Form["on-budget"] = "true"
 	}
-	return a.formKey(s, []string{"name", "currency", "on-budget", "notes"})
+	next, submit := a.accountFormKey(s, nil)
+	if !submit {
+		return next
+	}
+	name := strings.TrimSpace(next.Form["name"])
+	currency := strings.TrimSpace(next.Form["currency"])
+	onBudget := parseBoolDefault(next.Form["on-budget"], true)
+	acct, entry, err := next.Svc.Accounts.Create(next.ctx, name, currency, onBudget, next.Form["notes"])
+	if err != nil {
+		next.Error = err.Error()
+		return next
+	}
+	next.History = append(next.History, entry)
+	next.SelectedAccount = acct.Name
+	next.Form = map[string]string{}
+	next.Field = 0
+	next.Error = ""
+	next.Path = "/accounts/list/"
+	return next
 }
 
 func (a App) accountListKey(s string, includeHidden bool) App {
@@ -256,23 +257,25 @@ func (a App) accountEditKey(s, name string) App {
 		a.Error = err.Error()
 		return a
 	}
-	if s == "enter" {
-		updated, entry, err := a.Svc.Accounts.Update(a.ctx, acct.ID, strings.TrimSpace(a.Form["name"]), strings.TrimSpace(a.Form["currency"]), parseBoolDefault(a.Form["on-budget"], acct.OnBudget), acct.Hidden, a.Form["notes"])
-		if err != nil {
-			a.Error = err.Error()
-			return a
-		}
-		a.History = append(a.History, entry)
-		a.Form = map[string]string{}
-		a.Field = 0
-		a.Error = ""
-		a.Path = "/accounts/" + updated.Name + "/"
-		return a
+	locked := map[string]bool{}
+	if has, err := a.Svc.Accounts.Accounts.HasBalances(a.ctx, acct.ID); err == nil && has {
+		locked["currency"] = true
 	}
-	if a.Form["name"] == "" {
-		a.Form = map[string]string{"name": acct.Name, "currency": acct.Code, "on-budget": fmt.Sprintf("%t", acct.OnBudget), "notes": acct.Notes}
+	next, submit := a.accountFormKey(s, locked)
+	if !submit {
+		return next
 	}
-	return a.formKey(s, []string{"name", "currency", "on-budget", "notes"})
+	updated, entry, err := next.Svc.Accounts.Update(next.ctx, acct.ID, strings.TrimSpace(next.Form["name"]), strings.TrimSpace(next.Form["currency"]), parseBoolDefault(next.Form["on-budget"], acct.OnBudget), acct.Hidden, next.Form["notes"])
+	if err != nil {
+		next.Error = err.Error()
+		return next
+	}
+	next.History = append(next.History, entry)
+	next.Form = map[string]string{}
+	next.Field = 0
+	next.Error = ""
+	next.Path = "/accounts/" + updated.Name + "/"
+	return next
 }
 
 func (a App) balanceAddKey(s, name string) App {
@@ -370,6 +373,77 @@ func (a *App) actionIndex(s string, count int) int {
 	return -1
 }
 
+func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
+	fields := []string{"name", "currency", "on-budget", "notes"}
+	if a.Field == 1 && locked != nil && locked["currency"] {
+		switch s {
+		case "enter", "tab", "down":
+			a.Field = 2
+		case "shift+tab", "up":
+			a.Field = 0
+		}
+		return a, false
+	}
+	if a.Field == 1 {
+		return a.selectFieldKey(s, "currency", a.currencyOptions(), fields)
+	}
+	if a.Field == 2 {
+		return a.selectFieldKey(s, "on-budget", []string{"true", "false"}, fields)
+	}
+	if s == "enter" {
+		if a.Field >= len(fields) {
+			return a, true
+		}
+		a.Field++
+		return a, false
+	}
+	return a.formKey(s, fields), false
+}
+
+func (a App) selectFieldKey(s, field string, options []string, fields []string) (App, bool) {
+	if len(options) == 0 {
+		return a, false
+	}
+	if a.Form[field] == "" {
+		a.Form[field] = options[0]
+	}
+	idx := indexOf(options, a.Form[field])
+	if idx < 0 {
+		idx = 0
+		a.Form[field] = options[idx]
+	}
+	switch s {
+	case "down", "j":
+		idx = (idx + 1) % len(options)
+		a.Form[field] = options[idx]
+	case "up", "k":
+		idx = (idx - 1 + len(options)) % len(options)
+		a.Form[field] = options[idx]
+	case "tab":
+		a.Field = min(a.Field+1, len(fields))
+	case "shift+tab":
+		a.Field = max(a.Field-1, 0)
+	case "enter":
+		a.Field = min(a.Field+1, len(fields))
+	}
+	return a, false
+}
+
+func (a App) currencyOptions() []string {
+	currencies, err := a.Svc.Accounts.Currency.List(a.ctx)
+	if err != nil {
+		return []string{a.Config.Config.Currency}
+	}
+	var out []string
+	for _, cur := range currencies {
+		out = append(out, cur.Code)
+	}
+	if len(out) == 0 {
+		return []string{a.Config.Config.Currency}
+	}
+	return out
+}
+
 func (a App) balanceEditKey(s, name, date string) App {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
@@ -464,7 +538,7 @@ func (a App) screen() screen {
 	case a.Path == "/accounts/hidden/":
 		return screen{Path: "/accounts/hidden/", Body: a.accountList(true)}
 	case a.Path == "/accounts/create/":
-		return screen{Path: "/accounts/create/", Body: a.formView([]string{"name", "currency", "on-budget", "notes"}, nil), Help: formHelp()}
+		return screen{Path: "/accounts/create/", Body: a.accountFormView(nil), Help: a.accountFormHelp()}
 	case a.Path == "/settings/":
 		return screen{Path: "/settings/", Body: fmt.Sprintf("config   : %s\ncurrency : %s\n", a.Config.Path, a.Config.Config.Currency)}
 	case a.Path == "/backup/":
@@ -560,6 +634,19 @@ func (a App) helpLines(s screen) []string {
 
 func formHelp() []string {
 	return []string{"tab     : next field", "enter   : confirm", "esc     : discard", "?       : help"}
+}
+
+func (a App) accountFormHelp() []string {
+	if a.Field == 1 {
+		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}
+	}
+	if a.Field == 2 {
+		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}
+	}
+	if a.Field >= 4 {
+		return []string{"shift-tab : navigate", "enter     : confirm", "esc       : back", "?         : help"}
+	}
+	return formHelp()
 }
 
 func (a App) dashboardScreen() screen {
@@ -710,7 +797,14 @@ func (a App) accountEditScreen() screen {
 	if has, err := a.Svc.Accounts.Accounts.HasBalances(a.ctx, acct.ID); err == nil && has {
 		locked["currency"] = acct.Code + " (locked because balances exist)"
 	}
-	return screen{Path: a.Path, Body: a.formView([]string{"name", "currency", "on-budget", "notes"}, locked), Help: formHelp()}
+	return screen{Path: a.Path, Body: a.accountFormView(locked), Help: a.accountFormHelp()}
+}
+
+func (a App) accountFormView(locked map[string]string) string {
+	return a.formViewWithOptions([]string{"name", "currency", "on-budget", "notes"}, locked, map[string][]string{
+		"currency":  a.currencyOptions(),
+		"on-budget": {"true", "false"},
+	})
 }
 
 func (a App) balanceList(name string) string {
@@ -773,6 +867,10 @@ func (a App) balanceDetailScreen(name, date string) screen {
 }
 
 func (a App) formView(fields []string, locked map[string]string) string {
+	return a.formViewWithOptions(fields, locked, nil)
+}
+
+func (a App) formViewWithOptions(fields []string, locked map[string]string, options map[string][]string) string {
 	var lines []string
 	for i, field := range fields {
 		prefix := "  "
@@ -790,6 +888,16 @@ func (a App) formView(fields []string, locked map[string]string) string {
 			value = locked[field]
 		}
 		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, placeholder(value, placeholderFor(field))))
+		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
+			selected := value
+			for _, option := range options[field] {
+				optionPrefix := "       "
+				if option == selected {
+					optionPrefix = "     > "
+				}
+				lines = append(lines, optionPrefix+option)
+			}
+		}
 	}
 	confirmPrefix := "  "
 	if a.Field == len(fields) {
@@ -840,6 +948,15 @@ func parseBoolDefault(value string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func indexOf(values []string, needle string) int {
+	for i, value := range values {
+		if value == needle {
+			return i
+		}
+	}
+	return -1
 }
 
 func rawAmount(amount int64, scale int) string {

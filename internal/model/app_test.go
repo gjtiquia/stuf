@@ -216,6 +216,98 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 	}
 }
 
+func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
+	app, store := testApp(t)
+	app.Path = "/accounts/create/"
+	view := app.View()
+	for _, want := range []string{"> 1) name", "2) currency : HKD", "3) on-budget: true", "  [confirm]"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("initial account form missing %q:\n%s", want, view)
+		}
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	view = app.View()
+	for _, want := range []string{"> 2) currency", "     > HKD", "USD"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("currency select missing %q:\n%s", want, view)
+		}
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	view = app.View()
+	for _, want := range []string{"> 3) on-budget", "     > true", "false"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("on-budget select missing %q:\n%s", want, view)
+		}
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "on-budget: false") || !strings.Contains(view, "     > false") {
+		t.Fatalf("on-budget select did not choose false:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "> [confirm]") || !strings.Contains(view, "shift-tab : navigate") {
+		t.Fatalf("confirm focus/footer missing:\n%s", view)
+	}
+	app.Form["name"] = "off-budget-cash"
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("confirm did not submit account form: %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "off-budget-cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.OnBudget {
+		t.Fatal("expected account to be created off-budget")
+	}
+}
+
+func TestAccountEditSelectToggleAndLockedCurrencyOptions(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "wallet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/edit/"
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true", "notes": "wallet"}
+	app.Field = 2
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "on-budget: false") || !strings.Contains(view, "     > false") {
+		t.Fatalf("edit on-budget select did not toggle:\n%s", view)
+	}
+	app.Field = 4
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	updated, err := store.Acct.GetByName(ctx, "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.OnBudget {
+		t.Fatal("expected edit to persist off-budget")
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "1.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/edit/"
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "false"}
+	app.Field = 1
+	view := app.View()
+	if !strings.Contains(view, "currency : HKD (locked because balances exist)") {
+		t.Fatalf("locked currency missing:\n%s", view)
+	}
+	if strings.Contains(view, "     > HKD") {
+		t.Fatalf("locked currency should not render selectable options:\n%s", view)
+	}
+}
+
 func TestBalancesScreensReadmeShape(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -370,6 +462,7 @@ func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app.Path = "/accounts/create/"
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=Bad Name")})
 	app = m.(App)
+	app.Field = 4
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if !strings.Contains(app.View(), "strict slug") {
@@ -379,6 +472,7 @@ func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=HKD")})
 	app = m.(App)
+	app.Field = 4
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" || len(app.History) != 1 {
@@ -433,6 +527,7 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
 	}
+	app.Field = 4
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
