@@ -117,8 +117,9 @@ func TestAccountListReadmeShape(t *testing.T) {
 	for _, want := range []string{
 		"> filter : (type anything...)",
 		"on-budget accounts",
-		"name        | balance",
-		"TOTAL       |",
+		"| balance",
+		"| notes",
+		"TOTAL |",
 		"> cash",
 		"main cash",
 	} {
@@ -132,7 +133,7 @@ func TestAccountListReadmeShape(t *testing.T) {
 	app.Path = "/accounts/hidden/"
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"> filter : (type anything...)", "name        | balance", "> investment", "brokerage"} {
+	for _, want := range []string{"> filter : (type anything...)", "| balance", "> investment", "brokerage"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden accounts missing %q:\n%s", want, view)
 		}
@@ -186,6 +187,54 @@ func TestAccountListFilterTypingAndFilteredNavigation(t *testing.T) {
 	}
 }
 
+func TestAccountListTableColumnsAlignWithConvertedBalances(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	setCurrencyRate(t, store, "HKD", 1, 0)
+	setCurrencyRate(t, store, "USD", 10, 0)
+	cfg := app.Config
+	cfg.Config.Currency = "USD"
+	app.Config = cfg
+	acct, _, err := app.Svc.Accounts.Create(ctx, "hsbc-one", "HKD", true, "dunno if need to split...?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "0.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/list/"
+	view := app.View()
+	var tableLines []string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, " | ") && (strings.Contains(line, "name") || strings.Contains(line, "TOTAL") || strings.Contains(line, "hsbc-one")) {
+			tableLines = append(tableLines, line)
+		}
+	}
+	if len(tableLines) < 3 {
+		t.Fatalf("expected header, total, and account rows, got %d lines:\n%s", len(tableLines), view)
+	}
+	wantIdx := notesColumnIndex(tableLines[0])
+	for i, line := range tableLines[1:] {
+		if got := notesColumnIndex(line); got != wantIdx {
+			t.Fatalf("notes column misaligned on line %d: want index %d, got %d\n%s", i+1, wantIdx, got, view)
+		}
+	}
+}
+
+func notesColumnIndex(line string) int {
+	idx := -1
+	start := 0
+	for range 2 {
+		pos := strings.Index(line[start:], " |")
+		if pos < 0 {
+			return -1
+		}
+		idx = start + pos
+		start = idx + 2
+	}
+	return idx
+}
+
 func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()
@@ -215,11 +264,11 @@ func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 	app.Path = "/accounts/list/"
 	view := app.View()
 	for _, want := range []string{
-		"TOTAL       | HKD 600.00",
+		"| HKD 600.00",
 		"> cash",
 		"usd-savings",
 		"HKD 500.00 (USD 50.00)",
-		"TOTAL       | HKD -25.00",
+		"| HKD -25.00",
 		"student-loan",
 		"negative until fully paid",
 	} {

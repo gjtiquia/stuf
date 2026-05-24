@@ -859,20 +859,21 @@ func (a App) accountList(includeHidden bool) string {
 		lines = append(lines, "  (no results)")
 		return strings.Join(lines, "\n") + "\n"
 	}
+	layout := accountListTableLayoutFor(visible, a.Config.Config.Currency)
 	if includeHidden {
-		lines = append(lines, "  name        | balance      | notes")
+		lines = append(lines, layout.headerLine())
 		for i, row := range visible {
 			prefix := "  "
 			if i == a.Menu {
 				prefix = "> "
 			}
-			lines = append(lines, fmt.Sprintf("%s%-11s | %-12s | %s", prefix, row.Name, row.Balance, row.Notes))
+			lines = append(lines, layout.rowLine(prefix, row.Name, row.Balance, row.Notes))
 		}
 		return strings.Join(lines, "\n") + "\n"
 	}
-	lines = appendAccountSection(lines, "on-budget accounts", visible, true, a.Menu, a.Config.Config.Currency)
+	lines = appendAccountSection(lines, "on-budget accounts", visible, true, a.Menu, a.Config.Config.Currency, layout)
 	lines = append(lines, "")
-	lines = appendAccountSection(lines, "off-budget accounts", visible, false, a.Menu, a.Config.Config.Currency)
+	lines = appendAccountSection(lines, "off-budget accounts", visible, false, a.Menu, a.Config.Config.Currency, layout)
 	return strings.Join(lines, "\n") + "\n"
 }
 
@@ -883,6 +884,60 @@ type accountListRow struct {
 	Notes    string
 	OnBudget bool
 	AsOf     string
+}
+
+type accountListTableLayout struct {
+	NameWidth    int
+	BalanceWidth int
+}
+
+func accountListTableLayoutFor(rows []accountListRow, appCurrency string) accountListTableLayout {
+	layout := accountListTableLayout{NameWidth: len("name"), BalanceWidth: len("balance")}
+	if len(rows) == 0 {
+		return layout
+	}
+	for _, onBudget := range []bool{true, false} {
+		if total, ok := accountSectionTotal(rows, onBudget); ok {
+			layout.NameWidth = max(layout.NameWidth, len("TOTAL"))
+			layout.BalanceWidth = max(layout.BalanceWidth, len(total.Format(appCurrency)))
+		}
+	}
+	for _, row := range rows {
+		layout.NameWidth = max(layout.NameWidth, len(row.Name))
+		layout.BalanceWidth = max(layout.BalanceWidth, len(row.Balance))
+	}
+	return layout
+}
+
+func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, bool) {
+	if len(rows) == 0 {
+		return money.Money{}, false
+	}
+	total := money.Money{Scale: rows[0].Amount.Scale}
+	found := false
+	for _, row := range rows {
+		if row.OnBudget != onBudget {
+			continue
+		}
+		found = true
+		next, err := total.Add(row.Amount)
+		if err == nil {
+			total = next
+		}
+	}
+	return total, found
+}
+
+func (l accountListTableLayout) headerLine() string {
+	return fmt.Sprintf("  %-*s | %-*s | notes", l.NameWidth, "name", l.BalanceWidth, "balance")
+}
+
+func (l accountListTableLayout) totalLine(total string) string {
+	return fmt.Sprintf("  %-*s | %-*s |", l.NameWidth, "TOTAL", l.BalanceWidth, total)
+}
+
+func (l accountListTableLayout) rowLine(prefix, name, balance, notes string) string {
+	return fmt.Sprintf("%s%-*s | %-*s | %s", prefix, l.NameWidth, name, l.BalanceWidth, balance, notes)
 }
 
 func (a App) accountListRows(includeHidden bool) ([]accountListRow, error) {
@@ -946,24 +1001,14 @@ func (a App) accountListBalance(code string, native money.Money, appCur repo.Cur
 	return appAmount, fmt.Sprintf("%s (%s)", appAmount.Format(appCur.Code), native.Format(code)), nil
 }
 
-func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string) []string {
-	var section []accountListRow
-	total := money.Money{Scale: rows[0].Amount.Scale}
-	for _, row := range rows {
-		if row.OnBudget == onBudget {
-			section = append(section, row)
-			next, err := total.Add(row.Amount)
-			if err == nil {
-				total = next
-			}
-		}
-	}
-	if len(section) == 0 {
+func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string, layout accountListTableLayout) []string {
+	total, ok := accountSectionTotal(rows, onBudget)
+	if !ok {
 		return lines
 	}
 	lines = append(lines, "  "+title)
-	lines = append(lines, "  name        | balance      | notes")
-	lines = append(lines, fmt.Sprintf("  TOTAL       | %-12s |", total.Format(appCurrency)))
+	lines = append(lines, layout.headerLine())
+	lines = append(lines, layout.totalLine(total.Format(appCurrency)))
 	for i, row := range rows {
 		if row.OnBudget != onBudget {
 			continue
@@ -972,7 +1017,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 		if i == selected {
 			prefix = "> "
 		}
-		lines = append(lines, fmt.Sprintf("%s%-11s | %-12s | %s", prefix, row.Name, row.Balance, row.Notes))
+		lines = append(lines, layout.rowLine(prefix, row.Name, row.Balance, row.Notes))
 	}
 	return lines
 }
