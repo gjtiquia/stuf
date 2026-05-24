@@ -40,6 +40,35 @@ func TestSanitizeDateInput(t *testing.T) {
 	}
 }
 
+func TestSanitizeBalanceAmount(t *testing.T) {
+	tests := map[string]string{
+		"":              "",
+		"1234.56":       "1234.56",
+		"-1234.56":      "-1234.56",
+		"1,234.56":      "1234.56",
+		"HKD 1234.56":   "1234.56",
+		"12a34.5b6":     "1234.56",
+		"12..34":        "12.34",
+		"--123":         "-123",
+		".5":            ".5",
+		"abc":           "",
+	}
+	for input, want := range tests {
+		if got := sanitizeBalanceAmount(input); got != want {
+			t.Fatalf("sanitizeBalanceAmount(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestFormatBalanceDisplay(t *testing.T) {
+	if got := formatBalanceDisplay("", "HKD"); got != "HKD (type amount...)" {
+		t.Fatalf("empty display = %q", got)
+	}
+	if got := formatBalanceDisplay("1234.56", "USD"); got != "USD 1,234.56" {
+		t.Fatalf("formatted display = %q", got)
+	}
+}
+
 func TestAccountFormValues(t *testing.T) {
 	got := accountFormValues("cash", "HKD", true, "wallet")
 	if got["name"] != "cash" || got["currency"] != "HKD" || got["on-budget"] != "true" || got["notes"] != "wallet" {

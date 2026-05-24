@@ -3,6 +3,8 @@ package model
 import (
 	"fmt"
 	"strings"
+
+	"stuf/internal/money"
 )
 
 func menuItems(items []string, selected int) string {
@@ -47,6 +49,8 @@ func normalizeFieldValue(field, value string) string {
 		return sanitizeSlug(value)
 	case "date":
 		return sanitizeDateInput(value)
+	case "balance":
+		return sanitizeBalanceAmount(value)
 	default:
 		return value
 	}
@@ -147,6 +151,42 @@ func accountFormValues(name, code string, onBudget bool, notes string) map[strin
 		"on-budget": fmt.Sprintf("%t", onBudget),
 		"notes":     notes,
 	}
+}
+
+func sanitizeBalanceAmount(input string) string {
+	var b strings.Builder
+	hasDot := false
+	for _, r := range input {
+		switch {
+		case r == '-':
+			if b.Len() == 0 {
+				b.WriteRune('-')
+			}
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.':
+			if !hasDot {
+				b.WriteRune('.')
+				hasDot = true
+			}
+		}
+	}
+	return b.String()
+}
+
+func formatBalanceDisplay(value, currency string) string {
+	if value == "" {
+		return currency + " (type amount...)"
+	}
+	return currency + " " + money.FormatDecimalText(value)
+}
+
+func renderBalanceCaret(value, currency string) string {
+	prefix := currency + " "
+	if value == "" {
+		return prefix + "|"
+	}
+	return prefix + money.FormatDecimalText(value) + "|"
 }
 
 func rawAmount(amount int64, scale int) string {

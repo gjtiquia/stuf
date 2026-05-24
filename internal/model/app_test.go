@@ -372,7 +372,7 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 	app.Path = "/accounts/cash/balances/add/"
 	app.Form = map[string]string{"date": "2026-05-24"}
 	view = app.View()
-	for _, want := range []string{"> 1) date", "2026-05-24|", "2) balance", "(type amount...)", "3) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) date", "2026-05-24|", "2) balance", "HKD (type amount...)", "3) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance add form missing %q:\n%s", want, view)
 		}
@@ -631,7 +631,7 @@ func TestBalanceEditScreenRenderOrder(t *testing.T) {
 	assertRenderOrder(t, view,
 		"# stuf",
 		"name        : cash",
-		"balance     : HKD 50000.00",
+		"balance     : HKD 50,000.00",
 		"as of       : 2026-05-21",
 		"/accounts/cash/balances/2026-05-21/edit/",
 		"> 1) date",
@@ -659,14 +659,14 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/"
 	view = app.View()
-	for _, want := range []string{"> 2026-05-21 | HKD 50000.00", "initial balance", "  1) add balance"} {
+	for _, want := range []string{"> 2026-05-21 | HKD 50,000.00", "initial balance", "  1) add balance"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balances list missing %q:\n%s", want, view)
 		}
 	}
 	app.Path = "/accounts/cash/balances/2026-05-21/"
 	view = app.View()
-	for _, want := range []string{"account : cash", "date    : 2026-05-21", "balance : HKD 50000.00", "> 1) edit balance", "2) delete balance"} {
+	for _, want := range []string{"account : cash", "date    : 2026-05-21", "balance : HKD 50,000.00", "> 1) edit balance", "2) delete balance"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance detail missing %q:\n%s", want, view)
 		}
@@ -674,7 +674,7 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/balances/2026-05-21/edit/"
 	app.Form = map[string]string{"date": "2026-05-21", "balance": "50000.00", "notes": "initial balance"}
 	view = app.View()
-	for _, want := range []string{"> 1) date", "2026-05-21|", "2) balance", "50000.00", "3) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) date", "2026-05-21|", "2) balance", "HKD 50,000.00", "3) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance edit missing %q:\n%s", want, view)
 		}
@@ -901,6 +901,48 @@ func TestBalanceDateInputSanitizesOnTypingAndSet(t *testing.T) {
 	}
 	if got := app.Form["notes"]; got != "Hello World" {
 		t.Fatalf("balance notes should preserve raw input, got %q", got)
+	}
+}
+
+func TestBalanceAmountInputFormatting(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/add/"
+	app.Form = map[string]string{"date": "2026-05-24"}
+	app.Field = 1
+	for _, r := range "1,234abc.56xx" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if got := app.Form["balance"]; got != "1234.56" {
+		t.Fatalf("stored balance should be sanitized numeric, got %q", got)
+	}
+	if view := app.View(); !strings.Contains(view, "balance  : HKD 1,234.56|") {
+		t.Fatalf("balance field should render currency and commas:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set balance=9,999.00!!")})
+	app = m.(App)
+	if got := app.Form["balance"]; got != "9999.00" {
+		t.Fatalf("set balance should sanitize, got %q", got)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Form["balance"] != "" {
+		t.Fatalf("form should clear after submit, balance=%q", app.Form["balance"])
+	}
+	acct, err := app.Svc.Accounts.GetByName(ctx, "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Amount.Format("HKD"); got != "HKD 9,999.00" {
+		t.Fatalf("saved balance = %q", got)
 	}
 }
 

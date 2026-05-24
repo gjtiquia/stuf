@@ -414,7 +414,7 @@ func (a App) accountFormView(locked map[string]string) string {
 	return a.formViewWithOptions([]string{"name", "currency", "on-budget", "notes"}, locked, map[string][]string{
 		"currency":  a.currencyOptions(),
 		"on-budget": {"true", "false"},
-	})
+	}, nil)
 }
 
 func (l accountListTableLayout) headerLine() string {

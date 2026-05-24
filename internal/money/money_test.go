@@ -26,6 +26,43 @@ func TestParseFormatAndArithmetic(t *testing.T) {
 	}
 }
 
+func TestFormatDecimalText(t *testing.T) {
+	tests := map[string]string{
+		"":           "",
+		"0":          "0",
+		"123":        "123",
+		"1234":       "1,234",
+		"1234567":    "1,234,567",
+		"1234.56":    "1,234.56",
+		"-1234.56":   "-1,234.56",
+		".5":         "0.5",
+	}
+	for input, want := range tests {
+		if got := FormatDecimalText(input); got != want {
+			t.Fatalf("FormatDecimalText(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestFormatWithThousandsSeparators(t *testing.T) {
+	tests := []struct {
+		m    Money
+		code string
+		want string
+	}{
+		{Money{Amount: 0, Scale: 2}, "HKD", "HKD 0.00"},
+		{Money{Amount: -12345, Scale: 2}, "HKD", "HKD -123.45"},
+		{Money{Amount: 5000000, Scale: 2}, "HKD", "HKD 50,000.00"},
+		{Money{Amount: 999900, Scale: 2}, "HKD", "HKD 9,999.00"},
+		{Money{Amount: 1000000, Scale: 0}, "USD", "USD 1,000,000"},
+	}
+	for _, tc := range tests {
+		if got := tc.m.Format(tc.code); got != tc.want {
+			t.Fatalf("Format(%+v, %q) = %q, want %q", tc.m, tc.code, got, tc.want)
+		}
+	}
+}
+
 func TestRejectInvalidMoney(t *testing.T) {
 	for _, input := range []string{"", ".", "1.2.3", "HKD 1", "1_000"} {
 		if _, err := Parse(input); err == nil {

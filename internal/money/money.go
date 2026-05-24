@@ -42,10 +42,53 @@ func (m Money) Format(currencyCode string) string {
 		amount = -amount
 	}
 	if m.Scale == 0 {
-		return fmt.Sprintf("%s %s%d", currencyCode, sign, amount)
+		return fmt.Sprintf("%s %s%s", currencyCode, sign, addThousandsSeparators(strconv.FormatInt(amount, 10)))
 	}
 	div := pow10(m.Scale)
-	return fmt.Sprintf("%s %s%d.%0*d", currencyCode, sign, amount/div, m.Scale, amount%div)
+	whole := amount / div
+	frac := amount % div
+	return fmt.Sprintf("%s %s%s.%0*d", currencyCode, sign, addThousandsSeparators(strconv.FormatInt(whole, 10)), m.Scale, frac)
+}
+
+// FormatDecimalText formats a sanitized decimal amount string with thousands separators.
+// The input should contain only an optional leading minus, digits, and at most one decimal point.
+func FormatDecimalText(value string) string {
+	if value == "" {
+		return ""
+	}
+	sign := ""
+	if strings.HasPrefix(value, "-") {
+		sign = "-"
+		value = value[1:]
+	}
+	parts := strings.SplitN(value, ".", 2)
+	whole := parts[0]
+	if whole == "" {
+		whole = "0"
+	}
+	out := sign + addThousandsSeparators(whole)
+	if len(parts) == 2 {
+		out += "." + parts[1]
+	}
+	return out
+}
+
+func addThousandsSeparators(digits string) string {
+	n := len(digits)
+	if n <= 3 {
+		return digits
+	}
+	firstGroup := n % 3
+	if firstGroup == 0 {
+		firstGroup = 3
+	}
+	var b strings.Builder
+	b.WriteString(digits[:firstGroup])
+	for i := firstGroup; i < n; i += 3 {
+		b.WriteByte(',')
+		b.WriteString(digits[i : i+3])
+	}
+	return b.String()
 }
 
 func (m Money) Add(other Money) (Money, error) {

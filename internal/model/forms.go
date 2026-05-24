@@ -194,7 +194,7 @@ func (a App) formKey(s string, fields []string) App {
 			runes := []rune(current)
 			next := string(runes[:cursor]) + s + string(runes[cursor:])
 			a.Form[field] = normalizeFieldValue(field, next)
-			if field == "name" || field == "date" {
+			if field == "name" || field == "date" || field == "balance" {
 				a.resetTextCursor(field)
 			} else {
 				a.setTextCursor(field, cursor+len([]rune(s)))
@@ -205,10 +205,10 @@ func (a App) formKey(s string, fields []string) App {
 }
 
 func (a App) formView(fields []string, locked map[string]string) string {
-	return a.formViewWithOptions(fields, locked, nil)
+	return a.formViewWithOptions(fields, locked, nil, nil)
 }
 
-func (a App) formViewWithOptions(fields []string, locked map[string]string, options map[string][]string) string {
+func (a App) formViewWithOptions(fields []string, locked map[string]string, options map[string][]string, prefixes map[string]string) string {
 	var lines []string
 	for i, field := range fields {
 		if i > 0 {
@@ -229,7 +229,14 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 			value = locked[field]
 		}
 		renderedValue := placeholder(value, placeholderFor(field))
-		if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
+		if field == "balance" && prefixes != nil && prefixes["balance"] != "" {
+			currency := prefixes["balance"]
+			if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
+				renderedValue = renderBalanceCaret(value, currency)
+			} else {
+				renderedValue = formatBalanceDisplay(value, currency)
+			}
+		} else if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
 			renderedValue = renderCaret(value, placeholderFor(field), a.textCursor(field))
 		}
 		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, renderedValue))

@@ -129,22 +129,36 @@ func (a App) balanceSummary(name string) string {
 	return fmt.Sprintf("name        : %s\nbalance     : %s\nas of       : %s\n", acct.Name, amount, asOf)
 }
 
+func (a App) balanceFormView(currency string) string {
+	fields := []string{"date", "balance", "notes"}
+	prefixes := map[string]string{"balance": currency}
+	return a.formViewWithOptions(fields, nil, nil, prefixes)
+}
+
 func (a App) balanceAddScreen(name string) screen {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return screen{Path: accountBalanceAddPath(name), Body: "error: " + err.Error() + "\n"}
+	}
 	fields := []string{"date", "balance", "notes"}
 	return screen{
 		Path:    accountBalanceAddPath(name),
 		Body:    a.balanceSummary(name),
-		Options: a.formView(fields, nil),
+		Options: a.balanceFormView(acct.Code),
 		Help:    a.formHelp(fields),
 	}
 }
 
 func (a App) balanceEditScreen(name, date string) screen {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return screen{Path: accountBalanceEditPath(name, date), Body: "error: " + err.Error() + "\n"}
+	}
 	fields := []string{"date", "balance", "notes"}
 	return screen{
 		Path:    accountBalanceEditPath(name, date),
 		Body:    a.balanceSummary(name),
-		Options: a.formView(fields, nil),
+		Options: a.balanceFormView(acct.Code),
 		Help:    a.formHelp(fields),
 	}
 }
