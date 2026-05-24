@@ -119,20 +119,26 @@ func TestAccountListReadmeShape(t *testing.T) {
 		"on-budget accounts",
 		"name        | balance",
 		"TOTAL       |",
-		"> 1) cash",
+		"> cash",
 		"main cash",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("account list missing %q:\n%s", want, view)
 		}
 	}
+	if strings.Contains(view, "> 1) cash") {
+		t.Fatalf("account list rows should not render menu numbers:\n%s", view)
+	}
 	app.Path = "/accounts/hidden/"
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"> filter : (type anything...)", "name        | balance", "> 1) investment", "brokerage"} {
+	for _, want := range []string{"> filter : (type anything...)", "name        | balance", "> investment", "brokerage"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden accounts missing %q:\n%s", want, view)
 		}
+	}
+	if strings.Contains(view, "> 1) investment") {
+		t.Fatalf("hidden account rows should not render menu numbers:\n%s", view)
 	}
 }
 
@@ -141,8 +147,85 @@ func TestAccountListNoResultsShape(t *testing.T) {
 	app.Form["filter"] = "amex"
 	app.Path = "/accounts/list/"
 	view := app.View()
-	if !strings.Contains(view, "> filter : amex|") || !strings.Contains(view, "(no results)") {
+	if !strings.Contains(view, "> filter : amex") || strings.Contains(view, "> filter : amex|") || !strings.Contains(view, "(no results)") {
 		t.Fatalf("no-results shape missing:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("enter on no results should stay on list, got %s", app.Path)
+	}
+}
+
+func TestAccountListFilterTypingAndFilteredNavigation(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	for _, name := range []string{"cash", "savings", "travel"} {
+		if _, _, err := app.Svc.Accounts.Create(ctx, name, "HKD", true, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app.Path = "/accounts/list/"
+	for _, r := range "sav" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> filter : sav") || !strings.Contains(view, "> savings") || strings.Contains(view, "cash") || strings.Contains(view, "travel") {
+		t.Fatalf("typed filter did not narrow account list:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "> filter : sa") || !strings.Contains(view, "> savings") {
+		t.Fatalf("backspace did not update account filter:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/savings/" {
+		t.Fatalf("enter should open selected filtered account, got %s", app.Path)
+	}
+}
+
+func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	setCurrencyRate(t, store, "HKD", 1, 0)
+	setCurrencyRate(t, store, "USD", 10, 0)
+	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "wallet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, _, err := app.Svc.Accounts.Create(ctx, "usd-savings", "USD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loan, _, err := app.Svc.Accounts.Create(ctx, "student-loan", "HKD", false, "negative until fully paid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-21", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, usd.ID, "2026-05-21", "50.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, loan.ID, "2026-05-21", "-25.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/list/"
+	view := app.View()
+	for _, want := range []string{
+		"TOTAL       | HKD 600.00",
+		"> cash",
+		"usd-savings",
+		"HKD 500.00 (USD 50.00)",
+		"TOTAL       | HKD -25.00",
+		"student-loan",
+		"negative until fully paid",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("account list totals/conversion missing %q:\n%s", want, view)
+		}
 	}
 }
 
@@ -188,7 +271,7 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 	ctx := context.Background()
 	app.Path = "/accounts/create/"
 	view := app.View()
-	for _, want := range []string{"> 1) name", "(type anything...)|", "2) currency : HKD", "3) on-budget: true", "4) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) name     : |", "2) currency : HKD", "3) on-budget: true", "4) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("account create form missing %q:\n%s", want, view)
 		}
@@ -220,7 +303,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	app, store := testApp(t)
 	app.Path = "/accounts/create/"
 	view := app.View()
-	for _, want := range []string{"> 1) name", "(type anything...)|", "2) currency : HKD", "3) on-budget: true", "  [confirm]"} {
+	for _, want := range []string{"> 1) name     : |", "2) currency : HKD", "3) on-budget: true", "  [confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("initial account form missing %q:\n%s", want, view)
 		}
@@ -228,7 +311,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)|", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -278,8 +361,8 @@ func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)|")
-	assertOrdered(t, view, "   > filter  : (type anything...)|", "\n\n     > HKD")
+	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)")
+	assertOrdered(t, view, "   > filter  : (type anything...)", "\n\n     > HKD")
 	assertOrdered(t, view, "     [01/30]", "\n\n  3) on-budget")
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
@@ -297,7 +380,7 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 		app = m.(App)
 	}
 	view := app.View()
-	for _, want := range []string{"currency : HKD", "filter  : JPY|", "     > JPY", "     [01/01]"} {
+	for _, want := range []string{"currency : HKD", "filter  : JPY", "     > JPY", "     [01/01]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency filter missing %q:\n%s", want, view)
 		}
@@ -309,12 +392,12 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 	}
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter  : JP|") || !strings.Contains(view, "JPY") {
+	if view = app.View(); !strings.Contains(view, "filter  : JP") || strings.Contains(view, "filter  : JP|") || !strings.Contains(view, "JPY") {
 		t.Fatalf("currency backspace did not update filter:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter  : JPZZ|") || !strings.Contains(view, "(no matching currencies)") || !strings.Contains(view, "[00/00]") {
+	if view = app.View(); !strings.Contains(view, "filter  : JPZZ") || strings.Contains(view, "filter  : JPZZ|") || !strings.Contains(view, "(no matching currencies)") || !strings.Contains(view, "[00/00]") {
 		t.Fatalf("currency no-match state missing:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -364,7 +447,7 @@ func TestCurrencySelectNavigationPaginationAndSetSanitization(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "filter  : K|") || !strings.Contains(view, "KRW") {
+	if view := app.View(); !strings.Contains(view, "filter  : K") || strings.Contains(view, "filter  : K|") || !strings.Contains(view, "KRW") {
 		t.Fatalf("k should type into currency filter:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -476,6 +559,22 @@ func assertOrdered(t *testing.T, body string, earlier string, later string) {
 	}
 }
 
+func setCurrencyRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
+	t.Helper()
+	ctx := context.Background()
+	now := store.Clock().UTC().Format(time.RFC3339)
+	var id int64
+	if err := store.DB.QueryRowContext(ctx, "SELECT id FROM currencies WHERE code=?", code).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DB.ExecContext(ctx, `INSERT INTO currency_rates(currency_id, rate_to_usd_amount, rate_to_usd_scale, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(currency_id) DO UPDATE SET rate_to_usd_amount=excluded.rate_to_usd_amount, rate_to_usd_scale=excluded.rate_to_usd_scale, updated_at=excluded.updated_at`,
+		id, amount, scale, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -488,7 +587,7 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 	app.Path = "/accounts/list/"
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 2) savings") || strings.Contains(view, "> 1) cash") {
+	if view := app.View(); !strings.Contains(view, "> savings") || strings.Contains(view, "> cash") {
 		t.Fatalf("account list marker out of sync:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -511,7 +610,7 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	app, _ := testApp(t)
 	app.Path = "/accounts/create/"
-	if view := app.View(); !strings.Contains(view, "> 1) name     : (type anything...)|") || strings.Contains(view, "currency : HKD|") {
+	if view := app.View(); !strings.Contains(view, "> 1) name     : |") || strings.Contains(view, "(type anything...)|") || strings.Contains(view, "currency : HKD|") {
 		t.Fatalf("initial focused caret or unfocused field rendering wrong:\n%s", view)
 	}
 	for _, r := range "cash" {
@@ -573,6 +672,44 @@ func TestTextCaretAndCursorMovement(t *testing.T) {
 	app = m.(App)
 	if view := app.View(); !strings.Contains(view, "notes    : hi | there") {
 		t.Fatalf("right should move notes cursor over a visible space:\n%s", view)
+	}
+}
+
+func TestQuestionMarkTypesInNotesInsteadOfOpeningHelp(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Field = 3
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	app = m.(App)
+	if app.Help {
+		t.Fatal("? should not open help while account notes are focused")
+	}
+	if got := app.Form["notes"]; got != "?" {
+		t.Fatalf("? should type into account notes, got %q", got)
+	}
+	view := app.View()
+	if !strings.Contains(view, "notes    : ?|") || strings.Contains(view, "?       : help") {
+		t.Fatalf("account notes view/footer wrong:\n%s", view)
+	}
+
+	app, _ = testApp(t)
+	if _, _, err := app.Svc.Accounts.Create(context.Background(), "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/add/"
+	app.Form = map[string]string{"date": "2026-05-24"}
+	app.Field = 2
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	app = m.(App)
+	if app.Help {
+		t.Fatal("? should not open help while balance notes are focused")
+	}
+	if got := app.Form["notes"]; got != "?" {
+		t.Fatalf("? should type into balance notes, got %q", got)
+	}
+	view = app.View()
+	if !strings.Contains(view, "notes    : ?|") || strings.Contains(view, "?       : help") {
+		t.Fatalf("balance notes view/footer wrong:\n%s", view)
 	}
 }
 

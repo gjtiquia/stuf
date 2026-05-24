@@ -11,6 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"stuf/internal/config"
+	"stuf/internal/money"
+	"stuf/internal/repo"
 	"stuf/internal/service"
 )
 
@@ -53,6 +55,19 @@ func New(ctx context.Context, svc Services, cfg config.Loaded) App {
 
 func (a App) Init() tea.Cmd { return nil }
 
+func (a App) notesFocused() bool {
+	switch {
+	case a.Path == "/accounts/create/":
+		return a.Field == 3
+	case accountEditPath(a.Path):
+		return a.Field == 3
+	case balanceAddPath(a.Path), balanceEditPath(a.Path):
+		return a.Field == 2
+	default:
+		return false
+	}
+}
+
 func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -63,7 +78,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.History = nil
 		return a, tea.Quit
 	}
-	if s == "?" {
+	if s == "?" && !a.notesFocused() {
 		a.Help = !a.Help
 		return a, nil
 	}
@@ -179,25 +194,59 @@ func (a App) accountCreateKey(s string) App {
 }
 
 func (a App) accountListKey(s string, includeHidden bool) App {
-	accounts, err := a.Svc.Accounts.List(a.ctx, includeHidden)
-	if err != nil {
-		a.Error = err.Error()
-		return a
-	}
-	if len(accounts) == 0 {
-		return a
-	}
-	var routes []string
-	for _, acct := range accounts {
-		if includeHidden && !acct.Hidden {
-			continue
+	switch s {
+	case "up":
+		rows, err := a.accountListRows(includeHidden)
+		if err != nil {
+			a.Error = err.Error()
+			return a
 		}
-		routes = append(routes, "/accounts/"+acct.Name+"/")
-	}
-	if len(routes) == 0 {
+		if len(rows) > 0 {
+			a.Menu = (a.Menu - 1 + len(rows)) % len(rows)
+		}
+		return a
+	case "down":
+		rows, err := a.accountListRows(includeHidden)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		if len(rows) > 0 {
+			a.Menu = (a.Menu + 1) % len(rows)
+		}
+		return a
+	case "backspace":
+		a.Form["filter"] = trimLastRune(a.Form["filter"])
+		a.Menu = clampListCursor(a.Menu, a.accountListRowCount(includeHidden))
+		return a
+	case "enter":
+		rows, err := a.accountListRows(includeHidden)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		if len(rows) == 0 {
+			return a
+		}
+		a.Menu = clampListCursor(a.Menu, len(rows))
+		a.Path = "/accounts/" + rows[a.Menu].Name + "/"
+		a.Menu = 0
+		return a
+	default:
+		if isTextInputKey(s) {
+			a.Form["filter"] += s
+			a.Menu = 0
+		}
 		return a
 	}
-	return a.menuKey(s, routes)
+}
+
+func (a App) accountListRowCount(includeHidden bool) int {
+	rows, err := a.accountListRows(includeHidden)
+	if err != nil {
+		return 0
+	}
+	return len(rows)
 }
 
 func (a App) accountDetailKey(s, name string) App {
@@ -600,7 +649,7 @@ func (a App) formKey(s string, fields []string) App {
 			a.setTextCursor(field, cursor-1)
 		}
 	default:
-		if isTextInputKey(s) && a.Field < len(fields) {
+		if a.Field < len(fields) && (isTextInputKey(s) || (s == "?" && fields[a.Field] == "notes")) {
 			field := fields[a.Field]
 			current := a.Form[field]
 			cursor := a.textCursor(field)
@@ -647,9 +696,9 @@ func (a App) screen() screen {
 		s.Actions = []string{"overview", "list", "hidden", "create"}
 		return s
 	case a.Path == "/accounts/list/":
-		return screen{Path: "/accounts/list/", Body: a.accountList(false)}
+		return screen{Path: "/accounts/list/", Body: a.accountList(false), Help: listHelp()}
 	case a.Path == "/accounts/hidden/":
-		return screen{Path: "/accounts/hidden/", Body: a.accountList(true)}
+		return screen{Path: "/accounts/hidden/", Body: a.accountList(true), Help: listHelp()}
 	case a.Path == "/accounts/create/":
 		return screen{Path: "/accounts/create/", Body: a.accountFormView(nil), Help: a.accountFormHelp()}
 	case a.Path == "/settings/":
@@ -670,13 +719,13 @@ func (a App) screen() screen {
 			return screen{Path: a.Path, Body: a.balanceList(name)}
 		}
 		if _, ok := balanceAddName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: formHelp()}
+			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: a.formHelp([]string{"date", "balance", "notes"})}
 		}
 		if name, date, ok := balanceDetailName(a.Path); ok {
 			return a.balanceDetailScreen(name, date)
 		}
 		if _, _, ok := balanceEditName(a.Path); ok {
-			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: formHelp()}
+			return screen{Path: a.Path, Body: a.formView([]string{"date", "balance", "notes"}, nil), Help: a.formHelp([]string{"date", "balance", "notes"})}
 		}
 		if _, ok := accountEditName(a.Path); ok {
 			return a.accountEditScreen()
@@ -745,8 +794,15 @@ func (a App) helpLines(s screen) []string {
 	return []string{"esc     : back", "?       : help", "ctrl-z  : undo"}
 }
 
-func formHelp() []string {
+func (a App) formHelp(fields []string) []string {
+	if a.Field < len(fields) && fields[a.Field] == "notes" {
+		return []string{"tab     : next field", "enter   : confirm", "esc     : discard"}
+	}
 	return []string{"tab     : next field", "enter   : confirm", "esc     : discard", "?       : help"}
+}
+
+func listHelp() []string {
+	return []string{"up/down : navigate", "enter   : confirm", "esc     : back", "?       : help", "ctrl-z  : undo"}
 }
 
 func (a App) accountFormHelp() []string {
@@ -759,7 +815,7 @@ func (a App) accountFormHelp() []string {
 	if a.Field >= 4 {
 		return []string{"shift-tab : navigate", "enter     : confirm", "esc       : back", "?         : help"}
 	}
-	return formHelp()
+	return a.formHelp([]string{"name", "currency", "on-budget", "notes"})
 }
 
 func (a App) dashboardScreen() screen {
@@ -792,36 +848,13 @@ ppl owe you : %s
 }
 
 func (a App) accountList(includeHidden bool) string {
-	accounts, err := a.Svc.Accounts.List(a.ctx, includeHidden)
+	visible, err := a.accountListRows(includeHidden)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
 	filter := a.Form["filter"]
-	var visible []accountListRow
-	for _, acct := range accounts {
-		if includeHidden && !acct.Hidden {
-			continue
-		}
-		if filter != "" && !strings.Contains(acct.Name, filter) && !strings.Contains(acct.Notes, filter) {
-			continue
-		}
-		bal, ok, _ := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID)
-		amount := zero(acct.Code)
-		asOf := "(no balance entered yet)"
-		if ok {
-			amount = bal.Amount.Format(acct.Code)
-			asOf = bal.Date
-		}
-		visible = append(visible, accountListRow{
-			Name:     acct.Name,
-			Balance:  amount,
-			Notes:    acct.Notes,
-			OnBudget: acct.OnBudget,
-			AsOf:     asOf,
-		})
-	}
 	var lines []string
-	lines = append(lines, "> filter : "+caretAtEnd(placeholder(filter, "(type anything...)")), "")
+	lines = append(lines, "> filter : "+placeholder(filter, "(type anything...)"), "")
 	if len(visible) == 0 {
 		lines = append(lines, "  (no results)")
 		return strings.Join(lines, "\n") + "\n"
@@ -833,29 +866,96 @@ func (a App) accountList(includeHidden bool) string {
 			if i == a.Menu {
 				prefix = "> "
 			}
-			lines = append(lines, fmt.Sprintf("%s%d) %-11s | %-12s | %s", prefix, i+1, row.Name, row.Balance, row.Notes))
+			lines = append(lines, fmt.Sprintf("%s%-11s | %-12s | %s", prefix, row.Name, row.Balance, row.Notes))
 		}
 		return strings.Join(lines, "\n") + "\n"
 	}
-	lines = appendAccountSection(lines, "on-budget accounts", visible, true, a.Menu)
+	lines = appendAccountSection(lines, "on-budget accounts", visible, true, a.Menu, a.Config.Config.Currency)
 	lines = append(lines, "")
-	lines = appendAccountSection(lines, "off-budget accounts", visible, false, a.Menu)
+	lines = appendAccountSection(lines, "off-budget accounts", visible, false, a.Menu, a.Config.Config.Currency)
 	return strings.Join(lines, "\n") + "\n"
 }
 
 type accountListRow struct {
 	Name     string
 	Balance  string
+	Amount   money.Money
 	Notes    string
 	OnBudget bool
 	AsOf     string
 }
 
-func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int) []string {
+func (a App) accountListRows(includeHidden bool) ([]accountListRow, error) {
+	accounts, err := a.Svc.Accounts.List(a.ctx, includeHidden)
+	if err != nil {
+		return nil, err
+	}
+	appCur, err := a.Svc.Accounts.Currency.GetByCode(a.ctx, a.Config.Config.Currency)
+	if err != nil {
+		return nil, err
+	}
+	filter := a.Form["filter"]
+	var visible []accountListRow
+	for _, acct := range accounts {
+		if includeHidden && !acct.Hidden {
+			continue
+		}
+		if filter != "" && !strings.Contains(acct.Name, filter) && !strings.Contains(acct.Notes, filter) {
+			continue
+		}
+		native := money.Money{Scale: acct.Scale}
+		asOf := "(no balance entered yet)"
+		if bal, ok, err := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID); err != nil {
+			return nil, err
+		} else if ok {
+			native = bal.Amount
+			asOf = bal.Date
+		}
+		appAmount, balance, err := a.accountListBalance(acct.Code, native, appCur)
+		if err != nil {
+			return nil, err
+		}
+		visible = append(visible, accountListRow{
+			Name:     acct.Name,
+			Balance:  balance,
+			Amount:   appAmount,
+			Notes:    acct.Notes,
+			OnBudget: acct.OnBudget,
+			AsOf:     asOf,
+		})
+	}
+	return visible, nil
+}
+
+func (a App) accountListBalance(code string, native money.Money, appCur repo.Currency) (money.Money, string, error) {
+	if code == appCur.Code {
+		appAmount, err := native.ConvertToScale(appCur.Scale)
+		if err != nil {
+			return money.Money{}, "", err
+		}
+		return appAmount, appAmount.Format(appCur.Code), nil
+	}
+	cur, err := a.Svc.Accounts.Currency.GetByCode(a.ctx, code)
+	if err != nil {
+		return money.Money{}, "", err
+	}
+	appAmount, err := money.Convert(native, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
+	if err != nil {
+		return money.Money{}, "", err
+	}
+	return appAmount, fmt.Sprintf("%s (%s)", appAmount.Format(appCur.Code), native.Format(code)), nil
+}
+
+func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string) []string {
 	var section []accountListRow
+	total := money.Money{Scale: rows[0].Amount.Scale}
 	for _, row := range rows {
 		if row.OnBudget == onBudget {
 			section = append(section, row)
+			next, err := total.Add(row.Amount)
+			if err == nil {
+				total = next
+			}
 		}
 	}
 	if len(section) == 0 {
@@ -863,7 +963,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 	}
 	lines = append(lines, "  "+title)
 	lines = append(lines, "  name        | balance      | notes")
-	lines = append(lines, "  TOTAL       | (computed)   |")
+	lines = append(lines, fmt.Sprintf("  TOTAL       | %-12s |", total.Format(appCurrency)))
 	for i, row := range rows {
 		if row.OnBudget != onBudget {
 			continue
@@ -872,7 +972,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 		if i == selected {
 			prefix = "> "
 		}
-		lines = append(lines, fmt.Sprintf("%s%d) %-11s | %-12s | %s", prefix, i+1, row.Name, row.Balance, row.Notes))
+		lines = append(lines, fmt.Sprintf("%s%-11s | %-12s | %s", prefix, row.Name, row.Balance, row.Notes))
 	}
 	return lines
 }
@@ -1041,7 +1141,7 @@ func (a App) currencySelectLines(options []string) []string {
 	page := clampCurrencyPage(parseFormInt(a.Form["_currency_page"]), cursor, len(filtered))
 	start := page * currencyPageSize
 	end := min(start+currencyPageSize, len(filtered))
-	lines := []string{"", fmt.Sprintf("   > filter  : %s", caretAtEnd(placeholder(filter, "(type anything...)"))), ""}
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
 	if len(filtered) == 0 {
 		lines = append(lines, "     (no matching currencies)", "", "     [00/00]")
 		return lines
@@ -1154,6 +1254,16 @@ func clampCurrencyCursor(cursor, count int) int {
 	return cursor
 }
 
+func clampListCursor(cursor, count int) int {
+	if count <= 0 || cursor < 0 {
+		return 0
+	}
+	if cursor >= count {
+		return count - 1
+	}
+	return cursor
+}
+
 func currencyPageForCursor(cursor int) int {
 	if cursor < 0 {
 		return 0
@@ -1231,13 +1341,9 @@ func isFormTextField(field string, options map[string][]string) bool {
 	return options == nil || len(options[field]) == 0
 }
 
-func caretAtEnd(value string) string {
-	return value + "|"
-}
-
 func renderCaret(value, fallback string, cursor int) string {
 	if value == "" {
-		return caretAtEnd(fallback)
+		return "|"
 	}
 	runes := []rune(value)
 	cursor = max(0, min(cursor, len(runes)))
@@ -1341,6 +1447,11 @@ func accountEditName(path string) (string, bool) {
 	return name, name != ""
 }
 
+func accountEditPath(path string) bool {
+	_, ok := accountEditName(path)
+	return ok
+}
+
 func balancesName(path string) (string, bool) {
 	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/balances/") {
 		return "", false
@@ -1355,6 +1466,11 @@ func balanceAddName(path string) (string, bool) {
 	}
 	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/balances/add/")
 	return name, name != ""
+}
+
+func balanceAddPath(path string) bool {
+	_, ok := balanceAddName(path)
+	return ok
 }
 
 func balanceDetailName(path string) (string, string, bool) {
@@ -1377,4 +1493,9 @@ func balanceEditName(path string) (string, string, bool) {
 		return parts[0], parts[2], true
 	}
 	return "", "", false
+}
+
+func balanceEditPath(path string) bool {
+	_, _, ok := balanceEditName(path)
+	return ok
 }
