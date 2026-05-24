@@ -10,7 +10,7 @@ Build the foundation for the stuf TUI finance tool. This plan covers project sca
 
 - **Store user input, compute everything else** — if it can be derived at runtime, don't persist it
 - **Balances anchor truth** — transactions explain movement but never update balances
-- **History is write-only audit log** — undo is handled in-memory; on undo, the corresponding history row is silently deleted to keep history accurate. This is an intentional decision: history must reflect what is actually in effect, not what was ever done. No undo entries are appended. Future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
+- **History is effective mutation history** — undo is handled in-memory; on undo, the corresponding history row is silently deleted to keep persisted history accurate to what is currently in effect. This is an intentional decision: history must reflect effective mutations, not every mutation ever attempted. No undo entries are appended. Future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
 - **No premature caching** — budget balances, owed remaining, available, expense explanation are all computed at query time
 - **Dates as TEXT** — YYYY-MM-DD and YYYY-MM stored as text, validated Go-side
 - **No lipgloss** — all rendering is in-house using plain string formatting. Bubble Tea is the framework; we build the view layer ourselves
@@ -66,13 +66,14 @@ stuf/
 │   │   ├── history.go
 │   │   ├── history_test.go
 │   │   └── sqlite.go            # DB connection, startup, seeding, constructors
+│   ├── money/                   # money arithmetic, conversion, formatting, formulas
+│   │   ├── money.go
+│   │   ├── money_test.go
+│   │   ├── formula.go
+│   │   └── formula_test.go
 │   ├── service/                 # business logic
 │   │   ├── account.go
 │   │   ├── account_test.go      # unit tests with mock repos
-│   │   ├── money.go             # Money type + arithmetic + conversion
-│   │   ├── money_test.go
-│   │   ├── formula.go           # formula parsing/evaluation
-│   │   ├── formula_test.go
 │   │   ├── currency.go
 │   │   ├── currency_test.go
 │   │   ├── history.go
@@ -166,11 +167,11 @@ Seeded from embedded data. Not user-creatable in v1.
 |--------|------|-------------|-------|
 | id | INTEGER | PRIMARY KEY | |
 | currency_id | INTEGER | UNIQUE REFERENCES currencies(id) | One rate per currency |
-| rate_to_usd_amount | INTEGER | NOT NULL | e.g. HKD: 781 → 1 HKD ≈ 0.128 USD |
-| rate_to_usd_scale | INTEGER | NOT NULL DEFAULT 2 | Scale for the rate |
+| rate_to_usd_amount | INTEGER | NOT NULL | e.g. HKD: 128 → 1 HKD ≈ 0.128 USD |
+| rate_to_usd_scale | INTEGER | NOT NULL DEFAULT 3 | Scale for the rate |
 | updated_at | TEXT | NOT NULL | |
 
-Rate stored as integer+scale (same money pattern). To convert HKD to USD: `amount * rate_to_usd_amount / (10^rate_to_usd_scale * 10^from_scale)`. USD itself has rate 1/1 (amount=1, scale=0).
+Rate stored as integer+scale (same money pattern). `rate_to_usd_amount=128` and `rate_to_usd_scale=3` means `0.128 USD` per source currency unit. To convert source money to USD display minor units: convert source minor units to source major units using the source currency scale, multiply by `rate_to_usd_amount / 10^rate_to_usd_scale`, then scale to the target currency. USD itself has rate 1:1 (`amount=1`, `scale=0`). Rounding must be deterministic and covered by money tests.
 
 #### `accounts`
 
@@ -257,7 +258,7 @@ Currency for allocations/goals inherits from budget. No separate currency column
 | created_at | TEXT | NOT NULL | |
 | updated_at | TEXT | NOT NULL | |
 
-Budget balance = SUM(delta_amount) filtered by budget_id. **INDEX(budget_id, date)**.
+Allocated amount = SUM(delta_amount) filtered by budget_id. Budget balance is allocated minus budget-linked effective expense rows. **INDEX(budget_id, date)**.
 
 #### `transactions`
 
@@ -345,7 +346,7 @@ Remaining = amount - SUM(settlements converted to owed item currency). Computed 
 | old_data | TEXT | | JSON, null for creates |
 | new_data | TEXT | | JSON, null for deletes |
 
-Write-only audit log. On undo during a session: reverse the DB mutation, then **silently delete** the corresponding history row. This is intentional — history must reflect what is actually in effect, not what was ever done. **INDEX(timestamp)**.
+Persisted effective mutation history. On undo during a session: reverse the DB mutation, then **silently delete** the corresponding history row. This is intentional — persisted history must reflect mutations currently in effect, not every mutation ever attempted. **INDEX(timestamp)**.
 
 History action verbs: `create` for new containers (account, budget, party, tag, category), `add` for new entries (balance, allocation, transaction, owed item, settlement), `edit` for modifications, `delete` for deletions. Matches user-facing history language.
 
@@ -377,8 +378,9 @@ currencies ←──────────────────────
 | Value | Computation |
 |-------|-------------|
 | Account current balance | Latest balance entry for that account |
-| Budget balance | SUM(allocations delta_amount) by budget_id |
+| Budget allocated | SUM(allocations delta_amount) by budget_id |
 | Budget spent | SUM of effective expense transaction amounts linked to budget (see Effective Transaction Rows) |
+| Budget balance | budget allocated - budget spent |
 | Budget available | on-budget balances converted to app currency - SUM(budget balances converted to app currency) - SUM(open you-owe remaining converted to app currency). Money ppl owe you does not increase available until it appears in on-budget balances. |
 | Owed remaining | owed amount - SUM(settlements converted to owed item currency) |
 | Owed status | inferred: if remaining = 0, the item is settled. Settled items are hidden from open owed lists. Computed at query time, not stored. |
@@ -397,8 +399,8 @@ Reports and budget-spent calculations use effective rows, not raw parent + child
 - If a transaction has children → it contributes child effective rows **plus** one **parent remaining** row if remaining ≠ 0.
 - Apply recursively for deeper transaction trees.
 - Parent remaining = parent amount - Σ(child amounts converted to parent currency).
-- Parent remaining rows are virtual/read-only — they have no transaction ref, keep the parent date/account/type/tags/notes.
-- Budget spent uses the same effective-row logic.
+- Parent remaining rows are virtual/read-only — they have no transaction ref, keep the parent date/account/type/budget/tags/notes.
+- Budget spent uses the same effective-row logic. Parent remaining rows use the parent budget link if present.
 - If converted children total exceeds parent amount, remaining becomes negative (advisory, does not block input).
 - **V1 constraint**: deleting a transaction that has children is blocked. Children must be deleted first.
 - **V1 constraint**: mixed-type children (income child under expense parent, or vice versa) are blocked at the UI/validation layer.
@@ -558,15 +560,14 @@ After a successful mutation, redirect to the appropriate list or detail page:
 
 1. **`go.mod` + directory structure** — initialize module, create scaffolding
 2. **Currency seed data** — embed JSON of common currencies and USD rates
-3. **`money` package** — Money type, arithmetic, conversion, formatting, formula parser. **TDD: write tests first**
-4. **`formula` package** — formula parsing/evaluation. **TDD: write tests first**
-5. **Goose migration 00001** — all tables, indexes, constraints
-6. **`repo` package** — repository interfaces and SQLite implementations. **TDD: integration tests with real SQLite temp files**
+3. **`money` package** — Money type, arithmetic, conversion, formatting, formula parsing/evaluation. **TDD: write tests first**
+4. **Goose migration 00001** — all tables, indexes, constraints
+5. **sqlc config + queries** — generate query code
+6. **`repo` package** — repository interfaces and SQLite implementations wrapping sqlc-generated queries. **TDD: integration tests with real SQLite temp files**
 7. **App startup logic** — DB init, config, seeding. **TDD**
-8. **sqlc config + queries** — generate query code
-9. **`service` package** — business logic per domain. **TDD: unit tests with mock repos**
-10. **Bubbletea shell** — boot, connect, dashboard render, nav framework. **TDD: model tests**
-11. **First feature: accounts** — prove the full stack works end-to-end. **TDD**
+8. **`service` package** — business logic per domain. **TDD: unit tests with mock repos**
+9. **Bubbletea shell** — boot, connect, dashboard render, nav framework. **TDD: model tests**
+10. **First feature: accounts** — prove the full stack works end-to-end. **TDD**
 
 ## v1 Scope Exclusions
 
