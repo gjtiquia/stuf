@@ -999,3 +999,170 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 		t.Fatalf("balance flow failed path=%s view:\n%s", app.Path, app.View())
 	}
 }
+
+func TestMenuCursorRestoresOnBackFromAccountList(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("expected account list, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if app.Path != "/accounts/" {
+		t.Fatalf("expected accounts menu, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 2) list") || strings.Contains(view, "> 1) overview") {
+		t.Fatalf("expected list cursor restored on accounts menu:\n%s", view)
+	}
+}
+
+func TestMenuCursorRestoresOnBackFromAccountsToHome(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if app.Path != "/" {
+		t.Fatalf("expected home, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 1) accounts") {
+		t.Fatalf("expected accounts cursor restored on home:\n%s", view)
+	}
+}
+
+func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/"
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/transactions/" {
+		t.Fatalf("expected transactions route, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if app.Path != "/accounts/cash/" {
+		t.Fatalf("expected account detail, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 2) transactions (TODO)") || strings.Contains(view, "> 1) balances") {
+		t.Fatalf("expected transactions cursor restored on account detail:\n%s", view)
+	}
+}
+
+func TestMenuCursorRestoresOnBackFromBalanceDetail(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/"
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/2026-05-01/" {
+		t.Fatalf("expected balance detail, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("expected balances list, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 2026-05-01") || strings.Contains(view, "> 2026-06-01") {
+		t.Fatalf("expected selected balance cursor restored:\n%s", view)
+	}
+}
+
+func TestMenuCursorPersistsWhenJumpingBetweenScreens(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
+	app = m.(App)
+	if app.Path != "/accounts/hidden/" {
+		t.Fatalf("expected hidden accounts, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> 3) hidden") {
+		t.Fatalf("expected hidden cursor preserved after jumping away:\n%s", view)
+	}
+}
+
+func TestUndoReturnsHomeWithoutClearingOtherMenuCursors(t *testing.T) {
+	app, store := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	app = m.(App)
+	app.Path = "/accounts/create/"
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
+	app.Field = 4
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("expected account list after create, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
+	app = m.(App)
+	if app.Path != "/" {
+		t.Fatalf("undo should return home, got %s", app.Path)
+	}
+	if _, err := store.Acct.GetByName(context.Background(), "cash"); err == nil {
+		t.Fatal("account should be undone")
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> 2) list") {
+		t.Fatalf("accounts menu should still remember list cursor after undo:\n%s", view)
+	}
+}
+
+func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
+	app, store := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
+	app.Field = 4
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("expected account list after create, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> cash") {
+		t.Fatalf("expected created account selected in list:\n%s", view)
+	}
+	if _, err := store.Acct.GetByName(context.Background(), "cash"); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if app.Path != "/accounts/" {
+		t.Fatalf("expected accounts menu, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 2) list") {
+		t.Fatalf("expected list selected after backing out of post-create list:\n%s", view)
+	}
+}
