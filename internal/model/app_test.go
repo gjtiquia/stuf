@@ -958,8 +958,116 @@ func TestEscHelpAndBackup(t *testing.T) {
 	app.Path = "/"
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	if !strings.Contains(app.View(), "exit app? no") {
-		t.Fatal(app.View())
+	view := app.View()
+	for _, want := range []string{
+		"# stuf",
+		"total       : HKD 0.00",
+		"quit stuf?",
+		"> 1) no",
+		"  2) yes",
+		"up/down/j/k   : navigate",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("exit confirmation missing %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "\n/\n") {
+		t.Fatalf("exit confirmation should hide url path:\n%s", view)
+	}
+	if strings.Contains(view, "> 1) accounts") {
+		t.Fatalf("exit confirmation should replace menu items:\n%s", view)
+	}
+}
+
+func TestExitConfirmationRequiresYesToQuit(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/"
+	m, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if cmd != nil {
+		t.Fatal("esc should open confirmation, not quit")
+	}
+	if !app.ExitAsk || app.Menu != 0 {
+		t.Fatalf("expected exit confirmation with no selected, got ExitAsk=%t Menu=%d", app.ExitAsk, app.Menu)
+	}
+
+	m, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if cmd != nil {
+		t.Fatal("enter on no should cancel confirmation, not quit")
+	}
+	if app.ExitAsk {
+		t.Fatal("enter on no should close confirmation")
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if !strings.Contains(app.View(), "> 2) yes") {
+		t.Fatalf("down should select yes:\n%s", app.View())
+	}
+	m, cmd = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter on yes should quit")
+	}
+
+	app.Path = "/"
+	app.ExitAsk = false
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	if cmd == nil {
+		t.Fatal("hotkey 2 should quit")
+	}
+
+	app.Path = "/"
+	app.ExitAsk = false
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, cmd = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+	app = m.(App)
+	if cmd != nil {
+		t.Fatal("y should not quit directly")
+	}
+}
+
+func TestExitConfirmationHistoryWarningAndCancel(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=cash")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=HKD")})
+	app = m.(App)
+	app.Field = 4
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if len(app.History) != 1 {
+		t.Fatalf("expected undo history after account create, got %d entries", len(app.History))
+	}
+	app.Path = "/"
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	view := app.View()
+	if !strings.Contains(view, "history (ctrl-z to undo)") || !strings.Contains(view, "undo history will be cleared") {
+		t.Fatalf("expected undo history warning in exit confirmation:\n%s", view)
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	if len(app.History) != 1 {
+		t.Fatalf("esc cancel should preserve undo history, got %d entries", len(app.History))
+	}
+	if _, err := store.Acct.GetByName(context.Background(), "cash"); err != nil {
+		t.Fatal(err)
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if len(app.History) != 1 {
+		t.Fatalf("enter on no should preserve undo history, got %d entries", len(app.History))
 	}
 }
 

@@ -91,18 +91,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.undo(), nil
 	}
 	if a.ExitAsk {
-		if s == "enter" || s == "n" || s == "esc" {
-			a.ExitAsk = false
-			return a, nil
-		}
-		if s == "y" {
-			a.History = nil
-			return a, tea.Quit
-		}
+		return a.exitConfirmKey(s)
 	}
 	if s == "esc" {
 		if a.Path == "/" {
 			a.ExitAsk = true
+			a = a.navSetMenu(0)
 			return a, nil
 		}
 		a.Error = ""
@@ -145,6 +139,39 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.accountEditKey(s, name)
 		}
 	}
+	return a, nil
+}
+
+func exitConfirmActions() []string {
+	return []string{"no", "yes"}
+}
+
+func (a App) exitConfirmKey(s string) (App, tea.Cmd) {
+	actions := exitConfirmActions()
+	switch s {
+	case "down", "j", "tab":
+		a = a.navSetMenu((a.Menu + 1) % len(actions))
+	case "up", "k", "shift+tab":
+		a = a.navSetMenu((a.Menu - 1 + len(actions)) % len(actions))
+	case "esc":
+		a.ExitAsk = false
+	case "enter":
+		return a.exitConfirmSelect(a.Menu)
+	default:
+		if len(s) == 1 && s[0] >= '1' && int(s[0]-'1') < len(actions) {
+			a = a.navSetMenu(int(s[0] - '1'))
+			return a.exitConfirmSelect(a.Menu)
+		}
+	}
+	return a, nil
+}
+
+func (a App) exitConfirmSelect(idx int) (App, tea.Cmd) {
+	if idx == 1 {
+		a.History = nil
+		return a, tea.Quit
+	}
+	a.ExitAsk = false
 	return a, nil
 }
 
@@ -714,7 +741,17 @@ func (a App) View() string {
 func (a App) screen() screen {
 	switch {
 	case a.Path == "/":
-		return a.dashboardScreen()
+		s := a.dashboardScreen()
+		if a.ExitAsk {
+			s.Body += "\nquit stuf?"
+			if len(a.History) > 0 {
+				s.Body += "\nundo history will be cleared"
+			}
+			s.Body += "\n"
+			s.Path = ""
+			s.Actions = exitConfirmActions()
+		}
+		return s
 	case a.Path == "/accounts/":
 		s := a.dashboardScreen()
 		s.Path = "/accounts/"
@@ -777,13 +814,6 @@ func (a App) render(s screen) string {
 	}
 	if a.Help {
 		return b.String() + "help\n" + strings.Join(a.helpLines(s), "\n") + "\n"
-	}
-	if a.ExitAsk {
-		b.WriteString("exit app? no\n")
-		if len(a.History) > 0 {
-			b.WriteString("undo history will be cleared\n")
-		}
-		return b.String()
 	}
 	b.WriteString("# stuf\n\n")
 	if s.Body != "" {
