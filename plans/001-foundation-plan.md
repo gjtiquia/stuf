@@ -137,7 +137,8 @@ stuf/
 │       ├── filter_list_test.go
 │       ├── table.go
 │       ├── table_test.go
-│       └── form.go
+│       ├── form.go
+│       └── form_test.go
 ├── plans/
 │   └── 001-foundation-plan.md
 ├── README.md
@@ -308,10 +309,10 @@ history records effective account/balance mutations
 | Account list total | Sum latest account balances grouped by on-budget/off-budget, displayed in app currency where possible |
 | Dashboard total | Sum latest balances across visible accounts converted to app currency where possible |
 | Dashboard budgeted | `0` until budgets exist |
-| Dashboard growth | Current-month growth derived from visible account balances using shared nearest-boundary rules |
+| Dashboard growth | Required foundation capability: current-month growth derived from visible account balances using shared nearest-boundary rules |
 | Dashboard owed values | `0` until owed exists |
 
-Only values that depend on unimplemented domains should render as placeholders. Values derivable from accounts and balances must be real in `001`.
+Only values that depend on unimplemented domains should render as placeholders. Values derivable from accounts and balances must be real in `001`; this includes dashboard growth because it proves the balance-anchored premise.
 
 Missing display conversion data shows the original currency amount and a clear warning instead of silently converting. Converted totals that depend on missing rates omit the affected converted amount and show a warning. This applies to dashboard values and account-list totals.
 
@@ -421,7 +422,8 @@ The initial TUI shell proves the app boots, connects to DB, and shows dashboard/
 - Global keybinds: `ctrl-c` quit, `ctrl-z` undo, `esc` back/exit, `?` help.
 - Number hotkeys work only in menu screens, not in forms.
 - All rendering uses in-house string formatting, no lipgloss.
-- `/reports/`, `/budgets/`, `/transactions/`, and `/owed/` are not real workflows in `001`. They may be hidden or shown as placeholders, but must not pretend to be implemented.
+- Routes are displayed with trailing slashes for all app screens, for example `/accounts/list/` and `/settings/`.
+- `/transactions/`, `/budgets/`, `/owed/`, and `/reports/` are visible top-level structure in `001`, but not real workflows. Menu labels must include `(TODO)`, and selecting them routes only to a stub screen that shows `(TODO)`.
 
 Visible current-session history, when present, is shown above the main screen as `history (ctrl-z to undo)`. Rows render as `YYYY-MM-DD HH:MM <verb> <path>`, oldest at the top and newest at the bottom.
 
@@ -447,8 +449,12 @@ ppl owe you : HKD 0.00
 /
 
 > 1) accounts
-  2) settings
-  3) backup
+  2) transactions (TODO)
+  3) budgets (TODO)
+  4) owed (TODO)
+  5) reports (TODO)
+  6) settings
+  7) backup
 
 ---
 up/down : navigate
@@ -457,7 +463,7 @@ esc     : exit app
 ?       : help
 ```
 
-If future menu placeholders are shown, their detail pages should clearly say `coming later`.
+Deferred domain placeholder detail pages should clearly show `(TODO)`, so unfinished routes are easy to grep and cannot be mistaken for implemented workflows.
 
 ### Keybind Behavior
 
@@ -504,7 +510,7 @@ Account behavior:
 - Hidden accounts preserve balances, history, and future report relevance.
 - Account deletion is deferred for v1.
 
-Transaction actions/routes are not implemented in `001`. If account detail shows a transaction action or route, it must route only to an explicit `coming later` screen and must not expose fake transaction workflows.
+Transaction actions/routes are not implemented in `001`. If account detail shows a transaction action or route, the label must include `(TODO)`, and it must route only to an explicit `(TODO)` screen without exposing fake transaction workflows.
 
 ### Balances Requirements
 
@@ -549,7 +555,8 @@ After a successful mutation, redirect as follows:
 - `/settings/` shows active config path and app currency. Read-only. Editing happens via the config file directly.
 - `/backup/` shows database path, last backup path if known, and a `create backup` action.
 - Backup creates `db.YYYY-MM-DD-HHMM.sqlite` beside the active DB.
-- Backup copies the active SQLite database file and preserves database contents.
+- WAL mode remains disabled for v1, keeping backups single-file.
+- Backup creates a consistent snapshot of the active SQLite database and preserves database contents. It must not race an active write; use SQLite's backup API or take an equivalent read lock/transaction before copying.
 - After backup succeeds, render the latest created backup path.
 - Backup screen shows restore guidance: close stuf, replace `db.sqlite` with the backup file renamed to `db.sqlite`, then reopen stuf.
 - Backup does not write visible undo history or persisted effective history.

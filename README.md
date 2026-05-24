@@ -206,7 +206,7 @@ account flow decisions
 - account balance means the latest balance entry
 - if no balance has been added, balance is shown as 0
 - creating an account does not ask for an opening balance
-- after creating an account, redirect to /accounts/list
+- after creating an account, redirect to /accounts/list/
 - mutation history is enough success feedback
 - esc means back everywhere except /, where it opens exit confirmation
 - esc from a create form discards the draft immediately
@@ -705,7 +705,7 @@ esc         : back
 ?           : help
 ```
 
-- after confirm success, goes to /accounts/list automatically, serves a few purposes
+- after confirm success, goes to /accounts/list/ automatically, serves a few purposes
     - quickly confirms that the account has been created successfully
     - user tends to want to do something with that account after it has been created
 - accounts list should be filterable
@@ -763,7 +763,7 @@ total      : HKD  6,200.00
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
-/accounts/list
+/accounts/list/
 
 > filter : (type anything...)
 
@@ -1216,7 +1216,7 @@ esc       : back
 - "no results" mockup
 
 ```
-/accounts/list
+/accounts/list/
 
 > filter : amex
 
@@ -3575,7 +3575,8 @@ esc : back
 - active database file is db.sqlite in current working directory for v1
 - backup creates timestamped copy of db.sqlite
 - backup filename format is db.YYYY-MM-DD-HHMM.sqlite
-- no WAL for v1, keeping copy-based backup simple
+- no WAL for v1, keeping backups single-file
+- backup creates a consistent snapshot and must not race an active write
 - restore is manual for v1
 - to restore, close stuf and replace db.sqlite with backup file renamed to db.sqlite
 - backup does not write undo history
