@@ -23,14 +23,7 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 	if a.Field == 2 {
 		return a.selectFieldKey(s, "on-budget", []string{"true", "false"}, fields)
 	}
-	if s == "enter" {
-		if a.Field >= len(fields) {
-			return a, true
-		}
-		a.Field++
-		return a, false
-	}
-	return a.formKey(s, fields), false
+	return a.submitFormKey(s, fields)
 }
 
 func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
@@ -146,6 +139,18 @@ func (a App) currencyOptions() []string {
 		return []string{a.Config.Config.Currency}
 	}
 	return out
+}
+
+func (a App) submitFormKey(s string, fields []string) (App, bool) {
+	if s == "enter" {
+		if a.Field >= len(fields) {
+			return a, true
+		}
+		a.clearCurrentTextCursor(fields)
+		a.Field++
+		return a, false
+	}
+	return a.formKey(s, fields), false
 }
 
 func (a App) formKey(s string, fields []string) App {

@@ -904,6 +904,172 @@ func TestBalanceDateInputSanitizesOnTypingAndSet(t *testing.T) {
 	}
 }
 
+func TestBalanceAddEnterAdvancesFields(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
+	app.Field = 0
+
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/add/" {
+		t.Fatalf("enter on date should not submit, got path %s", app.Path)
+	}
+	if app.Field != 1 {
+		t.Fatalf("enter on date should move to balance field, field=%d", app.Field)
+	}
+	if app.Form["date"] != "2026-05-24" {
+		t.Fatalf("enter on date should not clear form, date=%q", app.Form["date"])
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/add/" {
+		t.Fatalf("enter on balance should not submit, got path %s", app.Path)
+	}
+	if app.Field != 2 {
+		t.Fatalf("enter on balance should move to notes field, field=%d", app.Field)
+	}
+	if app.Form["balance"] != "100.00" {
+		t.Fatalf("enter on balance should not clear form, balance=%q", app.Form["balance"])
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/add/" {
+		t.Fatalf("enter on notes should not submit, got path %s", app.Path)
+	}
+	if app.Field != 3 {
+		t.Fatalf("enter on notes should move to confirm, field=%d", app.Field)
+	}
+	if app.Form["notes"] != "test note" {
+		t.Fatalf("enter on notes should not clear form, notes=%q", app.Form["notes"])
+	}
+	if view := app.View(); !strings.Contains(view, "> [confirm]") {
+		t.Fatalf("confirm row should be focused:\n%s", view)
+	}
+}
+
+func TestBalanceAddEnterOnConfirmSubmits(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
+	app.Field = 3
+
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("enter on confirm should submit and return to balances list, got %s", app.Path)
+	}
+	if app.Form["balance"] != "" {
+		t.Fatalf("form should clear after submit, balance=%q", app.Form["balance"])
+	}
+	acct, err := app.Svc.Accounts.GetByName(ctx, "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Amount.Format("HKD"); got != "HKD 100.00" {
+		t.Fatalf("saved balance = %q", got)
+	}
+	if saved.Notes != "test note" {
+		t.Fatalf("saved notes = %q", saved.Notes)
+	}
+}
+
+func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-21/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-21/edit/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-21", "balance": "60000.00", "notes": "updated"}
+	app.Field = 1
+
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/2026-05-21/edit/" {
+		t.Fatalf("enter on balance should not submit edit, got path %s", app.Path)
+	}
+	if app.Field != 2 {
+		t.Fatalf("enter on balance should move to notes, field=%d", app.Field)
+	}
+
+	app.Field = 3
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("enter on confirm should submit edit and return to balances list, got %s", app.Path)
+	}
+	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-21")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Amount.Format("HKD"); got != "HKD 60,000.00" {
+		t.Fatalf("updated balance = %q", got)
+	}
+	if saved.Notes != "updated" {
+		t.Fatalf("updated notes = %q", saved.Notes)
+	}
+}
+
+func TestBalanceFormHelpEnterSemantics(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/cash/balances/add/"
+	app.Form = map[string]string{"date": "2026-05-24"}
+	app.Field = 0
+	view := app.View()
+	if !strings.Contains(view, "enter   : next field") {
+		t.Fatalf("date field help should say enter advances:\n%s", view)
+	}
+	app.Field = 2
+	view = app.View()
+	if !strings.Contains(view, "enter   : next field") || strings.Contains(view, "?       : help") {
+		t.Fatalf("notes field help should say enter advances and hide ?:\n%s", view)
+	}
+	app.Field = 3
+	view = app.View()
+	if !strings.Contains(view, "enter     : confirm") {
+		t.Fatalf("confirm row help should say enter submits:\n%s", view)
+	}
+}
+
 func TestBalanceAmountInputFormatting(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -928,8 +1094,10 @@ func TestBalanceAmountInputFormatting(t *testing.T) {
 	if got := app.Form["balance"]; got != "9999.00" {
 		t.Fatalf("set balance should sanitize, got %q", got)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	app = m.(App)
+	for i := 0; i < 3; i++ {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		app = m.(App)
+	}
 	if app.Form["balance"] != "" {
 		t.Fatalf("form should clear after submit, balance=%q", app.Form["balance"])
 	}
@@ -1226,8 +1394,10 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	app = m.(App)
+	for i := 0; i < 3; i++ {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		app = m.(App)
+	}
 	if app.Path != "/accounts/cash/balances/" || !strings.Contains(app.View(), "HKD 123.45") {
 		t.Fatalf("balance flow failed path=%s view:\n%s", app.Path, app.View())
 	}

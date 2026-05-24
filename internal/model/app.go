@@ -346,10 +346,13 @@ func (a App) helpLines(s screen) []string {
 }
 
 func (a App) formHelp(fields []string) []string {
-	if a.Field < len(fields) && fields[a.Field] == "notes" {
-		return []string{"tab     : next field", "enter   : confirm", "esc     : discard"}
+	if a.Field >= len(fields) {
+		return []string{"shift-tab : previous field", "enter     : confirm", "esc       : discard", "?         : help"}
 	}
-	return []string{"tab     : next field", "enter   : confirm", "esc     : discard", "?       : help"}
+	if a.Field < len(fields) && fields[a.Field] == "notes" {
+		return []string{"tab     : next field", "enter   : next field", "esc     : discard"}
+	}
+	return []string{"tab     : next field", "enter   : next field", "esc     : discard", "?       : help"}
 }
 
 func listHelp() []string {

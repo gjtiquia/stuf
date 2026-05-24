@@ -11,20 +11,22 @@ func (a App) balanceAddKey(s, name string) App {
 		a.Error = err.Error()
 		return a
 	}
-	if s == "enter" {
-		_, entry, err := a.Svc.Balances.Add(a.ctx, acct.ID, a.Form["date"], a.Form["balance"], a.Form["notes"])
-		if err != nil {
-			a.Error = err.Error()
-			return a
-		}
-		a.History = append(a.History, entry)
-		a.Form = map[string]string{}
-		a.Field = 0
-		a.Error = ""
-		a.Nav.Pop()
-		return a.syncFromNav()
+	fields := []string{"date", "balance", "notes"}
+	next, submit := a.submitFormKey(s, fields)
+	if !submit {
+		return next
 	}
-	return a.formKey(s, []string{"date", "balance", "notes"})
+	_, entry, err := next.Svc.Balances.Add(next.ctx, acct.ID, next.Form["date"], next.Form["balance"], next.Form["notes"])
+	if err != nil {
+		next.Error = err.Error()
+		return next
+	}
+	next.History = append(next.History, entry)
+	next.Form = map[string]string{}
+	next.Field = 0
+	next.Error = ""
+	next.Nav.Pop()
+	return next.syncFromNav()
 }
 
 func (a App) balanceListKey(s, name string) App {
@@ -97,21 +99,23 @@ func (a App) balanceEditKey(s, name, date string) App {
 		a.Error = err.Error()
 		return a
 	}
-	if s == "enter" {
-		_, entry, err := a.Svc.Balances.Update(a.ctx, bal.ID, a.Form["date"], a.Form["balance"], a.Form["notes"])
-		if err != nil {
-			a.Error = err.Error()
-			return a
-		}
-		a.History = append(a.History, entry)
-		a.Form = map[string]string{}
-		a.Field = 0
-		a.Error = ""
-		a.Nav.Pop()
-		a.Nav.Pop()
-		return a.syncFromNav()
+	fields := []string{"date", "balance", "notes"}
+	next, submit := a.submitFormKey(s, fields)
+	if !submit {
+		return next
 	}
-	return a.formKey(s, []string{"date", "balance", "notes"})
+	_, entry, err := next.Svc.Balances.Update(next.ctx, bal.ID, next.Form["date"], next.Form["balance"], next.Form["notes"])
+	if err != nil {
+		next.Error = err.Error()
+		return next
+	}
+	next.History = append(next.History, entry)
+	next.Form = map[string]string{}
+	next.Field = 0
+	next.Error = ""
+	next.Nav.Pop()
+	next.Nav.Pop()
+	return next.syncFromNav()
 }
 
 func (a App) balanceSummary(name string) string {
