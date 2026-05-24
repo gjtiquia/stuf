@@ -64,7 +64,9 @@ func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
 		a.setCurrencySelectCursor(cursor)
 		a.setCurrencySelectPage(page)
 	case "backspace":
-		a.trimCurrencyFilter()
+		input := newFilteredListInput(a.currencyFilter(), sanitizeCurrencyCode)
+		updated, _ := input.handleKey("backspace")
+		a.setCurrencyFilter(updated.value())
 		a.resetCurrencySelectCursor()
 	case "tab":
 		a.clearCurrencySelectState()
@@ -85,8 +87,9 @@ func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
 			a.clearCurrencySelectState()
 			return a, false
 		}
-		if isTextInputKey(s) {
-			a.appendCurrencyFilter(sanitizeCurrencyCode(s))
+		input := newFilteredListInput(a.currencyFilter(), sanitizeCurrencyCode)
+		if updated, handled := input.handleKey(s); handled {
+			a.setCurrencyFilter(updated.value())
 			a.resetCurrencySelectCursor()
 		}
 	}

@@ -281,6 +281,61 @@ func TestAccountListNoResultsShape(t *testing.T) {
 	}
 }
 
+func TestAccountListFilterAcceptsJKKeys(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "bank-jk", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "savings", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/list/"
+	app.Menu = 2
+
+	for _, r := range "jk" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> filter : jk") || strings.Contains(view, "> filter : jk|") {
+		t.Fatalf("typed j/k should append to filter:\n%s", view)
+	}
+	if strings.Contains(view, "> cash") || strings.Contains(view, "> savings") {
+		t.Fatalf("j/k should filter, not navigate:\n%s", view)
+	}
+	if !strings.Contains(view, "> bank-jk") {
+		t.Fatalf("filter jk should match bank-jk:\n%s", view)
+	}
+}
+
+func TestAccountListArrowKeysStillNavigate(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "savings", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/list/"
+	app.Menu = 0
+
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> savings") || strings.Contains(view, "> cash") {
+		t.Fatalf("down should move account list selection:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyUp})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> cash") || strings.Contains(view, "> savings") {
+		t.Fatalf("up should move account list selection back:\n%s", view)
+	}
+}
+
 func TestAccountListFilterTypingAndFilteredNavigation(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()

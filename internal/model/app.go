@@ -382,7 +382,7 @@ func (a App) formHelp(fields []string) []string {
 }
 
 func listHelp() []string {
-	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"type          : filter", "up/down       : navigate", "tab/shift-tab : navigate", "backspace     : edit filter", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {

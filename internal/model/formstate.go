@@ -147,17 +147,7 @@ func clampCurrencyPage(page, cursor, count int) int {
 }
 
 func filterOptions(options []string, filter string) []string {
-	filter = sanitizeCurrencyCode(filter)
-	if filter == "" {
-		return options
-	}
-	var out []string
-	for _, option := range options {
-		if strings.Contains(option, filter) {
-			out = append(out, option)
-		}
-	}
-	return out
+	return filterStrings(options, filter, sanitizeCurrencyCode)
 }
 
 func sanitizeCurrencyCode(input string) string {

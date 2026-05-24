@@ -66,7 +66,7 @@ func (a App) accountCreateKey(s string) App {
 
 func (a App) accountListKey(s string, includeHidden bool) App {
 	switch s {
-	case "up", "k", "shift+tab":
+	case "up", "shift+tab":
 		rows, err := a.accountListRows(includeHidden)
 		if err != nil {
 			a.Error = err.Error()
@@ -76,7 +76,7 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
 		}
 		return a
-	case "down", "j", "tab":
+	case "down", "tab":
 		rows, err := a.accountListRows(includeHidden)
 		if err != nil {
 			a.Error = err.Error()
@@ -87,7 +87,9 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		}
 		return a
 	case "backspace":
-		a.trimListFilter()
+		input := newFilteredListInput(a.listFilter(), nil)
+		updated, _ := input.handleKey("backspace")
+		a.setListFilter(updated.value())
 		a = a.navSetMenu(clampListCursor(a.Menu, a.accountListRowCount(includeHidden)))
 		return a
 	case "enter":
@@ -102,8 +104,9 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
 		return a.navPush(accountPath(rows[a.Menu].Name), 0)
 	default:
-		if isTextInputKey(s) {
-			a.setListFilter(a.listFilter() + s)
+		input := newFilteredListInput(a.listFilter(), nil)
+		if updated, handled := input.handleKey(s); handled {
+			a.setListFilter(updated.value())
 			a = a.navSetMenu(0)
 		}
 		return a
