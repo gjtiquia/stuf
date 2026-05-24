@@ -150,9 +150,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a App) menuKey(s string, routes []string) App {
 	switch s {
-	case "down", "j":
+	case "down", "j", "tab":
 		a = a.navSetMenu((a.Menu + 1) % len(routes))
-	case "up", "k":
+	case "up", "k", "shift+tab":
 		a = a.navSetMenu((a.Menu - 1 + len(routes)) % len(routes))
 	case "enter":
 		a = a.navSetMenu(a.Menu)
@@ -217,7 +217,7 @@ func (a App) accountCreateKey(s string) App {
 
 func (a App) accountListKey(s string, includeHidden bool) App {
 	switch s {
-	case "up":
+	case "up", "k", "shift+tab":
 		rows, err := a.accountListRows(includeHidden)
 		if err != nil {
 			a.Error = err.Error()
@@ -227,7 +227,7 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
 		}
 		return a
-	case "down":
+	case "down", "j", "tab":
 		rows, err := a.accountListRows(includeHidden)
 		if err != nil {
 			a.Error = err.Error()
@@ -436,10 +436,10 @@ func (a App) balanceDetailKey(s, name, date string) App {
 
 func (a *App) actionIndex(s string, count int) int {
 	switch s {
-	case "down", "j":
+	case "down", "j", "tab":
 		*a = a.navSetMenu((a.Menu + 1) % count)
 		return -1
-	case "up", "k":
+	case "up", "k", "shift+tab":
 		*a = a.navSetMenu((a.Menu - 1 + count) % count)
 		return -1
 	case "enter":
@@ -814,7 +814,7 @@ func (a App) helpLines(s screen) []string {
 		return s.Help
 	}
 	if len(s.Actions) > 0 {
-		return []string{"up/down : navigate", "enter   : confirm", "esc     : back", "?       : help", "ctrl-z  : undo"}
+		return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
 	}
 	return []string{"esc     : back", "?       : help", "ctrl-z  : undo"}
 }
@@ -827,7 +827,7 @@ func (a App) formHelp(fields []string) []string {
 }
 
 func listHelp() []string {
-	return []string{"up/down : navigate", "enter   : confirm", "esc     : back", "?       : help", "ctrl-z  : undo"}
+	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {

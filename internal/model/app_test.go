@@ -1217,3 +1217,38 @@ func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
 		t.Fatalf("expected list selected after backing out of post-create list:\n%s", view)
 	}
 }
+
+func TestTabNavigatesMenus(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> 2) transactions (TODO)") || strings.Contains(view, "> 1) accounts") {
+		t.Fatalf("tab should move home menu cursor down:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> 1) accounts") || strings.Contains(view, "> 2) transactions (TODO)") {
+		t.Fatalf("shift-tab should move home menu cursor up:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "> 2) list") || strings.Contains(view, "> 1) overview") {
+		t.Fatalf("tab should move accounts menu cursor down:\n%s", view)
+	}
+}
+
+func TestTabDoesNotNavigateCurrencySelectOptions(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Field = 1
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	if app.Field != 2 {
+		t.Fatalf("tab on currency select should move to next form field, got field %d", app.Field)
+	}
+	if view := app.View(); !strings.Contains(view, "> 3) on-budget") {
+		t.Fatalf("expected on-budget field focused after tab:\n%s", view)
+	}
+}
