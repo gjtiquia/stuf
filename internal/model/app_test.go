@@ -268,6 +268,23 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	}
 }
 
+func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	view := app.View()
+	assertOrdered(t, view, "> 1) name", "\n\n  2) currency")
+	assertOrdered(t, view, "  2) currency", "\n\n  3) on-budget")
+	assertOrdered(t, view, "  4) notes", "\n\n  [confirm]")
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	view = app.View()
+	assertOrdered(t, view, "     > HKD", "\n\n  3) on-budget")
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
+	app = m.(App)
+	view = app.View()
+	assertOrdered(t, view, "     > true", "\n       false\n\n  4) notes")
+}
+
 func TestAccountEditSelectToggleAndLockedCurrencyOptions(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()

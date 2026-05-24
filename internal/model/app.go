@@ -873,6 +873,9 @@ func (a App) formView(fields []string, locked map[string]string) string {
 func (a App) formViewWithOptions(fields []string, locked map[string]string, options map[string][]string) string {
 	var lines []string
 	for i, field := range fields {
+		if i > 0 {
+			lines = append(lines, "")
+		}
 		prefix := "  "
 		if i == a.Field {
 			prefix = "> "
