@@ -500,6 +500,10 @@ func (a App) screen() screen {
 
 func (a App) render(s screen) string {
 	var b strings.Builder
+
+	// empty space after goose migrations running
+	b.WriteString("\n")
+
 	if len(a.History) > 0 {
 		b.WriteString("history (ctrl-z to undo)\n")
 		for _, h := range a.History {
