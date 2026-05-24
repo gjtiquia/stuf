@@ -144,15 +144,17 @@ session action history / undo support
 - also super clear what Ctrl-Z does, it really just undoes the previous action
 - visible session history behaves like an undo stack
 - visible session history only contains undoable mutations from the current session
-- persisted history behaves like an audit/recovery log
-- undo stack and audit log can share the same action/mutation schema, but should not behave the same in the UI
+- persisted history behaves like effective mutation history: a single-branch recovery log for the current database state
+- current-session undo history and persisted effective history can share the same action/mutation schema, but should not behave the same in the UI
 - this also means this needs to be a first class citizen, baked deep into the architecture
 - literally any mutation, needs a way to undo, and this needs to be backed by compile time checking of interface, and also sufficient unit testing coverage to ensure correctness
 - what this unlocks is efficiency gains. not afraid to do things fast because, u can easily edit or undo. 
 - keeps things "simple" as well, we can skip confirmation pages for a lot of otherwise seemingly destructive actions
+- persisted history is not an audit log
+- it describes mutations currently in effect, not every action ever attempted
 - on undo, the corresponding history row is silently deleted, not marked or appended to
 - this is intentional: history must reflect what is actually in effect, not what was ever done
-- this keeps history accurate and avoids confusing audit trails
+- this keeps history aligned to the current effective branch and avoids confusing stale trails
 - future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
 
 backups
@@ -722,15 +724,15 @@ esc         : back
 - after undo succeeds, remove that row from visible history
 - undo does not add a visible history row
 - visible history is cleared when the app exits
-- persisted history should still be stored in db, so that nothing is ever irrecoverable
-- persisted history behaves like an audit/recovery log
+- persisted history should still be stored in db, so effective mutations can be inspected or reconstructed by future recovery tooling
+- persisted history behaves like effective mutation history: a single-branch recovery log for the current database state
 - persisted history survives app restarts
 - persisted history stores old/new data for recovery, but v1 does not support ctrl-z for previous-session mutations
-- undo stack and audit log can use the same action/mutation schema, but should not behave the same in the UI
+- current-session undo history and persisted effective history can use the same action/mutation schema, but should not behave the same in the UI
 - since history is stored in db, the db schema can also be much simpler, no need for each table to support soft deletes, as all deletes are soft by default, assuming all actions are undo-able
 - after successful undo, return to / and re-render, just to keep things simple for now and prevent any rendering bugs
 - the language we go for {date} {time} {verb} {path}, we can update further in the future
-- history db... should be sufficient to a point such that, even if all the tables are deleted, it can be recoverable via the history db
+- history db should store enough old/new JSON data to deterministically reconstruct or inspect effective mutations when recovery tooling exists
 - to keep things simple... store json data, like the create -> old is null, new has json, update -> old has json, new has json, represents the diff, delete -> old has json, new is null
 - ctrl-z example
     - before ctrl-z

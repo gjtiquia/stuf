@@ -10,7 +10,7 @@ Build the foundation for the stuf TUI finance tool. This plan covers project sca
 
 - **Store user input, compute everything else** — if it can be derived at runtime, don't persist it
 - **Balances anchor truth** — transactions explain movement but never update balances
-- **History is effective mutation history** — undo is handled in-memory; on undo, the corresponding history row is silently deleted to keep persisted history accurate to what is currently in effect. This is an intentional decision: history must reflect effective mutations, not every mutation ever attempted. No undo entries are appended. Future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
+- **History is effective mutation history, not an audit log** — persisted history is a single-branch recovery log for the current database state. Undo is handled in-memory; on undo, the corresponding history row is silently deleted to keep persisted history accurate to what is currently in effect. This is intentional: history must reflect effective mutations, not every mutation ever attempted. No undo entries are appended. Future undo-via-history is still possible because the JSON blob contains enough info to reconstruct reversals
 - **No premature caching** — budget balances, owed remaining, available, expense explanation are all computed at query time
 - **Dates as TEXT** — YYYY-MM-DD and YYYY-MM stored as text, validated Go-side
 - **No lipgloss** — all rendering is in-house using plain string formatting. Bubble Tea is the framework; we build the view layer ourselves
@@ -346,7 +346,7 @@ Remaining = amount - SUM(settlements converted to owed item currency). Computed 
 | old_data | TEXT | | JSON, null for creates |
 | new_data | TEXT | | JSON, null for deletes |
 
-Persisted effective mutation history. On undo during a session: reverse the DB mutation, then **silently delete** the corresponding history row. This is intentional — persisted history must reflect mutations currently in effect, not every mutation ever attempted. **INDEX(timestamp)**.
+Persisted effective mutation history, not an audit log. It is a single-branch recovery log for the current database state. On undo during a session: reverse the DB mutation, then **silently delete** the corresponding history row. No undo entry is appended. This is intentional — persisted history must reflect mutations currently in effect, not every mutation ever attempted. **INDEX(timestamp)**.
 
 History action verbs: `create` for new containers (account, budget, party, tag, category), `add` for new entries (balance, allocation, transaction, owed item, settlement), `edit` for modifications, `delete` for deletions. Matches user-facing history language.
 
