@@ -28,6 +28,7 @@ func testApp(t *testing.T) (App, *repo.Store) {
 	return New(ctx, Services{
 		Accounts:  service.AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, History: h, AppCurrency: "HKD"},
 		Balances:  service.BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h},
+		Currency:  service.CurrencyService{Currencies: s.Cur},
 		Dashboard: service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		History:   h,
 		Backup: func(context.Context) (string, error) {
@@ -129,38 +130,8 @@ func TestAccountsListSummaryNavigation(t *testing.T) {
 
 func TestAccountsListSummaryTotals(t *testing.T) {
 	app, store := testApp(t)
-	ctx := context.Background()
-	setCurrencyRate(t, store, "HKD", 1, 0)
-	setCurrencyRate(t, store, "USD", 10, 0)
-	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	usd, _, err := app.Svc.Accounts.Create(ctx, "usd-savings", "USD", true, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	loan, _, err := app.Svc.Accounts.Create(ctx, "student-loan", "HKD", false, "negative until fully paid")
-	if err != nil {
-		t.Fatal(err)
-	}
-	hidden, _, err := app.Svc.Accounts.Create(ctx, "old-account", "HKD", true, "closed")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Accounts.SetHidden(ctx, hidden.ID, true); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-21", "100.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, usd.ID, "2026-05-21", "50.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, loan.ID, "2026-05-21", "-25.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	app.Path = "/accounts/list/"
+	seedStandardAccounts(t, app, store)
+	app.Path = routeAccountList
 	view := app.View()
 	for _, want := range []string{
 		"total       : HKD 575.00",
@@ -320,31 +291,8 @@ func notesColumnIndex(line string) int {
 
 func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 	app, store := testApp(t)
-	ctx := context.Background()
-	setCurrencyRate(t, store, "HKD", 1, 0)
-	setCurrencyRate(t, store, "USD", 10, 0)
-	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "wallet")
-	if err != nil {
-		t.Fatal(err)
-	}
-	usd, _, err := app.Svc.Accounts.Create(ctx, "usd-savings", "USD", true, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	loan, _, err := app.Svc.Accounts.Create(ctx, "student-loan", "HKD", false, "negative until fully paid")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-21", "100.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, usd.ID, "2026-05-21", "50.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := app.Svc.Balances.Add(ctx, loan.ID, "2026-05-21", "-25.00", ""); err != nil {
-		t.Fatal(err)
-	}
-	app.Path = "/accounts/list/"
+	seedStandardAccounts(t, app, store)
+	app.Path = routeAccountList
 	view := app.View()
 	for _, want := range []string{
 		"| HKD 600.00",
@@ -682,31 +630,6 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 }
 
-func assertOrdered(t *testing.T, body string, earlier string, later string) {
-	t.Helper()
-	i := strings.Index(body, earlier)
-	j := strings.Index(body, later)
-	if i == -1 || j == -1 || i >= j {
-		t.Fatalf("expected %q before %q in:\n%s", earlier, later, body)
-	}
-}
-
-func setCurrencyRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
-	t.Helper()
-	ctx := context.Background()
-	now := store.Clock().UTC().Format(time.RFC3339)
-	var id int64
-	if err := store.DB.QueryRowContext(ctx, "SELECT id FROM currencies WHERE code=?", code).Scan(&id); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.DB.ExecContext(ctx, `INSERT INTO currency_rates(currency_id, rate_to_usd_amount, rate_to_usd_scale, updated_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(currency_id) DO UPDATE SET rate_to_usd_amount=excluded.rate_to_usd_amount, rate_to_usd_scale=excluded.rate_to_usd_scale, updated_at=excluded.updated_at`,
-		id, amount, scale, now); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -863,24 +786,6 @@ func TestSlugCaretResetsAfterSanitization(t *testing.T) {
 	}
 	if view := app.View(); !strings.Contains(view, "name     : cash-acc-vip-ount|") {
 		t.Fatalf("sanitized slug cursor should reset to end:\n%s", view)
-	}
-}
-
-func TestSanitizeSlug(t *testing.T) {
-	tests := map[string]string{
-		"HSBC One":           "hsbc-one",
-		"foo  bar":           "foo-bar",
-		"foo---bar":          "foo-bar",
-		"__Foo!! Bar//Baz🙂":  "foo-barbaz",
-		"  ---Leading Space": "leading-space",
-		"already-good-123":   "already-good-123",
-		"trailing space ":    "trailing-space-",
-		"under_score":        "underscore",
-	}
-	for input, want := range tests {
-		if got := sanitizeSlug(input); got != want {
-			t.Fatalf("sanitizeSlug(%q) = %q, want %q", input, got, want)
-		}
 	}
 }
 

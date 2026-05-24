@@ -113,6 +113,10 @@ func (s BalanceService) List(ctx context.Context, accountID int64) ([]repo.Balan
 	return s.Balances.ListByAccount(ctx, accountID)
 }
 
+func (s BalanceService) GetByAccountDate(ctx context.Context, accountID int64, date string) (repo.Balance, error) {
+	return s.Balances.GetByAccountDate(ctx, accountID, date)
+}
+
 func parseBalanceAmount(date, input string, scale int) (money.Money, error) {
 	if !datePattern.MatchString(date) {
 		return money.Money{}, errors.New("date must be YYYY-MM-DD")

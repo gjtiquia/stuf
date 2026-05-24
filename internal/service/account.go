@@ -122,4 +122,8 @@ func (s AccountService) CurrentBalance(ctx context.Context, accountID int64) (re
 	return s.Balances.LatestByAccount(ctx, accountID)
 }
 
+func (s AccountService) HasBalances(ctx context.Context, accountID int64) (bool, error) {
+	return s.Accounts.HasBalances(ctx, accountID)
+}
+
 func AccountPath(a repo.Account) string { return fmt.Sprintf("/accounts/%s", a.Name) }

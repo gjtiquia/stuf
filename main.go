@@ -53,6 +53,7 @@ func main() {
 	app := model.New(ctx, model.Services{
 		Accounts:  accounts,
 		Balances:  balances,
+		Currency:  curSvc,
 		Dashboard: dashboard,
 		History:   history,
 		Backup: func(ctx context.Context) (string, error) {

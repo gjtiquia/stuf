@@ -1,0 +1,47 @@
+package model
+
+import "testing"
+
+func TestRouteBuildersAndParsers(t *testing.T) {
+	name := "cash"
+	date := "2026-05-21"
+
+	path := accountPath(name)
+	if got, ok := accountDetailName(path); !ok || got != name {
+		t.Fatalf("accountDetailName(%q) = %q, %v", path, got, ok)
+	}
+
+	editPath := accountEditPathFor(name)
+	if got, ok := accountEditName(editPath); !ok || got != name {
+		t.Fatalf("accountEditName(%q) = %q, %v", editPath, got, ok)
+	}
+	if !accountEditPath(editPath) {
+		t.Fatalf("accountEditPath(%q) = false", editPath)
+	}
+
+	balancesPath := accountBalancesPath(name)
+	if got, ok := balancesName(balancesPath); !ok || got != name {
+		t.Fatalf("balancesName(%q) = %q, %v", balancesPath, got, ok)
+	}
+
+	addPath := accountBalanceAddPath(name)
+	if got, ok := balanceAddName(addPath); !ok || got != name {
+		t.Fatalf("balanceAddName(%q) = %q, %v", addPath, got, ok)
+	}
+	if !balanceAddPath(addPath) {
+		t.Fatalf("balanceAddPath(%q) = false", addPath)
+	}
+
+	detailPath := accountBalancePath(name, date)
+	if gotName, gotDate, ok := balanceDetailName(detailPath); !ok || gotName != name || gotDate != date {
+		t.Fatalf("balanceDetailName(%q) = %q %q, %v", detailPath, gotName, gotDate, ok)
+	}
+
+	editBalancePath := accountBalanceEditPath(name, date)
+	if gotName, gotDate, ok := balanceEditName(editBalancePath); !ok || gotName != name || gotDate != date {
+		t.Fatalf("balanceEditName(%q) = %q %q, %v", editBalancePath, gotName, gotDate, ok)
+	}
+	if !balanceEditPath(editBalancePath) {
+		t.Fatalf("balanceEditPath(%q) = false", editBalancePath)
+	}
+}
