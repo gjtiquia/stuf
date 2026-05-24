@@ -385,7 +385,7 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 		return a, false
 	}
 	if a.Field == 1 {
-		return a.selectFieldKey(s, "currency", a.currencyOptions(), fields)
+		return a.currencyFieldKey(s, fields)
 	}
 	if a.Field == 2 {
 		return a.selectFieldKey(s, "on-budget", []string{"true", "false"}, fields)
@@ -398,6 +398,66 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 		return a, false
 	}
 	return a.formKey(s, fields), false
+}
+
+func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
+	const filterField = "_currency_filter"
+	options := a.currencyOptions()
+	if a.Form["currency"] == "" {
+		a.Form["currency"] = a.Config.Config.Currency
+	}
+	filtered := filterOptions(options, a.Form[filterField])
+	selectFirstFiltered := func() {
+		filtered = filterOptions(options, a.Form[filterField])
+		if len(filtered) > 0 {
+			a.Form["currency"] = filtered[0]
+		}
+	}
+	switch s {
+	case "down":
+		if len(filtered) == 0 {
+			return a, false
+		}
+		idx := indexOf(filtered, a.Form["currency"])
+		if idx < 0 {
+			idx = 0
+		} else {
+			idx = (idx + 1) % len(filtered)
+		}
+		a.Form["currency"] = filtered[idx]
+	case "up":
+		if len(filtered) == 0 {
+			return a, false
+		}
+		idx := indexOf(filtered, a.Form["currency"])
+		if idx < 0 {
+			idx = 0
+		} else {
+			idx = (idx - 1 + len(filtered)) % len(filtered)
+		}
+		a.Form["currency"] = filtered[idx]
+	case "backspace":
+		a.Form[filterField] = trimLastRune(a.Form[filterField])
+		selectFirstFiltered()
+	case "tab", "enter":
+		delete(a.Form, filterField)
+		a.Field = min(a.Field+1, len(fields))
+	case "shift+tab":
+		delete(a.Form, filterField)
+		a.Field = max(a.Field-1, 0)
+	case "left", "right":
+	default:
+		if strings.HasPrefix(s, "set currency=") {
+			a.Form["currency"] = strings.TrimPrefix(s, "set currency=")
+			delete(a.Form, filterField)
+			return a, false
+		}
+		if isTextInputKey(s) {
+			a.Form[filterField] += s
+			selectFirstFiltered()
+		}
+	}
+	return a, false
 }
 
 func (a App) selectFieldKey(s, field string, options []string, fields []string) (App, bool) {
@@ -436,6 +496,10 @@ func (a App) currencyOptions() []string {
 	}
 	var out []string
 	for _, cur := range currencies {
+		if cur.Code == a.Config.Config.Currency {
+			out = append([]string{cur.Code}, out...)
+			continue
+		}
 		out = append(out, cur.Code)
 	}
 	if len(out) == 0 {
@@ -639,7 +703,7 @@ func formHelp() []string {
 
 func (a App) accountFormHelp() []string {
 	if a.Field == 1 {
-		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}
+		return []string{"type       : filter", "up/down    : move cursor", "left/right : next/prev page", "enter      : confirm", "tab        : navigate", "esc        : back", "?          : help"}
 	}
 	if a.Field == 2 {
 		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}
@@ -894,7 +958,20 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, placeholder(value, placeholderFor(field))))
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
-			for _, option := range options[field] {
+			fieldOptions := options[field]
+			filter := ""
+			if field == "currency" {
+				filter = a.Form["_currency_filter"]
+				fieldOptions = filterOptions(fieldOptions, filter)
+			}
+			lines = append(lines, "")
+			if filter != "" {
+				lines = append(lines, "       filter: "+filter)
+			}
+			if len(fieldOptions) == 0 {
+				lines = append(lines, "       (no matching currencies)")
+			}
+			for _, option := range fieldOptions {
 				optionPrefix := "       "
 				if option == selected {
 					optionPrefix = "     > "
@@ -952,11 +1029,33 @@ func normalizeFieldInput(field, current, input string) string {
 
 func isTextInputKey(input string) bool {
 	switch input {
-	case "", "left", "right", "up", "down", "enter", "esc", "tab", "shift+tab", "backspace", "ctrl+c", "ctrl+z":
+	case "", "left", "right", "up", "down", "enter", "esc", "tab", "shift+tab", "backspace", "ctrl+c", "ctrl+z", "?":
 		return false
 	default:
 		return true
 	}
+}
+
+func filterOptions(options []string, filter string) []string {
+	filter = strings.ToLower(strings.TrimSpace(filter))
+	if filter == "" {
+		return options
+	}
+	var out []string
+	for _, option := range options {
+		if strings.Contains(strings.ToLower(option), filter) {
+			out = append(out, option)
+		}
+	}
+	return out
+}
+
+func trimLastRune(s string) string {
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	return string(runes[:len(runes)-1])
 }
 
 func sanitizeSlug(input string) string {

@@ -228,7 +228,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "     > HKD", "USD"} {
+	for _, want := range []string{"> 2) currency", "     > HKD", "USD", "type       : filter", "left/right : next/prev page"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -278,11 +278,55 @@ func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
+	assertOrdered(t, view, "> 2) currency", "\n\n     > HKD")
 	assertOrdered(t, view, "     > HKD", "\n\n  3) on-budget")
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
+	assertOrdered(t, view, "> 3) on-budget", "\n\n     > true")
 	assertOrdered(t, view, "     > true", "\n       false\n\n  4) notes")
+}
+
+func TestCurrencySelectFiltersTypedInput(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Field = 1
+	for _, r := range "jp" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	view := app.View()
+	for _, want := range []string{"currency : JPY", "filter: jp", "     > JPY"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("currency filter missing %q:\n%s", want, view)
+		}
+	}
+	for _, unwanted := range []string{"       HKD", "       USD"} {
+		if strings.Contains(view, unwanted) {
+			t.Fatalf("currency filter should hide %q:\n%s", unwanted, view)
+		}
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "filter: j") || !strings.Contains(view, "JPY") {
+		t.Fatalf("currency backspace did not update filter:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
+	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "filter: jzz") || !strings.Contains(view, "(no matching currencies)") {
+		t.Fatalf("currency no-match state missing:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Field != 2 {
+		t.Fatalf("enter should confirm currency and move to on-budget, field=%d", app.Field)
+	}
+	if _, ok := app.Form["_currency_filter"]; ok {
+		t.Fatal("currency filter should clear after confirm")
+	}
+	if app.Form["currency"] != "JPY" {
+		t.Fatalf("no-match filter should not overwrite selected currency, got %q", app.Form["currency"])
+	}
 }
 
 func TestAccountEditSelectToggleAndLockedCurrencyOptions(t *testing.T) {
