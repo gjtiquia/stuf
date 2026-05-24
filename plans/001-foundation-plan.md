@@ -174,12 +174,9 @@ Future domain packages/files should be added by future plans when their workflow
 ### Migration Strategy
 
 - Use numbered goose migrations, starting with `00001_foundation.sql`.
-- On startup, verify `db.sqlite` exists or create it.
-- Verify the database is SQLite.
-- Verify it is a stuf database via `app_meta`.
-- Run pending migrations.
-- Validate required foundation schema.
-- Seed missing currency/rate data.
+- If `db.sqlite` does not exist, create it, run migrations, then validate and seed.
+- If `db.sqlite` exists, verify it is SQLite, verify it is a stuf database via `app_meta`, run pending migrations, then validate and seed.
+- Do not require `app_meta` before migrations on a freshly-created empty database.
 - Embed migrations and seed data into the binary via `embed`.
 
 ### SQLite Notes
@@ -283,7 +280,7 @@ Foundation action verbs:
 
 - `create` for accounts
 - `add` for balances
-- `edit` for account/balance modifications
+- `edit` for account/balance modifications, including account hide/show
 - `delete` for balance deletion
 
 `INDEX(timestamp)`.
@@ -313,6 +310,8 @@ history records effective account/balance mutations
 | Dashboard owed values | `0` until owed exists |
 
 Only values that depend on unimplemented domains should render as placeholders. Values derivable from accounts and balances must be real in `001`; this includes dashboard growth because it proves the balance-anchored premise.
+
+Dashboard growth belongs in the service layer, not model rendering, so the same nearest-boundary logic can later be reused by reports.
 
 Missing display conversion data shows the original currency amount and a clear warning instead of silently converting. Converted totals that depend on missing rates omit the affected converted amount and show a warning. This applies to dashboard values and account-list totals.
 
@@ -424,6 +423,7 @@ The initial TUI shell proves the app boots, connects to DB, and shows dashboard/
 - All rendering uses in-house string formatting, no lipgloss.
 - Routes are displayed with trailing slashes for all app screens, for example `/accounts/list/` and `/settings/`.
 - `/transactions/`, `/budgets/`, `/owed/`, and `/reports/` are visible top-level structure in `001`, but not real workflows. Menu labels must include `(TODO)`, and selecting them routes only to a stub screen that shows `(TODO)`.
+- README transaction and account-scoped transaction mockups are future intent. In `001`, transaction menu entries and routes must be visible only as `(TODO)` stubs and must not expose list/add/edit workflows.
 
 Visible current-session history, when present, is shown above the main screen as `history (ctrl-z to undo)`. Rows render as `YYYY-MM-DD HH:MM <verb> <path>`, oldest at the top and newest at the bottom.
 
@@ -510,7 +510,7 @@ Account behavior:
 - Hidden accounts preserve balances, history, and future report relevance.
 - Account deletion is deferred for v1.
 
-Transaction actions/routes are not implemented in `001`. If account detail shows a transaction action or route, the label must include `(TODO)`, and it must route only to an explicit `(TODO)` screen without exposing fake transaction workflows.
+Transaction actions/routes are not implemented in `001`. If account detail shows a transaction action or route, the label must include `transactions (TODO)`, and it must route only to an explicit `(TODO)` screen without exposing fake transaction workflows.
 
 ### Balances Requirements
 
@@ -557,6 +557,7 @@ After a successful mutation, redirect as follows:
 - Backup creates `db.YYYY-MM-DD-HHMM.sqlite` beside the active DB.
 - WAL mode remains disabled for v1, keeping backups single-file.
 - Backup creates a consistent snapshot of the active SQLite database and preserves database contents. It must not race an active write; use SQLite's backup API or take an equivalent read lock/transaction before copying.
+- Backup creation must use the shared DB/service path and must not run concurrently with a mutation. A simple app-level mutex or single-threaded command boundary is enough for `001`.
 - After backup succeeds, render the latest created backup path.
 - Backup screen shows restore guidance: close stuf, replace `db.sqlite` with the backup file renamed to `db.sqlite`, then reopen stuf.
 - Backup does not write visible undo history or persisted effective history.
