@@ -2566,6 +2566,8 @@ deferred transactions
 - for now, reports are derived from accounts, balances, and transactions only
 - as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
 - expect report screens to evolve as those data flows become clearer
+- dashboard/report growth uses shared nearest-boundary balance rules
+- values derived from accounts and balances should be real; only unimplemented domains render as placeholders
 - reports are read-only for v1
 - reports consume input data but do not mutate it
 - balances can be entered on any date
@@ -2869,12 +2871,17 @@ esc   : back
 ```
 
 monthly report boundary rules
-- start = latest balance on or before first day of period
-- end = latest balance on or before last day of period
-- if no balance exists before start, start = 0
-- if no balance exists before end, end = start
-- if zero balances exist, use 0 -> 0
-- if one usable balance exists, assume flat
+- monthly periods use shared boundaries, not separate end/start snapshots
+- a month start boundary is the first day of that month
+- a month end boundary is the first day of the next month
+- the end boundary of one month is the same boundary as the start boundary of the next month
+- each boundary resolves to the balance snapshot nearest to that boundary date
+- a snapshot after the boundary can be used if it is nearer than any snapshot before the boundary
+- if two snapshots are equally near, prefer the earlier snapshot
+- if an account has no balances at all, boundary value is 0
+- monthly growth = resolved end boundary value - resolved start boundary value
+- this avoids gaps: April end and May start both use the same resolved value for the May 1 boundary
+- example: if the nearest snapshot to 2026-05-01 is 2026-05-02, that snapshot is used for both April end and May start
 
 deferred reports
 - opening original transactions from report expense detail

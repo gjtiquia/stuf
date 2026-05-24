@@ -305,13 +305,30 @@ history records effective account/balance mutations
 | Value | Computation |
 |-------|-------------|
 | Account current balance | Latest balance entry for that account, or zero if none |
-| Account list total | Sum latest account balances, grouped by on-budget/off-budget |
+| Account list total | Sum latest account balances grouped by on-budget/off-budget, displayed in app currency where possible |
 | Dashboard total | Sum latest balances across visible accounts converted to app currency where possible |
 | Dashboard budgeted | `0` until budgets exist |
-| Dashboard growth | `0` placeholder until reports exist |
+| Dashboard growth | Current-month growth derived from visible account balances using shared nearest-boundary rules |
 | Dashboard owed values | `0` until owed exists |
 
-Missing display conversion data shows the original currency amount and a clear warning instead of silently converting. Converted totals that depend on missing rates omit the affected converted amount and show a warning.
+Only values that depend on unimplemented domains should render as placeholders. Values derivable from accounts and balances must be real in `001`.
+
+Missing display conversion data shows the original currency amount and a clear warning instead of silently converting. Converted totals that depend on missing rates omit the affected converted amount and show a warning. This applies to dashboard values and account-list totals.
+
+### Balance Boundary Rules
+
+Dashboard growth and future report growth use shared period boundaries.
+
+- A month start boundary is the first day of that month.
+- A month end boundary is the first day of the next month.
+- The end boundary of one month is the same boundary as the start boundary of the next month.
+- Each boundary resolves to the balance snapshot nearest to that boundary date.
+- A snapshot after the boundary can be used if it is nearer than any snapshot before the boundary.
+- If two snapshots are equally near, prefer the earlier snapshot.
+- If an account has no balances at all, boundary value is `0`.
+- Growth is resolved end boundary value minus resolved start boundary value.
+- This avoids gaps between month calculations because adjacent months share the same resolved boundary value.
+- Example: if the nearest snapshot to `2026-05-01` is `2026-05-02`, that snapshot is used for both April end and May start.
 
 ## Phase 3: Money Package
 
@@ -533,6 +550,8 @@ After a successful mutation, redirect as follows:
 - `/backup/` shows database path, last backup path if known, and a `create backup` action.
 - Backup creates `db.YYYY-MM-DD-HHMM.sqlite` beside the active DB.
 - Backup copies the active SQLite database file and preserves database contents.
+- After backup succeeds, render the latest created backup path.
+- Backup screen shows restore guidance: close stuf, replace `db.sqlite` with the backup file renamed to `db.sqlite`, then reopen stuf.
 - Backup does not write visible undo history or persisted effective history.
 - Backup failures are recoverable display errors with clear messages.
 
@@ -562,6 +581,7 @@ After a successful mutation, redirect as follows:
 - Reject unknown currency code after DB seeding.
 - Create default config when none exists.
 - Location detection fallback to USD.
+- Successful location detection uses the detected currency.
 - Generated default config is valid JSONC and includes comments/docs link.
 
 ### Startup and Seeding Tests
@@ -598,6 +618,12 @@ After a successful mutation, redirect as follows:
 - Dashboard/account totals omit converted amounts when conversion data is missing.
 - Original currency amounts remain visible when conversion data is missing.
 - Missing conversion data produces a clear warning and does not crash rendering.
+- Dashboard growth uses nearest snapshots to start/end month boundaries.
+- Dashboard growth uses snapshots after a boundary when they are nearest.
+- Dashboard growth tie-breaks equally near snapshots by choosing the earlier snapshot.
+- Adjacent monthly periods share the same resolved boundary value.
+- Dashboard omits hidden accounts from total and growth.
+- Account lists display app-currency totals where conversion exists.
 - Undo reverses account create where valid.
 - Undo reverses account edit/hide/show.
 - Undo reverses balance add/edit/delete.
@@ -811,12 +837,13 @@ Report period boundary intent:
 
 | Rule | Definition |
 |------|------------|
-| Start balance | Latest balance on or before first day of period |
-| End balance | Latest balance on or before last day of period |
-| No start balance | Start = 0 |
-| No end balance | End = start |
-| Zero balances | Use 0 -> 0 |
-| One usable balance | Assume flat: start = end = that balance |
+| Period boundaries | A month starts on the first day of that month and ends on the first day of the next month |
+| Shared boundary | The end boundary of one month is the same boundary as the start boundary of the next month |
+| Boundary balance | Balance snapshot nearest to the boundary date |
+| After-boundary snapshot | May be used if it is nearer than any before-boundary snapshot |
+| Tie-breaker | If two snapshots are equally near, prefer the earlier snapshot |
+| No balances | Boundary value is 0 |
+| Growth | Resolved end boundary value minus resolved start boundary value |
 
 ### Currency Conversion Future Notes
 
