@@ -228,7 +228,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       EUR", "       GBP", "       JPY", "       PHP", "       USD", "     [01/06]", "type       : filter", "left/right : next/prev page"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -280,7 +280,7 @@ func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
 	view = app.View()
 	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)")
 	assertOrdered(t, view, "   > filter  : (type anything...)", "\n\n     > HKD")
-	assertOrdered(t, view, "     [01/06]", "\n\n  3) on-budget")
+	assertOrdered(t, view, "     [01/30]", "\n\n  3) on-budget")
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
@@ -371,12 +371,12 @@ func TestCurrencySelectNavigationPaginationAndSetSanitization(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRight})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "     > INR") || !strings.Contains(view, "[09/17]") {
+	if view := app.View(); !strings.Contains(view, "     > EUR") || !strings.Contains(view, "[09/30]") {
 		t.Fatalf("right should move to next currency page:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "     > HKD") || !strings.Contains(view, "[01/17]") {
+	if view := app.View(); !strings.Contains(view, "     > HKD") || !strings.Contains(view, "[01/30]") {
 		t.Fatalf("left should move back to first currency page:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=u sd!!")})

@@ -268,6 +268,13 @@ currency conversion
 - historical conversion snapshots are deferred for v1
 - manual conversion rate override is deferred for v1
 
+currency seed refresh
+- currency seed data is generated during development, not fetched at runtime
+- `make refresh-currencies` regenerates `internal/seed/currencies.json`
+- rates come from the ECB daily euro foreign exchange reference XML
+- currency names and decimal precision come from staticdata.dev ISO 4217 metadata
+- the generated JSON remains embedded in the app binary for offline startup/seeding
+
 historical conversion rationale
 - stuf is balance-anchored, not transaction-ledger-perfect
 - latest balances are the truth

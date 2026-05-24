@@ -1,9 +1,12 @@
-.PHONY: generate migrate run build test
+.PHONY: generate refresh-currencies migrate run build test
 
 GOCACHE ?= $(CURDIR)/.gocache
 
 generate:
 	sqlc generate
+
+refresh-currencies:
+	GOCACHE=$(GOCACHE) go run ./cmd/refresh-currencies
 
 migrate:
 	GOCACHE=$(GOCACHE) go run . --migrate-only

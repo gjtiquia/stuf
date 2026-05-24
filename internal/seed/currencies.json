@@ -1,8 +1,212 @@
 [
-  {"code":"USD","name":"US Dollar","scale":2,"rate_to_usd_amount":1,"rate_to_usd_scale":0},
-  {"code":"HKD","name":"Hong Kong Dollar","scale":2,"rate_to_usd_amount":128,"rate_to_usd_scale":3},
-  {"code":"EUR","name":"Euro","scale":2,"rate_to_usd_amount":109,"rate_to_usd_scale":2},
-  {"code":"GBP","name":"British Pound","scale":2,"rate_to_usd_amount":127,"rate_to_usd_scale":2},
-  {"code":"JPY","name":"Japanese Yen","scale":0,"rate_to_usd_amount":64,"rate_to_usd_scale":4},
-  {"code":"PHP","name":"Philippine Peso","scale":2,"rate_to_usd_amount":171,"rate_to_usd_scale":4}
+  {
+    "code": "AUD",
+    "name": "Australian Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 712092,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "BRL",
+    "name": "Brazilian Real",
+    "scale": 2,
+    "rate_to_usd_amount": 199347,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "CAD",
+    "name": "Canadian Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 724597,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "CHF",
+    "name": "Swiss Franc",
+    "scale": 2,
+    "rate_to_usd_amount": 1271521,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "CNY",
+    "name": "Yuan Renminbi",
+    "scale": 2,
+    "rate_to_usd_amount": 147161,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "CZK",
+    "name": "Czech Koruna",
+    "scale": 2,
+    "rate_to_usd_amount": 47738,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "DKK",
+    "name": "Danish Krone",
+    "scale": 2,
+    "rate_to_usd_amount": 155156,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "EUR",
+    "name": "Euro",
+    "scale": 2,
+    "rate_to_usd_amount": 11595,
+    "rate_to_usd_scale": 4
+  },
+  {
+    "code": "GBP",
+    "name": "Pound Sterling",
+    "scale": 2,
+    "rate_to_usd_amount": 1341734,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "HKD",
+    "name": "Hong Kong Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 127607,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "HUF",
+    "name": "Forint",
+    "scale": 2,
+    "rate_to_usd_amount": 3229,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "IDR",
+    "name": "Rupiah",
+    "scale": 2,
+    "rate_to_usd_amount": 57,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "ILS",
+    "name": "New Israeli Sheqel",
+    "scale": 2,
+    "rate_to_usd_amount": 345408,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "INR",
+    "name": "Indian Rupee",
+    "scale": 2,
+    "rate_to_usd_amount": 1045,
+    "rate_to_usd_scale": 5
+  },
+  {
+    "code": "ISK",
+    "name": "Iceland Krona",
+    "scale": 0,
+    "rate_to_usd_amount": 8075,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "JPY",
+    "name": "Yen",
+    "scale": 0,
+    "rate_to_usd_amount": 6284,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "KRW",
+    "name": "Won",
+    "scale": 0,
+    "rate_to_usd_amount": 659,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "MXN",
+    "name": "Mexican Peso",
+    "scale": 2,
+    "rate_to_usd_amount": 57674,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "MYR",
+    "name": "Malaysian Ringgit",
+    "scale": 2,
+    "rate_to_usd_amount": 252016,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "NOK",
+    "name": "Norwegian Krone",
+    "scale": 2,
+    "rate_to_usd_amount": 108067,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "NZD",
+    "name": "New Zealand Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 585104,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "PHP",
+    "name": "Philippine Peso",
+    "scale": 2,
+    "rate_to_usd_amount": 16228,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "PLN",
+    "name": "Zloty",
+    "scale": 2,
+    "rate_to_usd_amount": 273338,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "RON",
+    "name": "Romanian Leu",
+    "scale": 2,
+    "rate_to_usd_amount": 220899,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "SEK",
+    "name": "Swedish Krona",
+    "scale": 2,
+    "rate_to_usd_amount": 106675,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "SGD",
+    "name": "Singapore Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 781018,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "THB",
+    "name": "Baht",
+    "scale": 2,
+    "rate_to_usd_amount": 30614,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "TRY",
+    "name": "Turkish Lira",
+    "scale": 2,
+    "rate_to_usd_amount": 21875,
+    "rate_to_usd_scale": 6
+  },
+  {
+    "code": "USD",
+    "name": "US Dollar",
+    "scale": 2,
+    "rate_to_usd_amount": 1,
+    "rate_to_usd_scale": 0
+  },
+  {
+    "code": "ZAR",
+    "name": "Rand",
+    "scale": 2,
+    "rate_to_usd_amount": 60693,
+    "rate_to_usd_scale": 6
+  }
 ]

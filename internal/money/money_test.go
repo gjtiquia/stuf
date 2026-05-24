@@ -59,4 +59,16 @@ func TestScaleConversionAndCurrencyConversion(t *testing.T) {
 	if hkdToUSD.Amount != 1280 {
 		t.Fatalf("HKD conversion = %+v", hkdToUSD)
 	}
+	hkdToHKD, err := Convert(
+		Money{Amount: 5000, Scale: 2},
+		Money{Amount: 12760689, Scale: 8},
+		Money{Amount: 12760689, Scale: 8},
+		2,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hkdToHKD.Amount != 5000 {
+		t.Fatalf("high precision same-currency conversion = %+v", hkdToHKD)
+	}
 }

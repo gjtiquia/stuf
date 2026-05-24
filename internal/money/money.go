@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
@@ -93,9 +94,18 @@ func Convert(amount Money, rateToUSD Money, targetRateToUSD Money, targetScale i
 	if rateToUSD.Amount <= 0 || targetRateToUSD.Amount <= 0 {
 		return Money{}, errors.New("currency rates must be positive")
 	}
-	numerator := amount.Amount * rateToUSD.Amount * pow10(targetRateToUSD.Scale) * pow10(targetScale)
-	denominator := pow10(amount.Scale) * pow10(rateToUSD.Scale) * targetRateToUSD.Amount
-	return Money{Amount: roundDiv(numerator, denominator), Scale: targetScale}, nil
+	numerator := big.NewInt(amount.Amount)
+	numerator.Mul(numerator, big.NewInt(rateToUSD.Amount))
+	numerator.Mul(numerator, big.NewInt(pow10(targetRateToUSD.Scale)))
+	numerator.Mul(numerator, big.NewInt(pow10(targetScale)))
+	denominator := big.NewInt(pow10(amount.Scale))
+	denominator.Mul(denominator, big.NewInt(pow10(rateToUSD.Scale)))
+	denominator.Mul(denominator, big.NewInt(targetRateToUSD.Amount))
+	rounded := roundBigDiv(numerator, denominator)
+	if !rounded.IsInt64() {
+		return Money{}, errors.New("money amount overflow")
+	}
+	return Money{Amount: rounded.Int64(), Scale: targetScale}, nil
 }
 
 func align(a, b Money) (int64, int64, int, error) {
@@ -136,6 +146,25 @@ func roundDiv(n, d int64) int64 {
 		q++
 	}
 	return sign * q
+}
+
+func roundBigDiv(n, d *big.Int) *big.Int {
+	if d.Sign() == 0 {
+		panic("division by zero")
+	}
+	q := new(big.Int)
+	r := new(big.Int)
+	q.QuoRem(n, d, r)
+	doubleR := new(big.Int).Abs(r)
+	doubleR.Mul(doubleR, big.NewInt(2))
+	if doubleR.Cmp(new(big.Int).Abs(d)) >= 0 {
+		if n.Sign() == d.Sign() {
+			q.Add(q, big.NewInt(1))
+		} else {
+			q.Sub(q, big.NewInt(1))
+		}
+	}
+	return q
 }
 
 func willMulOverflow(a, b int64) bool {
