@@ -107,7 +107,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "/":
 		a = a.menuKey(s, []string{"/accounts/", "/transactions/", "/budgets/", "/owed/", "/reports/", "/settings/", "/backup/"})
 	case "/accounts/":
-		a = a.menuKey(s, []string{"/accounts/", "/accounts/list/", "/accounts/hidden/", "/accounts/create/"})
+		a = a.menuKey(s, []string{"/accounts/list/", "/accounts/hidden/", "/accounts/create/"})
 	case "/accounts/list/":
 		a = a.accountListKey(s, false)
 	case "/accounts/hidden/":
@@ -235,9 +235,9 @@ func (a App) accountCreateKey(s string) App {
 	next.Nav.Pop()
 	next = next.syncFromNav()
 	if next.Path == "/accounts/" {
-		next = next.navReplace(next.Path, 1)
+		next = next.navReplace(next.Path, 0)
 	} else {
-		next = next.navPush("/accounts/", 1)
+		next = next.navPush("/accounts/", 0)
 	}
 	return next.navPush("/accounts/list/", listIdx)
 }
@@ -755,7 +755,7 @@ func (a App) screen() screen {
 	case a.Path == "/accounts/":
 		s := a.dashboardScreen()
 		s.Path = "/accounts/"
-		s.Actions = []string{"overview", "list", "hidden", "create"}
+		s.Actions = []string{"list", "hidden", "create"}
 		return s
 	case a.Path == "/accounts/list/":
 		return screen{Path: "/accounts/list/", Body: a.accountList(false), Help: listHelp()}
@@ -902,13 +902,53 @@ ppl owe you : %s
 	}
 }
 
+func accountSummary(rows []accountListRow, appCurrency string) string {
+	total := money.Money{Scale: 2}
+	if len(rows) > 0 {
+		total = money.Money{Scale: rows[0].Amount.Scale}
+	}
+	for _, row := range rows {
+		next, err := total.Add(row.Amount)
+		if err == nil {
+			total = next
+		}
+	}
+	onBudgetTotal, hasOnBudget := accountSectionTotal(rows, true)
+	offBudgetTotal, hasOffBudget := accountSectionTotal(rows, false)
+
+	totalStr := total.Format(appCurrency)
+	if len(rows) == 0 {
+		totalStr = zero(appCurrency)
+	}
+	var lines []string
+	lines = append(lines, fmt.Sprintf("total       : %s", totalStr))
+	if hasOnBudget {
+		lines = append(lines, fmt.Sprintf("on-budget   : %s", onBudgetTotal.Format(appCurrency)))
+	} else {
+		lines = append(lines, fmt.Sprintf("on-budget   : %s", zero(appCurrency)))
+	}
+	if hasOffBudget {
+		lines = append(lines, fmt.Sprintf("off-budget  : %s", offBudgetTotal.Format(appCurrency)))
+	} else {
+		lines = append(lines, fmt.Sprintf("off-budget  : %s", zero(appCurrency)))
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (a App) accountList(includeHidden bool) string {
+	allRows, err := a.accountListRowsWithFilter(includeHidden, "")
+	if err != nil {
+		return "error: " + err.Error() + "\n"
+	}
 	visible, err := a.accountListRows(includeHidden)
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
 	filter := a.Form["filter"]
 	var lines []string
+	if !includeHidden {
+		lines = append(lines, accountSummary(allRows, a.Config.Config.Currency), "")
+	}
 	lines = append(lines, "> filter : "+placeholder(filter, "(type anything...)"), "")
 	if len(visible) == 0 {
 		lines = append(lines, "  (no results)")
@@ -996,6 +1036,10 @@ func (l accountListTableLayout) rowLine(prefix, name, balance, notes string) str
 }
 
 func (a App) accountListRows(includeHidden bool) ([]accountListRow, error) {
+	return a.accountListRowsWithFilter(includeHidden, a.Form["filter"])
+}
+
+func (a App) accountListRowsWithFilter(includeHidden bool, filter string) ([]accountListRow, error) {
 	accounts, err := a.Svc.Accounts.List(a.ctx, includeHidden)
 	if err != nil {
 		return nil, err
@@ -1004,7 +1048,6 @@ func (a App) accountListRows(includeHidden bool) ([]accountListRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	filter := a.Form["filter"]
 	var visible []accountListRow
 	for _, acct := range accounts {
 		if includeHidden && !acct.Hidden {
@@ -1554,7 +1597,7 @@ func (a App) menuCountFor(path string) int {
 	case "/":
 		return 7
 	case "/accounts/":
-		return 4
+		return 3
 	case "/accounts/list/":
 		return a.accountListRowCount(false)
 	case "/accounts/hidden/":

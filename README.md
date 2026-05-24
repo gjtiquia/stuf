@@ -508,10 +508,9 @@ ppl owe you : HKD    456.00
 
 /accounts/
 
-> 1) overview
-  2) list
-  3) hidden
-  4) create
+> 1) list
+  2) hidden
+  3) create
 
 ---
 up/down : navigate
@@ -724,6 +723,7 @@ esc         : back
     - if no search results for both, see handling below, (no results)
 
 - here we should also be able to have a birds eye view of account stuff like totals
+- accounts list shows a summary above the filter/table with total, on-budget, and off-budget totals
 
 - do note that history is added!
 - visible history above is shown for the current session only
@@ -771,6 +771,10 @@ you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
 /accounts/list/
+
+total       : HKD  50,000.00
+on-budget   : HKD  230,000.00
+off-budget  : HKD (180,000.00)
 
 > filter : (type anything...)
 
