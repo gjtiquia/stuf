@@ -36,6 +36,11 @@ func testApp(t *testing.T) (App, *repo.Store) {
 	}, cfg), s
 }
 
+func appWithNav(app App, frames ...navFrame) App {
+	app.Nav = NavigationStack{frames: frames}
+	return app.syncFromNav()
+}
+
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
@@ -659,7 +664,7 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 
 func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	app, _ := testApp(t)
-	app.Path = "/accounts/create/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
 	if view := app.View(); !strings.Contains(view, "> 1) name     : |") || strings.Contains(view, "(type anything...)|") || strings.Contains(view, "currency : HKD|") {
 		t.Fatalf("initial focused caret or unfocused field rendering wrong:\n%s", view)
 	}
@@ -868,7 +873,7 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
 		t.Fatal(err)
 	}
-	app.Path = "/accounts/cash/balances/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	view := app.View()
@@ -897,7 +902,7 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 
 func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app, store := testApp(t)
-	app.Path = "/accounts/create/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=!!!")})
 	app = m.(App)
 	app.Field = 4
@@ -960,7 +965,7 @@ func TestEscHelpAndBackup(t *testing.T) {
 
 func TestManualAccountAndBalanceFlow(t *testing.T) {
 	app, _ := testApp(t)
-	app.Path = "/accounts/create/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
 	for _, r := range "cash" {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
@@ -981,7 +986,13 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 	if app.Path != "/accounts/cash/transactions/" {
 		t.Fatalf("transactions TODO path = %s", app.Path)
 	}
-	app.Path = "/accounts/cash/balances/"
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("balances path = %s", app.Path)
+	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/cash/balances/add/" {
@@ -1040,6 +1051,7 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.Path = "/accounts/cash/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1070,7 +1082,7 @@ func TestMenuCursorRestoresOnBackFromBalanceDetail(t *testing.T) {
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
 		t.Fatal(err)
 	}
-	app.Path = "/accounts/cash/balances/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0}, navFrame{Path: "/accounts/cash/balances/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1088,7 +1100,7 @@ func TestMenuCursorRestoresOnBackFromBalanceDetail(t *testing.T) {
 	}
 }
 
-func TestMenuCursorPersistsWhenJumpingBetweenScreens(t *testing.T) {
+func TestMenuCursorDoesNotPersistAfterLeavingStack(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
@@ -1107,18 +1119,18 @@ func TestMenuCursorPersistsWhenJumpingBetweenScreens(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 3) hidden") {
-		t.Fatalf("expected hidden cursor preserved after jumping away:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "> 1) overview") || strings.Contains(view, "> 3) hidden") {
+		t.Fatalf("expected default accounts cursor after re-entering popped screen:\n%s", view)
 	}
 }
 
-func TestUndoReturnsHomeWithoutClearingOtherMenuCursors(t *testing.T) {
+func TestUndoResetsNavigationStack(t *testing.T) {
 	app, store := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
 	app = m.(App)
-	app.Path = "/accounts/create/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 1}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
 	app.Field = 4
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1136,14 +1148,53 @@ func TestUndoReturnsHomeWithoutClearingOtherMenuCursors(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 2) list") {
-		t.Fatalf("accounts menu should still remember list cursor after undo:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "> 1) overview") || strings.Contains(view, "> 2) list") {
+		t.Fatalf("accounts menu should start fresh after undo clears navigation stack:\n%s", view)
+	}
+}
+
+func TestAccountDetailResetsCursorAfterLeaveAndReturn(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	for range 3 {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
+		app = m.(App)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
+	if app.Path != "/accounts/cash/" {
+		t.Fatalf("expected account detail, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 1) balances") || strings.Contains(view, "> 4) hide account") {
+		t.Fatalf("expected balances cursor after re-entering account detail:\n%s", view)
+	}
+	if _, err := store.Acct.GetByName(ctx, "cash"); err != nil {
+		t.Fatal(err)
 	}
 }
 
 func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
 	app, store := testApp(t)
-	app.Path = "/accounts/create/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 3}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
 	app.Field = 4
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})

@@ -30,7 +30,7 @@ type App struct {
 	Config          config.Loaded
 	Path            string
 	Menu            int
-	MenuByPath      map[string]int
+	Nav             NavigationStack
 	History         []service.SessionEntry
 	Error           string
 	Help            bool
@@ -51,7 +51,7 @@ type screen struct {
 const currencyPageSize = 8
 
 func New(ctx context.Context, svc Services, cfg config.Loaded) App {
-	return App{ctx: ctx, Svc: svc, Config: cfg, Path: "/", Form: map[string]string{}, MenuByPath: map[string]int{}}
+	return App{ctx: ctx, Svc: svc, Config: cfg, Path: "/", Form: map[string]string{}, Nav: NewNavigationStack()}
 }
 
 func (a App) Init() tea.Cmd { return nil }
@@ -151,21 +151,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a App) menuKey(s string, routes []string) App {
 	switch s {
 	case "down", "j":
-		a.Menu = (a.Menu + 1) % len(routes)
-		a.saveMenu()
+		a = a.navSetMenu((a.Menu + 1) % len(routes))
 	case "up", "k":
-		a.Menu = (a.Menu - 1 + len(routes)) % len(routes)
-		a.saveMenu()
+		a = a.navSetMenu((a.Menu - 1 + len(routes)) % len(routes))
 	case "enter":
-		a.saveMenu()
-		a.Path = routes[a.Menu]
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		a = a.navSetMenu(a.Menu)
+		next := routes[a.Menu]
+		if next != a.Path {
+			a = a.navPush(next, 0)
+		}
 	default:
 		if len(s) == 1 && s[0] >= '1' && int(s[0]-'1') < len(routes) {
-			a.Menu = int(s[0] - '1')
-			a.saveMenu()
-			a.Path = routes[a.Menu]
-			a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+			a = a.navSetMenu(int(s[0] - '1'))
+			next := routes[a.Menu]
+			if next != a.Path {
+				a = a.navPush(next, 0)
+			}
 		}
 	}
 	return a
@@ -195,8 +196,6 @@ func (a App) accountCreateKey(s string) App {
 	next.Form = map[string]string{}
 	next.Field = 0
 	next.Error = ""
-	next.saveMenuForPath("/accounts/", 1)
-	next.Path = "/accounts/list/"
 	listIdx := 0
 	if rows, err := next.accountListRows(false); err == nil {
 		for i, row := range rows {
@@ -206,9 +205,14 @@ func (a App) accountCreateKey(s string) App {
 			}
 		}
 	}
-	next.Menu = listIdx
-	next.saveMenuForPath("/accounts/list/", listIdx)
-	return next
+	next.Nav.Pop()
+	next = next.syncFromNav()
+	if next.Path == "/accounts/" {
+		next = next.navReplace(next.Path, 1)
+	} else {
+		next = next.navPush("/accounts/", 1)
+	}
+	return next.navPush("/accounts/list/", listIdx)
 }
 
 func (a App) accountListKey(s string, includeHidden bool) App {
@@ -220,8 +224,7 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 			return a
 		}
 		if len(rows) > 0 {
-			a.Menu = (a.Menu - 1 + len(rows)) % len(rows)
-			a.saveMenu()
+			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
 		}
 		return a
 	case "down":
@@ -231,14 +234,12 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 			return a
 		}
 		if len(rows) > 0 {
-			a.Menu = (a.Menu + 1) % len(rows)
-			a.saveMenu()
+			a = a.navSetMenu((a.Menu + 1) % len(rows))
 		}
 		return a
 	case "backspace":
 		a.Form["filter"] = trimLastRune(a.Form["filter"])
-		a.Menu = clampListCursor(a.Menu, a.accountListRowCount(includeHidden))
-		a.saveMenu()
+		a = a.navSetMenu(clampListCursor(a.Menu, a.accountListRowCount(includeHidden)))
 		return a
 	case "enter":
 		rows, err := a.accountListRows(includeHidden)
@@ -249,16 +250,12 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		if len(rows) == 0 {
 			return a
 		}
-		a.Menu = clampListCursor(a.Menu, len(rows))
-		a.saveMenu()
-		a.Path = "/accounts/" + rows[a.Menu].Name + "/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
-		return a
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		return a.navPush("/accounts/"+rows[a.Menu].Name+"/", 0)
 	default:
 		if isTextInputKey(s) {
 			a.Form["filter"] += s
-			a.Menu = 0
-			a.saveMenu()
+			a = a.navSetMenu(0)
 		}
 		return a
 	}
@@ -282,21 +279,17 @@ func (a App) accountDetailKey(s, name string) App {
 	if action < 0 {
 		return a
 	}
-	a.Menu = action
-	a.saveMenu()
+	a = a.navSetMenu(action)
 	if acct.Hidden {
 		switch action {
 		case 0:
-			a.Path = "/accounts/" + name + "/balances/"
-			a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+			return a.navPush("/accounts/"+name+"/balances/", 0)
 		case 1:
-			a.Path = "/accounts/" + name + "/transactions/"
-			a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+			return a.navPush("/accounts/"+name+"/transactions/", 0)
 		case 2:
-			a.Path = "/accounts/" + name + "/edit/"
 			a.Form = map[string]string{"name": acct.Name, "currency": acct.Code, "on-budget": fmt.Sprintf("%t", acct.OnBudget), "notes": acct.Notes}
 			a.Field = 0
-			a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+			return a.navPush("/accounts/"+name+"/edit/", 0)
 		case 3:
 			updated, entry, err := a.Svc.Accounts.SetHidden(a.ctx, acct.ID, false)
 			if err != nil {
@@ -304,23 +297,19 @@ func (a App) accountDetailKey(s, name string) App {
 				return a
 			}
 			a.History = append(a.History, entry)
-			a.Path = "/accounts/" + updated.Name + "/"
-			a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+			return a.navReplace("/accounts/"+updated.Name+"/", action)
 		}
 		return a
 	}
 	switch action {
 	case 0:
-		a.Path = "/accounts/" + name + "/balances/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		return a.navPush("/accounts/"+name+"/balances/", 0)
 	case 1:
-		a.Path = "/accounts/" + name + "/transactions/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		return a.navPush("/accounts/"+name+"/transactions/", 0)
 	case 2:
-		a.Path = "/accounts/" + name + "/edit/"
 		a.Form = map[string]string{"name": acct.Name, "currency": acct.Code, "on-budget": fmt.Sprintf("%t", acct.OnBudget), "notes": acct.Notes}
 		a.Field = 0
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		return a.navPush("/accounts/"+name+"/edit/", 0)
 	case 3:
 		updated, entry, err := a.Svc.Accounts.SetHidden(a.ctx, acct.ID, !acct.Hidden)
 		if err != nil {
@@ -328,8 +317,7 @@ func (a App) accountDetailKey(s, name string) App {
 			return a
 		}
 		a.History = append(a.History, entry)
-		a.Path = "/accounts/" + updated.Name + "/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		return a.navReplace("/accounts/"+updated.Name+"/", action)
 	}
 	return a
 }
@@ -357,8 +345,11 @@ func (a App) accountEditKey(s, name string) App {
 	next.Form = map[string]string{}
 	next.Field = 0
 	next.Error = ""
-	next.Path = "/accounts/" + updated.Name + "/"
-	next.Menu = next.clampedMenuForPath(next.Path, next.menuCountFor(next.Path))
+	next.Nav.Pop()
+	next = next.syncFromNav()
+	if next.Path != "/accounts/"+updated.Name+"/" {
+		next = next.navReplace("/accounts/"+updated.Name+"/", next.Menu)
+	}
 	return next
 }
 
@@ -378,9 +369,8 @@ func (a App) balanceAddKey(s, name string) App {
 		a.Form = map[string]string{}
 		a.Field = 0
 		a.Error = ""
-		a.Path = "/accounts/" + name + "/balances/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
-		return a
+		a.Nav.Pop()
+		return a.syncFromNav()
 	}
 	return a.formKey(s, []string{"date", "balance", "notes"})
 }
@@ -424,14 +414,12 @@ func (a App) balanceDetailKey(s, name, date string) App {
 	if action < 0 {
 		return a
 	}
-	a.Menu = action
-	a.saveMenu()
+	a = a.navSetMenu(action)
 	switch action {
 	case 0:
-		a.Path = "/accounts/" + name + "/balances/" + date + "/edit/"
 		a.Form = map[string]string{"date": bal.Date, "balance": rawAmount(bal.Amount.Amount, bal.Amount.Scale), "notes": bal.Notes}
 		a.Field = 0
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
+		return a.navPush("/accounts/"+name+"/balances/"+date+"/edit/", 0)
 	case 1:
 		entry, err := a.Svc.Balances.Delete(a.ctx, bal.ID)
 		if err != nil {
@@ -439,9 +427,9 @@ func (a App) balanceDetailKey(s, name, date string) App {
 			return a
 		}
 		a.History = append(a.History, entry)
-		a.Path = "/accounts/" + name + "/balances/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
 		a.Error = ""
+		a.Nav.Pop()
+		return a.syncFromNav()
 	}
 	return a
 }
@@ -449,12 +437,10 @@ func (a App) balanceDetailKey(s, name, date string) App {
 func (a *App) actionIndex(s string, count int) int {
 	switch s {
 	case "down", "j":
-		a.Menu = (a.Menu + 1) % count
-		a.saveMenu()
+		*a = a.navSetMenu((a.Menu + 1) % count)
 		return -1
 	case "up", "k":
-		a.Menu = (a.Menu - 1 + count) % count
-		a.saveMenu()
+		*a = a.navSetMenu((a.Menu - 1 + count) % count)
 		return -1
 	case "enter":
 		return a.Menu
@@ -644,9 +630,9 @@ func (a App) balanceEditKey(s, name, date string) App {
 		a.Form = map[string]string{}
 		a.Field = 0
 		a.Error = ""
-		a.Path = "/accounts/" + name + "/balances/"
-		a.Menu = a.clampedMenuForPath(a.Path, a.menuCountFor(a.Path))
-		return a
+		a.Nav.Pop()
+		a.Nav.Pop()
+		return a.syncFromNav()
 	}
 	return a.formKey(s, []string{"date", "balance", "notes"})
 }
@@ -717,10 +703,7 @@ func (a App) undo() App {
 		return a
 	}
 	a.History = a.History[:len(a.History)-1]
-	a.Path = "/"
-	a.Menu = a.clampedMenuForPath("/", a.menuCountFor("/"))
-	a.Error = ""
-	return a
+	return a.navReset()
 }
 
 func (a App) View() string {
@@ -1498,40 +1481,42 @@ func rawAmount(amount int64, scale int) string {
 	return fmt.Sprintf("%s%d.%0*d", sign, amount/div, scale, amount%div)
 }
 
-func (a App) saveMenu() {
-	if a.MenuByPath == nil {
-		a.MenuByPath = map[string]int{}
-	}
-	a.MenuByPath[a.Path] = a.Menu
+func (a App) syncFromNav() App {
+	cur := a.Nav.Current()
+	a.Path = cur.Path
+	a.Menu = clampListCursor(cur.Menu, a.menuCountFor(cur.Path))
+	a.Nav.setCurrentMenu(a.Menu)
+	return a
 }
 
-func (a App) saveMenuForPath(path string, menu int) {
-	if a.MenuByPath == nil {
-		a.MenuByPath = map[string]int{}
-	}
-	a.MenuByPath[path] = menu
+func (a App) navSetMenu(menu int) App {
+	a.Menu = clampListCursor(menu, a.menuCountFor(a.Path))
+	a.Nav.setCurrentMenu(a.Menu)
+	return a
 }
 
-func (a App) clampedMenuForPath(path string, count int) int {
-	if count <= 0 {
-		return 0
-	}
-	if a.MenuByPath == nil {
-		return 0
-	}
-	menu, ok := a.MenuByPath[path]
-	if !ok {
-		return 0
-	}
-	return clampListCursor(menu, count)
+func (a App) navPush(path string, menu int) App {
+	a.Nav.setCurrentMenu(a.Menu)
+	a.Nav.Push(path, menu)
+	return a.syncFromNav()
+}
+
+func (a App) navReplace(path string, menu int) App {
+	a.Nav.Replace(path, menu)
+	return a.syncFromNav()
+}
+
+func (a App) navReset() App {
+	a.Nav.Reset()
+	return a.syncFromNav()
 }
 
 func (a App) goBack() App {
-	a.saveMenu()
-	parent := parentPath(a.Path)
-	a.Path = parent
-	a.Menu = a.clampedMenuForPath(parent, a.menuCountFor(parent))
-	return a
+	a.Nav.setCurrentMenu(a.Menu)
+	if !a.Nav.Pop() {
+		return a
+	}
+	return a.syncFromNav()
 }
 
 func (a App) menuCountFor(path string) int {
