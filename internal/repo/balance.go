@@ -3,9 +3,9 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
+	"stuf/internal/db"
 	"stuf/internal/money"
 )
 
@@ -20,8 +20,15 @@ type BalanceCreate struct {
 
 func (r *BalanceRepo) Create(ctx context.Context, in BalanceCreate) (Balance, error) {
 	now := r.store.Clock().UTC().Format(time.RFC3339)
-	res, err := r.store.DB.ExecContext(ctx, `INSERT INTO balances(account_id, date, amount, scale, notes, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, in.AccountID, in.Date, in.Amount.Amount, in.Amount.Scale, in.Notes, now, now)
+	res, err := r.store.Q.CreateBalance(ctx, db.CreateBalanceParams{
+		AccountID: in.AccountID,
+		Date:      in.Date,
+		Amount:    in.Amount.Amount,
+		Scale:     int64(in.Amount.Scale),
+		Notes:     in.Notes,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 	if err != nil {
 		return Balance{}, err
 	}
@@ -30,111 +37,94 @@ func (r *BalanceRepo) Create(ctx context.Context, in BalanceCreate) (Balance, er
 }
 
 func (r *BalanceRepo) GetByID(ctx context.Context, id int64) (Balance, error) {
-	return scanBalance(r.store.DB.QueryRowContext(ctx, balanceSelect+" WHERE id=?", id))
+	b, err := r.store.Q.GetBalanceByID(ctx, id)
+	if err != nil {
+		return Balance{}, mapBalanceErr(err)
+	}
+	return balanceFromDB(b), nil
 }
 
 func (r *BalanceRepo) GetByAccountDate(ctx context.Context, accountID int64, date string) (Balance, error) {
-	return scanBalance(r.store.DB.QueryRowContext(ctx, balanceSelect+" WHERE account_id=? AND date=?", accountID, date))
+	b, err := r.store.Q.GetBalanceByAccountDate(ctx, db.GetBalanceByAccountDateParams{
+		AccountID: accountID,
+		Date:      date,
+	})
+	if err != nil {
+		return Balance{}, mapBalanceErr(err)
+	}
+	return balanceFromDB(b), nil
 }
 
 func (r *BalanceRepo) ListByAccount(ctx context.Context, accountID int64) ([]Balance, error) {
-	rows, err := r.store.DB.QueryContext(ctx, balanceSelect+" WHERE account_id=? ORDER BY date DESC", accountID)
+	rows, err := r.store.Q.ListBalancesByAccount(ctx, accountID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanBalances(rows)
+	out := make([]Balance, len(rows))
+	for i, row := range rows {
+		out[i] = balanceFromDB(row)
+	}
+	return out, nil
 }
 
 func (r *BalanceRepo) ListAllVisible(ctx context.Context) ([]struct {
 	Account Account
 	Balance Balance
 }, error) {
-	rows, err := r.store.DB.QueryContext(ctx, `SELECT `+accountColumns("a")+`, b.id, b.account_id, b.date, b.amount, b.scale, b.notes, b.created_at, b.updated_at
-		FROM accounts a
-		JOIN currencies c ON c.id = a.currency_id
-		JOIN balances b ON b.account_id = a.id
-		WHERE a.hidden = 0
-		ORDER BY a.id, b.date`)
+	rows, err := r.store.Q.ListAllVisibleBalances(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []struct {
+	out := make([]struct {
 		Account Account
 		Balance Balance
-	}
-	for rows.Next() {
-		var a Account
-		var b Balance
-		var onBudget, hidden int
-		if err := rows.Scan(&a.ID, &a.Name, &a.CurrencyID, &a.Code, &a.Scale, &onBudget, &hidden, &a.Notes, &a.CreatedAt, &a.UpdatedAt,
-			&b.ID, &b.AccountID, &b.Date, &b.Amount.Amount, &b.Amount.Scale, &b.Notes, &b.CreatedAt, &b.UpdatedAt); err != nil {
-			return nil, err
-		}
-		a.OnBudget = onBudget == 1
-		a.Hidden = hidden == 1
-		out = append(out, struct {
+	}, len(rows))
+	for i, row := range rows {
+		out[i] = struct {
 			Account Account
 			Balance Balance
-		}{a, b})
+		}{
+			Account: accountFromFields(row.AccountID, row.AccountName, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.AccountNotes, row.AccountCreatedAt, row.AccountUpdatedAt),
+			Balance: Balance{
+				ID:        row.BalanceID,
+				AccountID: row.BalanceAccountID,
+				Date:      row.Date,
+				Amount:    money.Money{Amount: row.Amount, Scale: int(row.BalanceScale)},
+				Notes:     row.BalanceNotes,
+				CreatedAt: row.BalanceCreatedAt,
+				UpdatedAt: row.BalanceUpdatedAt,
+			},
+		}
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (r *BalanceRepo) LatestByAccount(ctx context.Context, accountID int64) (Balance, bool, error) {
-	b, err := scanBalance(r.store.DB.QueryRowContext(ctx, balanceSelect+" WHERE account_id=? ORDER BY date DESC LIMIT 1", accountID))
+	b, err := r.store.Q.GetLatestBalanceByAccount(ctx, accountID)
 	if err != nil {
-		if err.Error() == "balance not found" {
+		if err == sql.ErrNoRows {
 			return Balance{}, false, nil
 		}
 		return Balance{}, false, err
 	}
-	return b, true, nil
+	return balanceFromDB(b), true, nil
 }
 
 func (r *BalanceRepo) Update(ctx context.Context, b Balance) (Balance, error) {
 	now := r.store.Clock().UTC().Format(time.RFC3339)
-	_, err := r.store.DB.ExecContext(ctx, `UPDATE balances SET date=?, amount=?, scale=?, notes=?, updated_at=? WHERE id=?`,
-		b.Date, b.Amount.Amount, b.Amount.Scale, b.Notes, now, b.ID)
-	if err != nil {
+	if err := r.store.Q.UpdateBalance(ctx, db.UpdateBalanceParams{
+		Date:      b.Date,
+		Amount:    b.Amount.Amount,
+		Scale:     int64(b.Amount.Scale),
+		Notes:     b.Notes,
+		UpdatedAt: now,
+		ID:        b.ID,
+	}); err != nil {
 		return Balance{}, err
 	}
 	return r.GetByID(ctx, b.ID)
 }
 
 func (r *BalanceRepo) Delete(ctx context.Context, id int64) error {
-	_, err := r.store.DB.ExecContext(ctx, "DELETE FROM balances WHERE id=?", id)
-	return err
-}
-
-const balanceSelect = `SELECT id, account_id, date, amount, scale, notes, created_at, updated_at FROM balances`
-
-func accountColumns(alias string) string {
-	return alias + `.id, ` + alias + `.name, ` + alias + `.currency_id, c.code, c.scale, ` + alias + `.on_budget, ` + alias + `.hidden, ` + alias + `.notes, ` + alias + `.created_at, ` + alias + `.updated_at`
-}
-
-type balanceScanner interface{ Scan(dest ...any) error }
-
-func scanBalance(row balanceScanner) (Balance, error) {
-	var b Balance
-	if err := row.Scan(&b.ID, &b.AccountID, &b.Date, &b.Amount.Amount, &b.Amount.Scale, &b.Notes, &b.CreatedAt, &b.UpdatedAt); err != nil {
-		if err == sql.ErrNoRows {
-			return Balance{}, fmt.Errorf("balance not found")
-		}
-		return Balance{}, err
-	}
-	return b, nil
-}
-
-func scanBalances(rows *sql.Rows) ([]Balance, error) {
-	var out []Balance
-	for rows.Next() {
-		b, err := scanBalance(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
-	}
-	return out, rows.Err()
+	return r.store.Q.DeleteBalance(ctx, id)
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/pressly/goose/v3"
 
+	"stuf/internal/db"
 	"stuf/internal/migration"
 	"stuf/internal/seed"
 
@@ -22,6 +23,7 @@ import (
 
 type Store struct {
 	DB    *sql.DB
+	Q     *db.Queries
 	Path  string
 	mu    sync.Mutex
 	Clock func() time.Time
@@ -41,44 +43,44 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path)
+	sqlDB, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(1)
-	store := &Store{DB: db, Path: path, Clock: time.Now}
+	sqlDB.SetMaxOpenConns(1)
+	store := &Store{DB: sqlDB, Q: db.New(sqlDB), Path: path, Clock: time.Now}
 	store.Acct = &AccountRepo{store: store}
 	store.Bal = &BalanceRepo{store: store}
 	store.Cur = &CurrencyRepo{store: store}
 	store.Hist = &HistoryRepo{store: store}
 	if existed {
 		var n int
-		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
-			db.Close()
+		if err := sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
+			sqlDB.Close()
 			return nil, fmt.Errorf("not a valid sqlite database: %w", err)
 		}
 		if n > 0 {
-			var app string
-			if err := db.QueryRowContext(ctx, "SELECT value FROM app_meta WHERE key = 'app'").Scan(&app); err != nil || app != "stuf" {
-				db.Close()
+			app, err := store.Q.GetAppMetaApp(ctx)
+			if err != nil || app != "stuf" {
+				sqlDB.Close()
 				return nil, fmt.Errorf("not a stuf database")
 			}
 		}
 	}
 	if err := store.migrate(ctx); err != nil {
-		db.Close()
+		sqlDB.Close()
 		return nil, err
 	}
 	if err := store.verifyStuf(ctx); err != nil {
-		db.Close()
+		sqlDB.Close()
 		return nil, err
 	}
 	if err := store.validateSchema(ctx); err != nil {
-		db.Close()
+		sqlDB.Close()
 		return nil, err
 	}
 	if err := store.SeedCurrencies(ctx); err != nil {
-		db.Close()
+		sqlDB.Close()
 		return nil, err
 	}
 	return store, nil
@@ -134,8 +136,8 @@ func (s *Store) migrate(ctx context.Context) error {
 }
 
 func (s *Store) verifyStuf(ctx context.Context) error {
-	var app string
-	if err := s.DB.QueryRowContext(ctx, "SELECT value FROM app_meta WHERE key = 'app'").Scan(&app); err != nil {
+	app, err := s.Q.GetAppMetaApp(ctx)
+	if err != nil {
 		return fmt.Errorf("not a stuf database: %w", err)
 	}
 	if app != "stuf" {
@@ -174,25 +176,51 @@ func (s *Store) SeedCurrencies(ctx context.Context) error {
 	}
 	now := s.Clock().UTC().Format(time.RFC3339)
 	for _, row := range rows {
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO currencies(code, name, scale, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?)
-			ON CONFLICT(code) DO UPDATE SET name=excluded.name, scale=excluded.scale, updated_at=excluded.updated_at`,
-			row.Code, row.Name, row.Scale, now, now)
+		if err := s.Q.UpsertCurrency(ctx, db.UpsertCurrencyParams{
+			Code:      row.Code,
+			Name:      row.Name,
+			Scale:     int64(row.Scale),
+			CreatedAt: now,
+			UpdatedAt: now,
+		}); err != nil {
+			return err
+		}
+		id, err := s.Q.GetCurrencyIDByCode(ctx, row.Code)
 		if err != nil {
 			return err
 		}
-		_ = res
-		var id int64
-		if err := s.DB.QueryRowContext(ctx, "SELECT id FROM currencies WHERE code=?", row.Code).Scan(&id); err != nil {
-			return err
-		}
-		_, err = s.DB.ExecContext(ctx, `INSERT INTO currency_rates(currency_id, rate_to_usd_amount, rate_to_usd_scale, updated_at)
-			VALUES (?, ?, ?, ?)
-			ON CONFLICT(currency_id) DO UPDATE SET rate_to_usd_amount=excluded.rate_to_usd_amount, rate_to_usd_scale=excluded.rate_to_usd_scale, updated_at=excluded.updated_at`,
-			id, row.RateToUSDAmount, row.RateToUSDScale, now)
-		if err != nil {
+		if err := s.Q.UpsertCurrencyRate(ctx, db.UpsertCurrencyRateParams{
+			CurrencyID:      id,
+			RateToUsdAmount: row.RateToUSDAmount,
+			RateToUsdScale:  int64(row.RateToUSDScale),
+			UpdatedAt:       now,
+		}); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Store) SetCurrencyRate(ctx context.Context, code string, amount int64, scale int) error {
+	now := s.Clock().UTC().Format(time.RFC3339)
+	id, err := s.Q.GetCurrencyIDByCode(ctx, code)
+	if err != nil {
+		return err
+	}
+	return s.Q.UpsertCurrencyRate(ctx, db.UpsertCurrencyRateParams{
+		CurrencyID:      id,
+		RateToUsdAmount: amount,
+		RateToUsdScale:  int64(scale),
+		UpdatedAt:       now,
+	})
+}
+
+func (s *Store) UpsertCurrencyNameOnly(ctx context.Context, code, name string) error {
+	now := s.Clock().UTC().Format(time.RFC3339)
+	return s.Q.UpsertCurrencyNameOnly(ctx, db.UpsertCurrencyNameOnlyParams{
+		Code:      code,
+		Name:      name,
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 }

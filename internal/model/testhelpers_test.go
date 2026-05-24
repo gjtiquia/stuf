@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -43,16 +42,7 @@ func assertViewContains(t *testing.T, view string, wants ...string) {
 
 func setCurrencyRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
 	t.Helper()
-	ctx := context.Background()
-	now := store.Clock().UTC().Format(time.RFC3339)
-	var id int64
-	if err := store.DB.QueryRowContext(ctx, "SELECT id FROM currencies WHERE code=?", code).Scan(&id); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.DB.ExecContext(ctx, `INSERT INTO currency_rates(currency_id, rate_to_usd_amount, rate_to_usd_scale, updated_at)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(currency_id) DO UPDATE SET rate_to_usd_amount=excluded.rate_to_usd_amount, rate_to_usd_scale=excluded.rate_to_usd_scale, updated_at=excluded.updated_at`,
-		id, amount, scale, now); err != nil {
+	if err := store.SetCurrencyRate(context.Background(), code, amount, scale); err != nil {
 		t.Fatal(err)
 	}
 }

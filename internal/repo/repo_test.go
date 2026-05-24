@@ -92,6 +92,200 @@ func TestAccountBalanceHistoryRepos(t *testing.T) {
 	}
 }
 
+func TestAccountListVisibleVsHidden(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	visible, err := s.Acct.Create(ctx, AccountCreate{Name: "cash", CurrencyID: hkd.ID, OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden, err := s.Acct.Create(ctx, AccountCreate{Name: "old", CurrencyID: hkd.ID, OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden.Hidden = true
+	if _, err := s.Acct.Update(ctx, hidden); err != nil {
+		t.Fatal(err)
+	}
+	visibleOnly, err := s.Acct.List(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(visibleOnly) != 1 || visibleOnly[0].ID != visible.ID {
+		t.Fatalf("visible list = %+v", visibleOnly)
+	}
+	all, err := s.Acct.List(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("all list = %+v", all)
+	}
+}
+
+func TestAccountUpdateDeleteNotFoundAndHasBalances(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	a, err := s.Acct.Create(ctx, AccountCreate{Name: "cash", CurrencyID: hkd.ID, OnBudget: true, Notes: "notes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	has, err := s.Acct.HasBalances(ctx, a.ID)
+	if err != nil || has {
+		t.Fatalf("HasBalances empty = %v %v", has, err)
+	}
+	a.Name = "savings"
+	a.OnBudget = false
+	a.Notes = "updated"
+	updated, err := s.Acct.Update(ctx, a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "savings" || updated.OnBudget || updated.Notes != "updated" {
+		t.Fatalf("update = %+v", updated)
+	}
+	if _, err := s.Bal.Create(ctx, BalanceCreate{AccountID: a.ID, Date: "2026-05-01", Amount: money.Money{Amount: 100, Scale: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	has, err = s.Acct.HasBalances(ctx, a.ID)
+	if err != nil || !has {
+		t.Fatalf("HasBalances with data = %v %v", has, err)
+	}
+	if err := s.Acct.Delete(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Acct.GetByID(ctx, a.ID); err == nil || !strings.Contains(err.Error(), "account not found") {
+		t.Fatalf("expected not found after delete, got %v", err)
+	}
+	if _, err := s.Acct.GetByName(ctx, "savings"); err == nil || !strings.Contains(err.Error(), "account not found") {
+		t.Fatalf("expected not found by name, got %v", err)
+	}
+}
+
+func TestBalanceGetByDateListUpdateDeleteNotFoundAndLatestEmpty(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	a, _ := s.Acct.Create(ctx, AccountCreate{Name: "cash", CurrencyID: hkd.ID, OnBudget: true})
+	latest, ok, err := s.Bal.LatestByAccount(ctx, a.ID)
+	if err != nil || ok || latest.ID != 0 {
+		t.Fatalf("latest empty = %+v %v %v", latest, ok, err)
+	}
+	b1, err := s.Bal.Create(ctx, BalanceCreate{AccountID: a.ID, Date: "2026-05-01", Amount: money.Money{Amount: 10000, Scale: 2}, Notes: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b2, err := s.Bal.Create(ctx, BalanceCreate{AccountID: a.ID, Date: "2026-06-01", Amount: money.Money{Amount: 15000, Scale: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Bal.GetByAccountDate(ctx, a.ID, "2026-05-01")
+	if err != nil || got.ID != b1.ID || got.Notes != "first" {
+		t.Fatalf("get by date = %+v %v", got, err)
+	}
+	list, err := s.Bal.ListByAccount(ctx, a.ID)
+	if err != nil || len(list) != 2 || list[0].ID != b2.ID || list[1].ID != b1.ID {
+		t.Fatalf("list order = %+v %v", list, err)
+	}
+	b1.Amount = money.Money{Amount: 12000, Scale: 2}
+	b1.Notes = "edited"
+	updated, err := s.Bal.Update(ctx, b1)
+	if err != nil || updated.Amount.Amount != 12000 || updated.Notes != "edited" {
+		t.Fatalf("update = %+v %v", updated, err)
+	}
+	if err := s.Bal.Delete(ctx, b1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Bal.GetByID(ctx, b1.ID); err == nil || !strings.Contains(err.Error(), "balance not found") {
+		t.Fatalf("expected not found after delete, got %v", err)
+	}
+}
+
+func TestCurrencyGetByIDListNotFoundAndMissingRate(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	usd, err := s.Cur.GetByCode(ctx, "USD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID, err := s.Cur.GetByID(ctx, usd.ID)
+	if err != nil || byID.Code != "USD" || byID.RateToUSD.Amount != 1 {
+		t.Fatalf("get by id = %+v %v", byID, err)
+	}
+	list, err := s.Cur.List(ctx)
+	if err != nil || len(list) == 0 {
+		t.Fatalf("list = %+v %v", list, err)
+	}
+	for i := 1; i < len(list); i++ {
+		if list[i-1].Code >= list[i].Code {
+			t.Fatalf("list not ordered by code: %+v", list)
+		}
+	}
+	if _, err := s.Cur.GetByCode(ctx, "ZZZ"); err == nil || !strings.Contains(err.Error(), "currency not found") {
+		t.Fatalf("expected not found, got %v", err)
+	}
+}
+
+func TestHistoryOrderingAndNullableData(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	old := "old"
+	newData := "new"
+	h1, err := s.Hist.Create(ctx, History{Timestamp: "2026-05-24T10:00:00Z", Action: "create", Path: "/a", NewData: &newData})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := s.Hist.Create(ctx, History{Timestamp: "2026-05-24T11:00:00Z", Action: "edit", Path: "/b", OldData: &old, NewData: &newData})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h3, err := s.Hist.Create(ctx, History{Timestamp: "2026-05-24T11:00:00Z", Action: "delete", Path: "/c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.Hist.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 || rows[0].ID != h1.ID || rows[1].ID != h2.ID || rows[2].ID != h3.ID {
+		t.Fatalf("history order = %+v", rows)
+	}
+	if rows[0].OldData != nil || rows[0].NewData == nil || *rows[0].NewData != "new" {
+		t.Fatalf("h1 data = %+v", rows[0])
+	}
+	if rows[1].OldData == nil || *rows[1].OldData != "old" {
+		t.Fatalf("h2 old data = %+v", rows[1])
+	}
+	if rows[2].OldData != nil || rows[2].NewData != nil {
+		t.Fatalf("h3 nullable = %+v", rows[2])
+	}
+}
+
+func TestSeedCurrenciesIdempotent(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	before, err := s.Cur.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SeedCurrencies(ctx); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.Cur.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("seed changed count: before=%d after=%d", len(before), len(after))
+	}
+	usd, err := s.Cur.GetByCode(ctx, "USD")
+	if err != nil || usd.RateToUSD.Amount != 1 {
+		t.Fatalf("USD after reseed = %+v %v", usd, err)
+	}
+}
+
 func TestBackupPreservesDatabase(t *testing.T) {
 	ctx := context.Background()
 	s := testStore(t)

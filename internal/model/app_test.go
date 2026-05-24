@@ -637,10 +637,8 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 func TestCurrencySelectNavigationPaginationAndSetSanitization(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()
-	now := store.Clock().UTC().Format(time.RFC3339)
 	for _, code := range []string{"AUD", "BRL", "CAD", "CHF", "CNY", "INR", "KRW", "MXN", "NZD", "SGD", "THB"} {
-		if _, err := store.DB.ExecContext(ctx, `INSERT INTO currencies(code, name, scale, created_at, updated_at) VALUES (?, ?, 2, ?, ?)
-			ON CONFLICT(code) DO UPDATE SET name=excluded.name`, code, code, now, now); err != nil {
+		if err := store.UpsertCurrencyNameOnly(ctx, code, code); err != nil {
 			t.Fatal(err)
 		}
 	}
