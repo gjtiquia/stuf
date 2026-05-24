@@ -141,7 +141,7 @@ func TestAccountListNoResultsShape(t *testing.T) {
 	app.Form["filter"] = "amex"
 	app.Path = "/accounts/list/"
 	view := app.View()
-	if !strings.Contains(view, "> filter : amex") || !strings.Contains(view, "(no results)") {
+	if !strings.Contains(view, "> filter : amex|") || !strings.Contains(view, "(no results)") {
 		t.Fatalf("no-results shape missing:\n%s", view)
 	}
 }
@@ -188,7 +188,7 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 	ctx := context.Background()
 	app.Path = "/accounts/create/"
 	view := app.View()
-	for _, want := range []string{"> 1) name", "2) currency : HKD", "3) on-budget: true", "4) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) name", "(type anything...)|", "2) currency : HKD", "3) on-budget: true", "4) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("account create form missing %q:\n%s", want, view)
 		}
@@ -209,7 +209,7 @@ func TestFormsReadmeShapeAndLockedCurrency(t *testing.T) {
 	app.Path = "/accounts/cash/balances/add/"
 	app.Form = map[string]string{"date": "2026-05-24"}
 	view = app.View()
-	for _, want := range []string{"> 1) date", "2) balance", "(type amount...)", "3) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) date", "2026-05-24|", "2) balance", "(type amount...)", "3) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance add form missing %q:\n%s", want, view)
 		}
@@ -220,7 +220,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	app, store := testApp(t)
 	app.Path = "/accounts/create/"
 	view := app.View()
-	for _, want := range []string{"> 1) name", "2) currency : HKD", "3) on-budget: true", "  [confirm]"} {
+	for _, want := range []string{"> 1) name", "(type anything...)|", "2) currency : HKD", "3) on-budget: true", "  [confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("initial account form missing %q:\n%s", want, view)
 		}
@@ -228,7 +228,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)|", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -278,8 +278,8 @@ func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)")
-	assertOrdered(t, view, "   > filter  : (type anything...)", "\n\n     > HKD")
+	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)|")
+	assertOrdered(t, view, "   > filter  : (type anything...)|", "\n\n     > HKD")
 	assertOrdered(t, view, "     [01/30]", "\n\n  3) on-budget")
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
@@ -297,7 +297,7 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 		app = m.(App)
 	}
 	view := app.View()
-	for _, want := range []string{"currency : HKD", "filter  : JPY", "     > JPY", "     [01/01]"} {
+	for _, want := range []string{"currency : HKD", "filter  : JPY|", "     > JPY", "     [01/01]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency filter missing %q:\n%s", want, view)
 		}
@@ -309,12 +309,12 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 	}
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter  : JP") || !strings.Contains(view, "JPY") {
+	if view = app.View(); !strings.Contains(view, "filter  : JP|") || !strings.Contains(view, "JPY") {
 		t.Fatalf("currency backspace did not update filter:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter  : JPZZ") || !strings.Contains(view, "(no matching currencies)") || !strings.Contains(view, "[00/00]") {
+	if view = app.View(); !strings.Contains(view, "filter  : JPZZ|") || !strings.Contains(view, "(no matching currencies)") || !strings.Contains(view, "[00/00]") {
 		t.Fatalf("currency no-match state missing:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -364,7 +364,7 @@ func TestCurrencySelectNavigationPaginationAndSetSanitization(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "filter  : K") || !strings.Contains(view, "KRW") {
+	if view := app.View(); !strings.Contains(view, "filter  : K|") || !strings.Contains(view, "KRW") {
 		t.Fatalf("k should type into currency filter:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -460,7 +460,7 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/balances/2026-05-21/edit/"
 	app.Form = map[string]string{"date": "2026-05-21", "balance": "50000.00", "notes": "initial balance"}
 	view = app.View()
-	for _, want := range []string{"> 1) date", "2) balance", "50000.00", "3) notes", "[confirm]"} {
+	for _, want := range []string{"> 1) date", "2026-05-21|", "2) balance", "50000.00", "3) notes", "[confirm]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance edit missing %q:\n%s", want, view)
 		}
@@ -511,16 +511,19 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	app, _ := testApp(t)
 	app.Path = "/accounts/create/"
+	if view := app.View(); !strings.Contains(view, "> 1) name     : (type anything...)|") || strings.Contains(view, "currency : HKD|") {
+		t.Fatalf("initial focused caret or unfocused field rendering wrong:\n%s", view)
+	}
 	for _, r := range "cash" {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
 	}
-	if view := app.View(); !strings.Contains(view, "> 1) name") || !strings.Contains(view, "name     : cash") {
+	if view := app.View(); !strings.Contains(view, "> 1) name") || !strings.Contains(view, "name     : cash|") {
 		t.Fatalf("typed text or focus marker missing:\n%s", view)
 	}
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 1) name") || !strings.Contains(view, "name     : cas") {
+	if view := app.View(); !strings.Contains(view, "> 1) name") || !strings.Contains(view, "name     : cas|") {
 		t.Fatalf("backspace did not update visible field:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -532,6 +535,65 @@ func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	app = m.(App)
 	if app.Path != "/accounts/" || app.Error != "" {
 		t.Fatalf("esc should discard form and return to account menu: path=%s error=%q", app.Path, app.Error)
+	}
+}
+
+func TestTextCaretAndCursorMovement(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Field = 3
+	for _, r := range "hi  there" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if view := app.View(); !strings.Contains(view, "notes    : hi  there|") {
+		t.Fatalf("notes caret should show trailing position after spaces/text:\n%s", view)
+	}
+	for i := 0; i < 7; i++ {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyLeft})
+		app = m.(App)
+	}
+	if view := app.View(); !strings.Contains(view, "notes    : hi|  there") {
+		t.Fatalf("left should move text cursor inside notes:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
+	app = m.(App)
+	if got := app.Form["notes"]; got != "hi!  there" {
+		t.Fatalf("typing should insert at notes cursor, got %q", got)
+	}
+	if view := app.View(); !strings.Contains(view, "notes    : hi!|  there") {
+		t.Fatalf("inserted text caret missing:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	app = m.(App)
+	if got := app.Form["notes"]; got != "hi  there" {
+		t.Fatalf("backspace should delete before notes cursor, got %q", got)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "notes    : hi | there") {
+		t.Fatalf("right should move notes cursor over a visible space:\n%s", view)
+	}
+}
+
+func TestSlugCaretResetsAfterSanitization(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	for _, r := range "Cash Account" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	for i := 0; i < 4; i++ {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyLeft})
+		app = m.(App)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" VIP ")})
+	app = m.(App)
+	if got := app.Form["name"]; got != "cash-acc-vip-ount" {
+		t.Fatalf("name should sanitize inserted text, got %q", got)
+	}
+	if view := app.View(); !strings.Contains(view, "name     : cash-acc-vip-ount|") {
+		t.Fatalf("sanitized slug cursor should reset to end:\n%s", view)
 	}
 }
 

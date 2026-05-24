@@ -566,6 +566,7 @@ func (a App) formKey(s string, fields []string) App {
 		parts := strings.SplitN(strings.TrimPrefix(s, "set "), "=", 2)
 		if len(parts) == 2 {
 			a.Form[parts[0]] = normalizeFieldInput(parts[0], "", parts[1])
+			a.resetTextCursor(parts[0])
 		}
 		return a
 	}
@@ -575,21 +576,42 @@ func (a App) formKey(s string, fields []string) App {
 	fieldCount := len(fields) + 1
 	switch s {
 	case "tab", "down":
+		a.clearCurrentTextCursor(fields)
 		a.Field = (a.Field + 1) % fieldCount
 	case "shift+tab", "up":
+		a.clearCurrentTextCursor(fields)
 		a.Field = (a.Field - 1 + fieldCount) % fieldCount
+	case "left":
+		if a.Field < len(fields) {
+			a.moveTextCursor(fields[a.Field], -1)
+		}
+	case "right":
+		if a.Field < len(fields) {
+			a.moveTextCursor(fields[a.Field], 1)
+		}
 	case "backspace":
 		if a.Field >= len(fields) {
 			return a
 		}
 		field := fields[a.Field]
-		if len(a.Form[field]) > 0 {
-			a.Form[field] = a.Form[field][:len(a.Form[field])-1]
+		if cursor := a.textCursor(field); cursor > 0 {
+			runes := []rune(a.Form[field])
+			a.Form[field] = string(append(runes[:cursor-1], runes[cursor:]...))
+			a.setTextCursor(field, cursor-1)
 		}
 	default:
 		if isTextInputKey(s) && a.Field < len(fields) {
 			field := fields[a.Field]
-			a.Form[field] = normalizeFieldInput(field, a.Form[field], s)
+			current := a.Form[field]
+			cursor := a.textCursor(field)
+			runes := []rune(current)
+			next := string(runes[:cursor]) + s + string(runes[cursor:])
+			a.Form[field] = normalizeFieldValue(field, next)
+			if field == "name" {
+				a.resetTextCursor(field)
+			} else {
+				a.setTextCursor(field, cursor+len([]rune(s)))
+			}
 		}
 	}
 	return a
@@ -799,7 +821,7 @@ func (a App) accountList(includeHidden bool) string {
 		})
 	}
 	var lines []string
-	lines = append(lines, "> filter : "+placeholder(filter, "(type anything...)"), "")
+	lines = append(lines, "> filter : "+caretAtEnd(placeholder(filter, "(type anything...)")), "")
 	if len(visible) == 0 {
 		lines = append(lines, "  (no results)")
 		return strings.Join(lines, "\n") + "\n"
@@ -981,7 +1003,11 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 		if locked != nil && locked[field] != "" {
 			value = locked[field]
 		}
-		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, placeholder(value, placeholderFor(field))))
+		renderedValue := placeholder(value, placeholderFor(field))
+		if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
+			renderedValue = renderCaret(value, placeholderFor(field), a.textCursor(field))
+		}
+		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, renderedValue))
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
 			fieldOptions := options[field]
@@ -1015,7 +1041,7 @@ func (a App) currencySelectLines(options []string) []string {
 	page := clampCurrencyPage(parseFormInt(a.Form["_currency_page"]), cursor, len(filtered))
 	start := page * currencyPageSize
 	end := min(start+currencyPageSize, len(filtered))
-	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", caretAtEnd(placeholder(filter, "(type anything...)"))), ""}
 	if len(filtered) == 0 {
 		lines = append(lines, "     (no matching currencies)", "", "     [00/00]")
 		return lines
@@ -1064,10 +1090,14 @@ func placeholderFor(field string) string {
 }
 
 func normalizeFieldInput(field, current, input string) string {
+	return normalizeFieldValue(field, current+input)
+}
+
+func normalizeFieldValue(field, value string) string {
 	if field != "name" {
-		return current + input
+		return value
 	}
-	return sanitizeSlug(current + input)
+	return sanitizeSlug(value)
 }
 
 func isTextInputKey(input string) bool {
@@ -1157,6 +1187,61 @@ func trimLastRune(s string) string {
 	}
 	runes := []rune(s)
 	return string(runes[:len(runes)-1])
+}
+
+func cursorKey(field string) string { return "_cursor:" + field }
+
+func (a App) textCursor(field string) int {
+	size := len([]rune(a.Form[field]))
+	raw, ok := a.Form[cursorKey(field)]
+	if !ok {
+		return size
+	}
+	cursor := parseFormInt(raw)
+	if cursor < 0 {
+		return 0
+	}
+	if cursor > size {
+		return size
+	}
+	return cursor
+}
+
+func (a App) setTextCursor(field string, cursor int) {
+	size := len([]rune(a.Form[field]))
+	cursor = max(0, min(cursor, size))
+	a.Form[cursorKey(field)] = strconv.Itoa(cursor)
+}
+
+func (a App) resetTextCursor(field string) {
+	a.setTextCursor(field, len([]rune(a.Form[field])))
+}
+
+func (a App) moveTextCursor(field string, delta int) {
+	a.setTextCursor(field, a.textCursor(field)+delta)
+}
+
+func (a App) clearCurrentTextCursor(fields []string) {
+	if a.Field < len(fields) {
+		delete(a.Form, cursorKey(fields[a.Field]))
+	}
+}
+
+func isFormTextField(field string, options map[string][]string) bool {
+	return options == nil || len(options[field]) == 0
+}
+
+func caretAtEnd(value string) string {
+	return value + "|"
+}
+
+func renderCaret(value, fallback string, cursor int) string {
+	if value == "" {
+		return caretAtEnd(fallback)
+	}
+	runes := []rune(value)
+	cursor = max(0, min(cursor, len(runes)))
+	return string(runes[:cursor]) + "|" + string(runes[cursor:])
 }
 
 func sanitizeSlug(input string) string {
