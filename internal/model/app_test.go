@@ -130,6 +130,7 @@ func TestAccountListReadmeShape(t *testing.T) {
 	if strings.Contains(view, "> 1) cash") {
 		t.Fatalf("account list rows should not render menu numbers:\n%s", view)
 	}
+	assertOrdered(t, view, "TOTAL |", "\n\n> cash")
 	app.Path = "/accounts/hidden/"
 	app.Menu = 0
 	view = app.View()
@@ -308,7 +309,7 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/"
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"hidden    : true", "> 1) show account", "  2) balances", "  3) transactions (TODO)", "  4) edit account"} {
+	for _, want := range []string{"hidden    : true", "> 1) balances", "  2) transactions (TODO)", "  3) edit account", "  4) show account"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden account detail missing %q:\n%s", want, view)
 		}

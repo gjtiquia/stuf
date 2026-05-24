@@ -259,6 +259,17 @@ func (a App) accountDetailKey(s, name string) App {
 	if acct.Hidden {
 		switch action {
 		case 0:
+			a.Path = "/accounts/" + name + "/balances/"
+			a.Menu = 0
+		case 1:
+			a.Path = "/accounts/" + name + "/transactions/"
+			a.Menu = 0
+		case 2:
+			a.Path = "/accounts/" + name + "/edit/"
+			a.Form = map[string]string{"name": acct.Name, "currency": acct.Code, "on-budget": fmt.Sprintf("%t", acct.OnBudget), "notes": acct.Notes}
+			a.Field = 0
+			a.Menu = 0
+		case 3:
 			updated, entry, err := a.Svc.Accounts.SetHidden(a.ctx, acct.ID, false)
 			if err != nil {
 				a.Error = err.Error()
@@ -266,17 +277,6 @@ func (a App) accountDetailKey(s, name string) App {
 			}
 			a.History = append(a.History, entry)
 			a.Path = "/accounts/" + updated.Name + "/"
-		case 1:
-			a.Path = "/accounts/" + name + "/balances/"
-			a.Menu = 0
-		case 2:
-			a.Path = "/accounts/" + name + "/transactions/"
-			a.Menu = 0
-		case 3:
-			a.Path = "/accounts/" + name + "/edit/"
-			a.Form = map[string]string{"name": acct.Name, "currency": acct.Code, "on-budget": fmt.Sprintf("%t", acct.OnBudget), "notes": acct.Notes}
-			a.Field = 0
-			a.Menu = 0
 		}
 		return a
 	}
@@ -1009,6 +1009,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 	lines = append(lines, "  "+title)
 	lines = append(lines, layout.headerLine())
 	lines = append(lines, layout.totalLine(total.Format(appCurrency)))
+	lines = append(lines, "")
 	for i, row := range rows {
 		if row.OnBudget != onBudget {
 			continue
@@ -1036,7 +1037,7 @@ func (a App) accountDetailScreen(name string) screen {
 	actions := []string{"balances", "transactions (TODO)", "edit account", "hide account"}
 	if acct.Hidden {
 		hidden = "hidden    : true\n"
-		actions = []string{"show account", "balances", "transactions (TODO)", "edit account"}
+		actions = []string{"balances", "transactions (TODO)", "edit account", "show account"}
 	}
 	return screen{
 		Path:    "/accounts/" + name + "/",
