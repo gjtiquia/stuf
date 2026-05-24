@@ -228,7 +228,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "     > HKD", "USD", "type       : filter", "left/right : next/prev page"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       EUR", "       GBP", "       JPY", "       PHP", "       USD", "     [01/06]", "type       : filter", "left/right : next/prev page"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -278,8 +278,9 @@ func TestAccountFormSpacingMatchesReadmeComponents(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	assertOrdered(t, view, "> 2) currency", "\n\n     > HKD")
-	assertOrdered(t, view, "     > HKD", "\n\n  3) on-budget")
+	assertOrdered(t, view, "> 2) currency", "\n\n   > filter  : (type anything...)")
+	assertOrdered(t, view, "   > filter  : (type anything...)", "\n\n     > HKD")
+	assertOrdered(t, view, "     [01/06]", "\n\n  3) on-budget")
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
@@ -291,12 +292,12 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 	app, _ := testApp(t)
 	app.Path = "/accounts/create/"
 	app.Field = 1
-	for _, r := range "jp" {
+	for _, r := range "j py!!🙂" {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
 	}
 	view := app.View()
-	for _, want := range []string{"currency : JPY", "filter: jp", "     > JPY"} {
+	for _, want := range []string{"currency : HKD", "filter  : JPY", "     > JPY", "     [01/01]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency filter missing %q:\n%s", want, view)
 		}
@@ -308,24 +309,80 @@ func TestCurrencySelectFiltersTypedInput(t *testing.T) {
 	}
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter: j") || !strings.Contains(view, "JPY") {
+	if view = app.View(); !strings.Contains(view, "filter  : JP") || !strings.Contains(view, "JPY") {
 		t.Fatalf("currency backspace did not update filter:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "filter: jzz") || !strings.Contains(view, "(no matching currencies)") {
+	if view = app.View(); !strings.Contains(view, "filter  : JPZZ") || !strings.Contains(view, "(no matching currencies)") || !strings.Contains(view, "[00/00]") {
 		t.Fatalf("currency no-match state missing:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
+	if app.Field != 1 {
+		t.Fatalf("enter should stay on currency when filter has no matches, field=%d", app.Field)
+	}
+	if app.Form["currency"] != "HKD" {
+		t.Fatalf("no-match filter should not overwrite selected currency, got %q", app.Form["currency"])
+	}
+	for i := 0; i < 2; i++ {
+		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		app = m.(App)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
 	if app.Field != 2 {
-		t.Fatalf("enter should confirm currency and move to on-budget, field=%d", app.Field)
+		t.Fatalf("enter should confirm highlighted currency and move to on-budget, field=%d", app.Field)
+	}
+	if app.Form["currency"] != "JPY" {
+		t.Fatalf("enter should confirm highlighted currency, got %q", app.Form["currency"])
 	}
 	if _, ok := app.Form["_currency_filter"]; ok {
 		t.Fatal("currency filter should clear after confirm")
 	}
-	if app.Form["currency"] != "JPY" {
-		t.Fatalf("no-match filter should not overwrite selected currency, got %q", app.Form["currency"])
+}
+
+func TestCurrencySelectNavigationPaginationAndSetSanitization(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	now := store.Clock().UTC().Format(time.RFC3339)
+	for _, code := range []string{"AUD", "BRL", "CAD", "CHF", "CNY", "INR", "KRW", "MXN", "NZD", "SGD", "THB"} {
+		if _, err := store.DB.ExecContext(ctx, `INSERT INTO currencies(code, name, scale, created_at, updated_at) VALUES (?, ?, 2, ?, ?)
+			ON CONFLICT(code) DO UPDATE SET name=excluded.name`, code, code, now, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app.Path = "/accounts/create/"
+	app.Field = 1
+	if view := app.View(); !strings.Contains(view, "     > HKD") || !strings.Contains(view, "       AUD") {
+		t.Fatalf("app currency should be first with remaining currencies alphabetical:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "     > AUD") {
+		t.Fatalf("down should move option cursor:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "filter  : K") || !strings.Contains(view, "KRW") {
+		t.Fatalf("k should type into currency filter:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "     > INR") || !strings.Contains(view, "[09/17]") {
+		t.Fatalf("right should move to next currency page:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	app = m.(App)
+	if view := app.View(); !strings.Contains(view, "     > HKD") || !strings.Contains(view, "[01/17]") {
+		t.Fatalf("left should move back to first currency page:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=u sd!!")})
+	app = m.(App)
+	if app.Form["currency"] != "USD" {
+		t.Fatalf("set currency should sanitize to uppercase no-space code, got %q", app.Form["currency"])
 	}
 }
 

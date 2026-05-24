@@ -3,6 +3,8 @@ package model
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +44,8 @@ type screen struct {
 	Actions []string
 	Help    []string
 }
+
+const currencyPageSize = 8
 
 func New(ctx context.Context, svc Services, cfg config.Loaded) App {
 	return App{ctx: ctx, Svc: svc, Config: cfg, Path: "/", Form: map[string]string{}}
@@ -402,59 +406,81 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 
 func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
 	const filterField = "_currency_filter"
+	const cursorField = "_currency_cursor"
+	const pageField = "_currency_page"
 	options := a.currencyOptions()
 	if a.Form["currency"] == "" {
 		a.Form["currency"] = a.Config.Config.Currency
 	}
 	filtered := filterOptions(options, a.Form[filterField])
-	selectFirstFiltered := func() {
-		filtered = filterOptions(options, a.Form[filterField])
-		if len(filtered) > 0 {
-			a.Form["currency"] = filtered[0]
-		}
+	cursor := clampCurrencyCursor(parseFormInt(a.Form[cursorField]), len(filtered))
+	a.Form[cursorField] = strconv.Itoa(cursor)
+	a.Form[pageField] = strconv.Itoa(currencyPageForCursor(cursor))
+	clearTransient := func() {
+		delete(a.Form, filterField)
+		delete(a.Form, cursorField)
+		delete(a.Form, pageField)
+	}
+	resetCursor := func() {
+		a.Form[cursorField] = "0"
+		a.Form[pageField] = "0"
 	}
 	switch s {
 	case "down":
 		if len(filtered) == 0 {
 			return a, false
 		}
-		idx := indexOf(filtered, a.Form["currency"])
-		if idx < 0 {
-			idx = 0
-		} else {
-			idx = (idx + 1) % len(filtered)
-		}
-		a.Form["currency"] = filtered[idx]
+		cursor = (cursor + 1) % len(filtered)
+		a.Form[cursorField] = strconv.Itoa(cursor)
+		a.Form[pageField] = strconv.Itoa(currencyPageForCursor(cursor))
 	case "up":
 		if len(filtered) == 0 {
 			return a, false
 		}
-		idx := indexOf(filtered, a.Form["currency"])
-		if idx < 0 {
-			idx = 0
-		} else {
-			idx = (idx - 1 + len(filtered)) % len(filtered)
+		cursor = (cursor - 1 + len(filtered)) % len(filtered)
+		a.Form[cursorField] = strconv.Itoa(cursor)
+		a.Form[pageField] = strconv.Itoa(currencyPageForCursor(cursor))
+	case "right":
+		if len(filtered) == 0 {
+			return a, false
 		}
-		a.Form["currency"] = filtered[idx]
+		page := min(parseFormInt(a.Form[pageField])+1, currencyPageCount(len(filtered))-1)
+		cursor = min(page*currencyPageSize, len(filtered)-1)
+		a.Form[cursorField] = strconv.Itoa(cursor)
+		a.Form[pageField] = strconv.Itoa(page)
+	case "left":
+		if len(filtered) == 0 {
+			return a, false
+		}
+		page := max(parseFormInt(a.Form[pageField])-1, 0)
+		cursor = min(page*currencyPageSize, len(filtered)-1)
+		a.Form[cursorField] = strconv.Itoa(cursor)
+		a.Form[pageField] = strconv.Itoa(page)
 	case "backspace":
 		a.Form[filterField] = trimLastRune(a.Form[filterField])
-		selectFirstFiltered()
-	case "tab", "enter":
-		delete(a.Form, filterField)
+		resetCursor()
+	case "tab":
+		clearTransient()
+		a.Field = min(a.Field+1, len(fields))
+	case "enter":
+		if len(filtered) == 0 {
+			return a, false
+		}
+		a.Form["currency"] = filtered[cursor]
+		clearTransient()
 		a.Field = min(a.Field+1, len(fields))
 	case "shift+tab":
-		delete(a.Form, filterField)
+		clearTransient()
 		a.Field = max(a.Field-1, 0)
-	case "left", "right":
 	default:
 		if strings.HasPrefix(s, "set currency=") {
-			a.Form["currency"] = strings.TrimPrefix(s, "set currency=")
-			delete(a.Form, filterField)
+			a.Form["currency"] = sanitizeCurrencyCode(strings.TrimPrefix(s, "set currency="))
+			clearTransient()
 			return a, false
 		}
 		if isTextInputKey(s) {
-			a.Form[filterField] += s
-			selectFirstFiltered()
+			a.Form[filterField] += sanitizeCurrencyCode(s)
+			resetCursor()
 		}
 	}
 	return a, false
@@ -496,12 +522,12 @@ func (a App) currencyOptions() []string {
 	}
 	var out []string
 	for _, cur := range currencies {
-		if cur.Code == a.Config.Config.Currency {
-			out = append([]string{cur.Code}, out...)
-			continue
+		if cur.Code != a.Config.Config.Currency {
+			out = append(out, cur.Code)
 		}
-		out = append(out, cur.Code)
 	}
+	sort.Strings(out)
+	out = append([]string{a.Config.Config.Currency}, out...)
 	if len(out) == 0 {
 		return []string{a.Config.Config.Currency}
 	}
@@ -959,17 +985,11 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
 			fieldOptions := options[field]
-			filter := ""
 			if field == "currency" {
-				filter = a.Form["_currency_filter"]
-				fieldOptions = filterOptions(fieldOptions, filter)
-			}
-			lines = append(lines, "")
-			if filter != "" {
-				lines = append(lines, "       filter: "+filter)
-			}
-			if len(fieldOptions) == 0 {
-				lines = append(lines, "       (no matching currencies)")
+				lines = append(lines, a.currencySelectLines(fieldOptions)...)
+				continue
+			} else {
+				lines = append(lines, "")
 			}
 			for _, option := range fieldOptions {
 				optionPrefix := "       "
@@ -986,6 +1006,29 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 	}
 	lines = append(lines, "", confirmPrefix+"[confirm]")
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func (a App) currencySelectLines(options []string) []string {
+	filter := a.Form["_currency_filter"]
+	filtered := filterOptions(options, filter)
+	cursor := clampCurrencyCursor(parseFormInt(a.Form["_currency_cursor"]), len(filtered))
+	page := clampCurrencyPage(parseFormInt(a.Form["_currency_page"]), cursor, len(filtered))
+	start := page * currencyPageSize
+	end := min(start+currencyPageSize, len(filtered))
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
+	if len(filtered) == 0 {
+		lines = append(lines, "     (no matching currencies)", "", "     [00/00]")
+		return lines
+	}
+	for i, option := range filtered[start:end] {
+		optionPrefix := "       "
+		if start+i == cursor {
+			optionPrefix = "     > "
+		}
+		lines = append(lines, optionPrefix+option)
+	}
+	lines = append(lines, "", fmt.Sprintf("     [%02d/%02d]", cursor+1, len(filtered)))
+	return lines
 }
 
 func menuItems(items []string, selected int) string {
@@ -1037,17 +1080,75 @@ func isTextInputKey(input string) bool {
 }
 
 func filterOptions(options []string, filter string) []string {
-	filter = strings.ToLower(strings.TrimSpace(filter))
+	filter = sanitizeCurrencyCode(filter)
 	if filter == "" {
 		return options
 	}
 	var out []string
 	for _, option := range options {
-		if strings.Contains(strings.ToLower(option), filter) {
+		if strings.Contains(option, filter) {
 			out = append(out, option)
 		}
 	}
 	return out
+}
+
+func sanitizeCurrencyCode(input string) string {
+	var b strings.Builder
+	for _, r := range input {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r + ('A' - 'a'))
+		}
+	}
+	return b.String()
+}
+
+func parseFormInt(value string) int {
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+func clampCurrencyCursor(cursor, count int) int {
+	if count <= 0 || cursor < 0 {
+		return 0
+	}
+	if cursor >= count {
+		return count - 1
+	}
+	return cursor
+}
+
+func currencyPageForCursor(cursor int) int {
+	if cursor < 0 {
+		return 0
+	}
+	return cursor / currencyPageSize
+}
+
+func currencyPageCount(count int) int {
+	if count <= 0 {
+		return 1
+	}
+	return (count + currencyPageSize - 1) / currencyPageSize
+}
+
+func clampCurrencyPage(page, cursor, count int) int {
+	if count <= 0 {
+		return 0
+	}
+	page = max(page, 0)
+	page = min(page, currencyPageCount(count)-1)
+	cursorPage := currencyPageForCursor(cursor)
+	if cursorPage != page {
+		return cursorPage
+	}
+	return page
 }
 
 func trimLastRune(s string) string {
