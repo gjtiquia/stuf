@@ -111,14 +111,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case routeAccountCreate:
 		a = a.accountCreateKey(s)
 	case routeBackup:
-		if s == "enter" || s == "1" {
-			p, err := a.Svc.Backup(a.ctx)
-			if err != nil {
-				a.Error = err.Error()
-			} else {
-				a.Error = ""
-				a.LastBackup = p
-			}
+		a = a.backupKey(s)
+	case routeSettings:
+		if isMenuBackKey(s) {
+			a.Error = ""
+			a = a.goBack()
 		}
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
@@ -144,6 +141,23 @@ func exitConfirmActions() []string {
 	return []string{"no", "yes"}
 }
 
+func (a App) backupKey(s string) App {
+	if isMenuBackKey(s) {
+		a.Error = ""
+		return a.goBack()
+	}
+	if isMenuForwardKey(s) || s == "enter" || s == "1" {
+		p, err := a.Svc.Backup(a.ctx)
+		if err != nil {
+			a.Error = err.Error()
+		} else {
+			a.Error = ""
+			a.LastBackup = p
+		}
+	}
+	return a
+}
+
 func (a App) exitConfirmKey(s string) (App, tea.Cmd) {
 	actions := exitConfirmActions()
 	switch s {
@@ -151,9 +165,9 @@ func (a App) exitConfirmKey(s string) (App, tea.Cmd) {
 		a = a.navSetMenu((a.Menu + 1) % len(actions))
 	case "up", "k", "shift+tab":
 		a = a.navSetMenu((a.Menu - 1 + len(actions)) % len(actions))
-	case "esc":
+	case "esc", "left", "h":
 		a.ExitAsk = false
-	case "enter":
+	case "enter", "right", "l":
 		return a.exitConfirmSelect(a.Menu)
 	default:
 		if len(s) == 1 && s[0] >= '1' && int(s[0]-'1') < len(actions) {
@@ -174,6 +188,17 @@ func (a App) exitConfirmSelect(idx int) (App, tea.Cmd) {
 }
 
 func (a App) menuKey(s string, routes []string) App {
+	if isMenuBackKey(s) {
+		if a.Path == routeRoot {
+			a.ExitAsk = true
+			return a.navSetMenu(0)
+		}
+		a.Error = ""
+		return a.goBack()
+	}
+	if isMenuForwardKey(s) {
+		s = "enter"
+	}
 	switch s {
 	case "down", "j", "tab":
 		a = a.navSetMenu((a.Menu + 1) % len(routes))
@@ -198,6 +223,14 @@ func (a App) menuKey(s string, routes []string) App {
 }
 
 func (a *App) actionIndex(s string, count int) int {
+	if isMenuBackKey(s) {
+		a.Error = ""
+		*a = a.goBack()
+		return -1
+	}
+	if isMenuForwardKey(s) {
+		s = "enter"
+	}
 	switch s {
 	case "down", "j", "tab":
 		*a = a.navSetMenu((a.Menu + 1) % count)
@@ -289,7 +322,7 @@ func (a App) screen() screen {
 				Path:    a.Path,
 				Context: strings.TrimRight(a.balanceSummary(name), "\n"),
 				Body:    a.balanceListBody(name),
-				Help:    listHelp(),
+				Help:    tableListHelp(),
 			}
 		}
 		if name, ok := balanceAddName(a.Path); ok {
@@ -366,9 +399,9 @@ func (a App) helpLines(s screen) []string {
 		return s.Help
 	}
 	if len(s.Actions) > 0 {
-		return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+		return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/h        : back", "right/l       : open", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
 	}
-	return []string{"esc     : back", "?       : help", "ctrl-z  : undo"}
+	return []string{"left/h  : back", "esc     : back", "?       : help", "ctrl-z  : undo"}
 }
 
 func (a App) formHelp(fields []string) []string {
@@ -382,12 +415,16 @@ func (a App) formHelp(fields []string) []string {
 }
 
 func listHelp() []string {
-	return []string{"type          : filter", "up/down       : navigate", "tab/shift-tab : navigate", "backspace     : edit filter", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+}
+
+func tableListHelp() []string {
+	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {
 	if a.Field == 1 {
-		return []string{"type       : filter", "up/down    : move cursor", "left/right : next/prev page", "enter      : confirm", "tab        : navigate", "esc        : back", "?          : help"}
+		return []string{"type       : filter", "h/l        : type in filter", "up/down    : move cursor", "left/right : next/prev page", "enter      : confirm", "tab        : navigate", "esc        : back", "?          : help"}
 	}
 	if a.Field == 2 {
 		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}

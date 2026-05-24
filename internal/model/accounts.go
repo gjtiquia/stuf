@@ -66,6 +66,20 @@ func (a App) accountCreateKey(s string) App {
 
 func (a App) accountListKey(s string, includeHidden bool) App {
 	switch s {
+	case "left":
+		a.Error = ""
+		return a.goBack()
+	case "right":
+		rows, err := a.accountListRows(includeHidden)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		return a.navPush(accountPath(rows[a.Menu].Name), 0)
 	case "up", "shift+tab":
 		rows, err := a.accountListRows(includeHidden)
 		if err != nil {

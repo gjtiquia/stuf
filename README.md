@@ -112,6 +112,13 @@ stack
 
 keyboard shortcuts
 - separate actions and keys
+- vertical navigation uses up/down, j/k, and tab/shift-tab depending on screen
+- horizontal navigation is contextual:
+    - menus: left/h behaves like esc/back; right/l behaves like enter/open (yazi-style)
+    - paginated selects: left/right changes page; h/l stays available for filter typing
+    - text fields and active filters: h/l types normally; left/right moves caret or page
+    - list-backed detail screens: left/h and right/l move to the previous/next item in the source list order
+    - only show horizontal shortcuts when the action is available (hide at boundaries)
 
 components
 - custom components, dont fight with the defaults
@@ -232,6 +239,10 @@ account flow decisions
 - after creating an account, redirect to /accounts/list/
 - mutation history is enough success feedback
 - esc means back everywhere except /, where it opens exit confirmation
+- left/h and right/l follow the horizontal navigation rules above
+- on menus, left/h and esc both go back; right/l and enter both open/confirm
+- on filterable lists, h/l type into the filter; left/right go back/open
+- on list-backed detail screens opened from a list, left/h and right/l move prev/next in that list before menu shortcuts apply
 - esc from a create form discards the draft immediately
 - ctrl-c quits immediately and gracefully
 - quitting clears undo history
@@ -422,13 +433,16 @@ ppl owe you : HKD 0.00
 
 ---
 up/down : navigate
+left/h  : back
+right/l : open
 enter   : confirm
 esc     : exit app
 ?       : help
 ```
 
 - keyboard shortcuts shown are for basic navigation
-    - j/k, tab/shift-tab can also navigate
+    - j/k, tab/shift-tab can also navigate vertically
+    - left/h and right/l provide yazi-style back/open on menus
     - 1/2/3/4/5/6/7 hotkeys
     - number hotkeys only work in menu screens, not forms
 
@@ -537,6 +551,8 @@ ppl owe you : HKD    456.00
 
 ---
 up/down : navigate
+left/h  : back
+right/l : open
 enter   : confirm
 esc     : back
 ?       : help
@@ -607,6 +623,7 @@ esc     : back
 
 ---
 type       : filter
+h/l        : type in filter
 up/down    : move cursor
 left/right : next/prev page
 enter      : confirm
@@ -817,11 +834,13 @@ off-budget  : HKD (180,000.00)
     student-loan   | HKD (200,000.00)                | negative until fully paid
 
 ---
-up/down   : navigate
-left/right: 
-enter     : confirm
-esc       : back
-?         : help
+type          : filter
+h/l           : type in filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+esc           : back
+?             : help
 ```
 
 - account balance is the latest added balance
@@ -1114,10 +1133,11 @@ as of       : 2026-05-21
 > 2026-05-21 | HKD 50,000.00 | initial balance
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+up/down/j/k : navigate
+left/right  : back/open
+enter       : confirm
+esc         : back
+?           : help
 ```
 
 - pressing enter on a balance opens the balance detail page
@@ -1144,11 +1164,12 @@ notes       : initial balance
   2) delete balance
 
 ---
-up/down : navigate
-left    : older
-enter   : confirm
-esc     : back
-?       : help
+up/down/j/k : navigate
+left/h      : older
+right/l     : newer
+enter       : confirm
+esc         : back
+?           : help
 ```
 
 - edit balance reuses the add balance form/input components
@@ -2333,6 +2354,7 @@ transaction tag input
 
 ---
 type       : filter
+h/l        : type in filter
 up/down    : move cursor
 left/right : next/prev page
 enter      : confirm
@@ -2370,6 +2392,7 @@ esc        : back
 
 ---
 type       : filter
+h/l        : type in filter
 up/down    : move cursor
 left/right : next/prev page
 enter      : confirm
@@ -2728,10 +2751,13 @@ total      : HKD  6,200.00
   2026-04 | HKD  1,200.00 | HKD      0.00 | HKD  1,200.00
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+type          : filter
+h/l           : type in filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+esc           : back
+?             : help
 ```
 
 - pressing enter on a month opens the monthly report detail
@@ -2766,12 +2792,12 @@ expenses   : HKD      0.00
   investment-hkd | HKD 10,000.00  | HKD 11,000.00  | HKD 1,000.00
 
 ---
-up/down : navigate
-left    : previous month
-right   : next month
-enter   : confirm
-esc     : back
-?       : help
+up/down       : navigate
+left/h        : previous month
+right/l       : next month
+enter         : confirm
+esc           : back
+?             : help
 ```
 
 - monthly report detail shows balance-derived growth first
@@ -2807,12 +2833,12 @@ unexplained : HKD  6,800.00
   2026-05-16 | HKD 6,500.00  | (none)      | unexplained part of credit card payment
 
 ---
-up/down : navigate
-left    : previous month
-right   : next month
-enter   : confirm
-esc     : back
-?       : help
+up/down       : navigate
+left/h        : previous month
+right/l       : next month
+enter         : confirm
+esc           : back
+?             : help
 ```
 
 - expense explanation rows are effective transaction rows
@@ -2835,10 +2861,10 @@ notes   : supermarket
 /reports/monthly/2026-05/expenses/tx-000003/
 
 ---
-left  : previous expense
-right : next expense
-esc   : back
-?     : help
+left/h  : previous expense
+right/l : next expense
+esc     : back
+?       : help
 ```
 
 - normal expense row detail is read-only for v1
@@ -2873,11 +2899,11 @@ date       | amount        | budget      | notes
 /reports/monthly/2026-05/expenses/tx-000002/remainder/
 
 ---
-up/down : navigate
-left    : previous expense
-right   : next expense
-esc     : back
-?       : help
+up/down       : navigate
+left/h        : previous expense
+right/l       : next expense
+esc           : back
+?             : help
 ```
 
 - remaining expense row detail is read-only for v1
@@ -2907,10 +2933,10 @@ growth    : HKD  5,200.00
 /reports/monthly/2026-05/accounts/hsbc-one/
 
 ---
-left  : previous month
-right : next month
-esc   : back
-?     : help
+left/h  : previous month
+right/l : next month
+esc     : back
+?       : help
 ```
 
 monthly report boundary rules

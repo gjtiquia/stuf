@@ -51,6 +51,15 @@ func (a App) balanceListTableKey(s, name string) App {
 		return a
 	}
 	switch s {
+	case "left":
+		a.Error = ""
+		return a.goBack()
+	case "right":
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		return a.navPush(accountBalancePath(name, rows[a.Menu].Date), 0)
 	case "up", "k", "shift+tab":
 		if len(rows) > 0 {
 			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
@@ -76,6 +85,30 @@ func (a App) balanceDetailKey(s, name, date string) App {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		a.Error = err.Error()
+		return a
+	}
+	rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	currentIdx := -1
+	for i, row := range rows {
+		if row.Date == date {
+			currentIdx = i
+			break
+		}
+	}
+	if isItemPrevKey(s) {
+		if currentIdx >= 0 && currentIdx < len(rows)-1 {
+			return a.navReplace(accountBalancePath(name, rows[currentIdx+1].Date), a.Menu)
+		}
+		return a
+	}
+	if isItemNextKey(s) {
+		if currentIdx > 0 {
+			return a.navReplace(accountBalancePath(name, rows[currentIdx-1].Date), a.Menu)
+		}
 		return a
 	}
 	bal, err := a.Svc.Balances.GetByAccountDate(a.ctx, acct.ID, date)
@@ -228,9 +261,32 @@ func (a App) balanceDetailScreen(name, date string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
+	rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
+	currentIdx := -1
+	for i, row := range rows {
+		if row.Date == date {
+			currentIdx = i
+			break
+		}
+	}
 	return screen{
 		Path:    accountBalancePath(name, date),
 		Context: fmt.Sprintf("account : %s\ndate    : %s\nbalance : %s\nnotes   : %s", name, date, bal.Amount.Format(acct.Code), bal.Notes),
 		Actions: []string{"edit balance", "delete balance"},
+		Help:    balanceDetailHelp(currentIdx, len(rows)),
 	}
+}
+
+func balanceDetailHelp(currentIdx, count int) []string {
+	lines := []string{"up/down/j/k : navigate", "enter       : confirm", "esc         : back", "?           : help", "ctrl-z      : undo"}
+	if currentIdx >= 0 && currentIdx < count-1 {
+		lines = append(lines, "left/h      : older")
+	}
+	if currentIdx > 0 {
+		lines = append(lines, "right/l     : newer")
+	}
+	return lines
 }

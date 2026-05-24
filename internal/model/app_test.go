@@ -1771,3 +1771,503 @@ func TestTabDoesNotNavigateCurrencySelectOptions(t *testing.T) {
 		t.Fatalf("expected on-budget field focused after tab:\n%s", view)
 	}
 }
+
+func TestMenuHorizontalBackAndOpen(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	app = m.(App)
+	if app.Path != "/accounts/" {
+		t.Fatalf("right/l should open selected menu item, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	app = m.(App)
+	if app.Path != "/" {
+		t.Fatalf("left/h should go back from menu, got %s", app.Path)
+	}
+}
+
+func TestExitConfirmHorizontalKeys(t *testing.T) {
+	app, _ := testApp(t)
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	app = m.(App)
+	if !app.ExitAsk {
+		t.Fatal("left/h on home should open exit confirmation like esc")
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	app = m.(App)
+	if app.ExitAsk {
+		t.Fatal("left/h on exit confirmation should cancel like esc")
+	}
+
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
+	m, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if cmd == nil {
+		t.Fatal("right/l on yes should quit like enter")
+	}
+	_ = m
+}
+
+func TestAccountListHLFilterText(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "alpha", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "hotel-hl", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/list/"
+	for _, r := range "hl" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> filter : hl") {
+		t.Fatalf("h/l should append to account filter:\n%s", view)
+	}
+	if !strings.Contains(view, "> hotel-hl") || strings.Contains(view, "> alpha") {
+		t.Fatalf("h/l should filter, not navigate:\n%s", view)
+	}
+}
+
+func TestAccountListLeftRightBackOpen(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRight})
+	app = m.(App)
+	if app.Path != "/accounts/cash/" {
+		t.Fatalf("right should open selected account, got %s", app.Path)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	app = m.(App)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("left should go back to account list, got %s", app.Path)
+	}
+}
+
+func TestCurrencySelectHLFilterText(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Field = 1
+	for _, r := range "hl" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> filter  : HL") {
+		t.Fatalf("h/l should append to currency filter:\n%s", view)
+	}
+}
+
+func TestTextFieldHLTyping(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Field = 3
+	for _, r := range "hl" {
+		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		app = m.(App)
+	}
+	if got := app.Form["notes"]; got != "hl" {
+		t.Fatalf("h/l should type into notes field, got %q", got)
+	}
+}
+
+func TestBalanceDetailPrevNextNavigation(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "newer"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", "older"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
+	)
+	view := app.View()
+	if !strings.Contains(view, "left/h      : older") || strings.Contains(view, "right/l     : newer") {
+		t.Fatalf("newest balance detail help should show older only:\n%s", view)
+	}
+	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/2026-05-01/" {
+		t.Fatalf("left/h should move to older balance, got %s", app.Path)
+	}
+	view = app.View()
+	if strings.Contains(view, "left/h      : older") {
+		t.Fatalf("oldest balance should hide older shortcut:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	app = m.(App)
+	if app.Path != "/accounts/cash/balances/2026-06-01/" {
+		t.Fatalf("right/l should move to newer balance, got %s", app.Path)
+	}
+}
+
+func TestMenuHorizontalArrowKeys(t *testing.T) {
+	app, _ := testApp(t)
+	app = pressRunes(app, "1")
+	if app.Path != "/accounts/" {
+		t.Fatalf("expected accounts menu, got %s", app.Path)
+	}
+	app = press(app, tea.KeyLeft)
+	if app.Path != "/" {
+		t.Fatalf("left arrow should go back from menu, got %s", app.Path)
+	}
+	app = press(app, tea.KeyRight)
+	if app.Path != "/accounts/" {
+		t.Fatalf("right arrow should open selected menu item, got %s", app.Path)
+	}
+}
+
+func TestExitConfirmRightLOnNoCancels(t *testing.T) {
+	app, _ := testApp(t)
+	app = press(app, tea.KeyEsc)
+	if !app.ExitAsk || app.Menu != 0 {
+		t.Fatalf("expected exit confirmation on no, got ExitAsk=%t Menu=%d", app.ExitAsk, app.Menu)
+	}
+	app = press(app, tea.KeyRight)
+	if app.ExitAsk {
+		t.Fatal("right/l on no should cancel exit confirmation, not quit")
+	}
+	if app.Path != "/" {
+		t.Fatalf("expected to remain on home, got %s", app.Path)
+	}
+}
+
+func TestAccountDetailHorizontalBackAndOpen(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
+	app = press(app, tea.KeyRight)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("right/l should open highlighted action, got %s", app.Path)
+	}
+	app = press(app, tea.KeyLeft)
+	if app.Path != "/accounts/cash/" {
+		t.Fatalf("left/h should go back from account detail menu, got %s", app.Path)
+	}
+}
+
+func TestBalanceDetailPrevNextTakesPriorityOverMenuBack(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
+	)
+	stackBefore := app.Nav.Len()
+	app = press(app, tea.KeyLeft)
+	if app.Path != "/accounts/cash/balances/2026-05-01/" {
+		t.Fatalf("left/h on balance detail should move to older balance, not go back, got %s", app.Path)
+	}
+	if app.Nav.Len() != stackBefore {
+		t.Fatalf("lateral balance navigation should replace route, stack went from %d to %d", stackBefore, app.Nav.Len())
+	}
+}
+
+func TestBalanceDetailBoundaryNoOps(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 1},
+	)
+	app = pressRunes(app, "l")
+	if app.Path != "/accounts/cash/balances/2026-06-01/" || app.Menu != 1 {
+		t.Fatalf("right/l at newest boundary should no-op, got path=%s menu=%d", app.Path, app.Menu)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-01/", Menu: 1},
+	)
+	app = pressRunes(app, "h")
+	if app.Path != "/accounts/cash/balances/2026-05-01/" || app.Menu != 1 {
+		t.Fatalf("left/h at oldest boundary should no-op, got path=%s menu=%d", app.Path, app.Menu)
+	}
+}
+
+func TestBalanceDetailSingleBalanceNoLateralHelp(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
+	)
+	view := app.View()
+	for _, line := range []string{"left/h      : older", "right/l     : newer", "left/h      :", "right/l     :"} {
+		if strings.Contains(view, line) {
+			t.Fatalf("single balance detail should hide lateral shortcuts, found %q in:\n%s", line, view)
+		}
+	}
+	app = pressRunes(app, "hl")
+	if app.Path != "/accounts/cash/balances/2026-06-01/" {
+		t.Fatalf("h/l with only one balance should not lateral-nav, got %s", app.Path)
+	}
+}
+
+func TestBalanceListLeftRightBackOpen(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+	)
+	app = press(app, tea.KeyLeft)
+	if app.Path != "/accounts/cash/balances/" {
+		t.Fatalf("left on balance list should go back, got %s", app.Path)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+	)
+	app = press(app, tea.KeyRight)
+	if app.Path != "/accounts/cash/balances/2026-06-01/" {
+		t.Fatalf("right on balance list should open selected balance, got %s", app.Path)
+	}
+}
+
+func TestAccountListFilterHLDoesNotTriggerBackOrOpen(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = pressRunes(app, "h")
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("h on account list should type into filter, not go back/open, got %s", app.Path)
+	}
+	if !strings.Contains(app.View(), "> filter : h") {
+		t.Fatalf("h should appear in filter:\n%s", app.View())
+	}
+}
+
+func TestCurrencySelectHLDoesNotPaginate(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	for _, code := range []string{"AUD", "BRL", "CAD", "CHF", "CNY", "INR", "KRW", "MXN", "NZD", "SGD", "THB"} {
+		if err := store.UpsertCurrencyNameOnly(ctx, code, code); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Field = 1
+	app = press(app, tea.KeyRight)
+	view := app.View()
+	if !strings.Contains(view, "     > EUR") || !strings.Contains(view, "[09/30]") {
+		t.Fatalf("right should paginate unfiltered currency options:\n%s", view)
+	}
+	app = pressRunes(app, "h")
+	view = app.View()
+	if !strings.Contains(view, "> filter  : H") {
+		t.Fatalf("h should type into currency filter instead of paginating:\n%s", view)
+	}
+	if strings.Contains(view, "     > EUR") || !strings.Contains(view, "     > HKD") {
+		t.Fatalf("h filter should reset to filtered page 1, not keep unfiltered page 2 selection:\n%s", view)
+	}
+	app = pressRunes(app, "l")
+	view = app.View()
+	if !strings.Contains(view, "> filter  : HL") {
+		t.Fatalf("l should append to currency filter, not paginate or open:\n%s", view)
+	}
+}
+
+func TestTextFieldHLAndCaretIndependence(t *testing.T) {
+	app, _ := testApp(t)
+	app.Path = "/accounts/create/"
+	app.Field = 3
+	app = pressRunes(app, "oh")
+	if app.Form["notes"] != "oh" {
+		t.Fatalf("expected notes oh, got %q", app.Form["notes"])
+	}
+	app = press(app, tea.KeyLeft)
+	if !strings.Contains(app.View(), "notes    : o|h") {
+		t.Fatalf("left should move caret independently of h/l typing:\n%s", app.View())
+	}
+}
+
+func TestBackupHorizontalKeys(t *testing.T) {
+	app, _ := testApp(t)
+	app = pressRunes(app, "7")
+	if app.Path != routeBackup {
+		t.Fatalf("expected backup screen, got %s", app.Path)
+	}
+	app = press(app, tea.KeyRight)
+	if app.LastBackup == "" {
+		t.Fatal("right/l should trigger backup like enter")
+	}
+	app = press(app, tea.KeyLeft)
+	if app.Path != "/" {
+		t.Fatalf("left/h should go back from backup, got %s", app.Path)
+	}
+}
+
+func TestSettingsHorizontalBack(t *testing.T) {
+	app, _ := testApp(t)
+	app = pressRunes(app, "6")
+	if app.Path != routeSettings {
+		t.Fatalf("expected settings screen, got %s", app.Path)
+	}
+	app = pressRunes(app, "h")
+	if app.Path != "/" {
+		t.Fatalf("left/h should go back from settings, got %s", app.Path)
+	}
+}
+
+func TestNavigationHelpFooters(t *testing.T) {
+	app, _ := testApp(t)
+	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
+
+	app = pressRunes(app, "1")
+	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
+
+	app = pressRunes(app, "1")
+	assertViewContains(t, app.View(), "h/l           : type in filter", "left/right    : back/open")
+
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+	)
+	assertViewContains(t, app.View(), "left/right    : back/open")
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
+	)
+	assertViewContains(t, app.View(), "left/h      : older")
+}
+
+func TestBalanceDetailLateralNavPreservesMenuSelection(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 1},
+	)
+	app = pressRunes(app, "h")
+	if app.Menu != 1 {
+		t.Fatalf("lateral navigation should preserve menu cursor, got %d", app.Menu)
+	}
+	if !strings.Contains(app.View(), "> 2) delete balance") {
+		t.Fatalf("menu selection should stay on delete after lateral nav:\n%s", app.View())
+	}
+}
+
+func TestAccountCreateCurrencyHelpShowsHLFilterHint(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Field = 1
+	assertViewContains(t, app.View(), "h/l        : type in filter", "left/right : next/prev page")
+}
+
+func TestBalanceDetailAtBoundaryEscStillGoesBack(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-01/", Menu: 0},
+	)
+	app = pressRunes(app, "h")
+	if app.Path != "/accounts/cash/balances/2026-05-01/" {
+		t.Fatalf("left/h at oldest boundary should stay on detail, got %s", app.Path)
+	}
+	app = press(app, tea.KeyEsc)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("esc should still go back from balance detail at boundary, got %s", app.Path)
+	}
+}
