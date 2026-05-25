@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"stuf/internal/component"
 	"stuf/internal/money"
 )
 
@@ -14,11 +15,6 @@ type accountListRow struct {
 	Notes    string
 	OnBudget bool
 	AsOf     string
-}
-
-type accountListTableLayout struct {
-	NameWidth    int
-	BalanceWidth int
 }
 
 func (a App) accountCreateKey(s string) App {
@@ -265,13 +261,13 @@ func (a App) accountListBody(includeHidden bool) string {
 	}
 	layout := accountListTableLayoutFor(visible, a.Config.Config.Currency)
 	if includeHidden {
-		lines = append(lines, layout.headerLine())
+		lines = append(lines, layout.Header("  "))
 		for i, row := range visible {
 			prefix := "  "
 			if i == a.Menu {
 				prefix = "> "
 			}
-			lines = append(lines, layout.rowLine(prefix, row.Name, row.Balance, row.Notes))
+			lines = append(lines, layout.Row(prefix, []string{row.Name, row.Balance, row.Notes}))
 		}
 		return strings.Join(lines, "\n") + "\n"
 	}
@@ -281,22 +277,17 @@ func (a App) accountListBody(includeHidden bool) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func accountListTableLayoutFor(rows []accountListRow, appCurrency string) accountListTableLayout {
-	layout := accountListTableLayout{NameWidth: len("name"), BalanceWidth: len("balance")}
-	if len(rows) == 0 {
-		return layout
-	}
+func accountListTableLayoutFor(rows []accountListRow, appCurrency string) component.TableLayout {
+	tableRows := make([][]string, 0, len(rows)+2)
 	for _, onBudget := range []bool{true, false} {
 		if total, ok := accountSectionTotal(rows, onBudget); ok {
-			layout.NameWidth = max(layout.NameWidth, len("TOTAL"))
-			layout.BalanceWidth = max(layout.BalanceWidth, len(total.Format(appCurrency)))
+			tableRows = append(tableRows, []string{"TOTAL", total.Format(appCurrency), ""})
 		}
 	}
 	for _, row := range rows {
-		layout.NameWidth = max(layout.NameWidth, len(row.Name))
-		layout.BalanceWidth = max(layout.BalanceWidth, len(row.Balance))
+		tableRows = append(tableRows, []string{row.Name, row.Balance, row.Notes})
 	}
-	return layout
+	return component.NewTableLayout([]string{"name", "balance", "notes"}, tableRows)
 }
 
 func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, bool) {
@@ -382,14 +373,14 @@ func (a App) accountListBalance(code string, native money.Money) (money.Money, s
 	return appAmount, fmt.Sprintf("%s (%s)", appAmount.Format(appCur.Code), native.Format(code)), nil
 }
 
-func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string, layout accountListTableLayout) []string {
+func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string, layout component.TableLayout) []string {
 	total, ok := accountSectionTotal(rows, onBudget)
 	if !ok {
 		return lines
 	}
 	lines = append(lines, "  "+title)
-	lines = append(lines, layout.headerLine())
-	lines = append(lines, layout.totalLine(total.Format(appCurrency)))
+	lines = append(lines, layout.Header("  "))
+	lines = append(lines, layout.Row("  ", []string{"TOTAL", total.Format(appCurrency), ""}))
 	lines = append(lines, "")
 	for i, row := range rows {
 		if row.OnBudget != onBudget {
@@ -399,7 +390,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 		if i == selected {
 			prefix = "> "
 		}
-		lines = append(lines, layout.rowLine(prefix, row.Name, row.Balance, row.Notes))
+		lines = append(lines, layout.Row(prefix, []string{row.Name, row.Balance, row.Notes}))
 	}
 	return lines
 }
@@ -445,16 +436,4 @@ func (a App) accountFormView(locked map[string]string) string {
 		"currency":  a.currencyOptions(),
 		"on-budget": {"true", "false"},
 	}, nil)
-}
-
-func (l accountListTableLayout) headerLine() string {
-	return fmt.Sprintf("  %-*s | %-*s | notes", l.NameWidth, "name", l.BalanceWidth, "balance")
-}
-
-func (l accountListTableLayout) totalLine(total string) string {
-	return fmt.Sprintf("  %-*s | %-*s |", l.NameWidth, "TOTAL", l.BalanceWidth, total)
-}
-
-func (l accountListTableLayout) rowLine(prefix, name, balance, notes string) string {
-	return fmt.Sprintf("%s%-*s | %-*s | %s", prefix, l.NameWidth, name, l.BalanceWidth, balance, notes)
 }

@@ -124,7 +124,7 @@ func TestBalanceListRenderOrder(t *testing.T) {
 		"balance     : HKD 50,000.00",
 		"as of       : 2026-05-21",
 		"/accounts/cash/balances/list/",
-		"  date       | balance      | notes",
+		"  date       | balance       | notes",
 		"> 2026-05-21 | HKD 50,000.00",
 		"---",
 	)
@@ -397,6 +397,84 @@ func TestAccountListTableColumnsAlignWithConvertedBalances(t *testing.T) {
 			t.Fatalf("notes column misaligned on line %d: want index %d, got %d\n%s", i+1, wantIdx, got, view)
 		}
 	}
+}
+
+func TestAccountListSectionsShareColumnLayout(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loan, _, err := app.Svc.Accounts.Create(ctx, "very-long-student-loan", "HKD", false, "negative until fully paid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-25", "10.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, loan.ID, "2026-05-25", "-1234567.89", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeAccountList
+	view := app.View()
+
+	var tableLines []string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, " | ") && (strings.Contains(line, "name") || strings.Contains(line, "TOTAL") || strings.Contains(line, "cash") || strings.Contains(line, "student-loan")) {
+			tableLines = append(tableLines, line)
+		}
+	}
+	if len(tableLines) < 6 {
+		t.Fatalf("expected both account sections to render table rows, got %d lines:\n%s", len(tableLines), view)
+	}
+	wantBalanceIdx := balanceColumnIndex(tableLines[0])
+	wantNotesIdx := notesColumnIndex(tableLines[0])
+	for i, line := range tableLines[1:] {
+		if got := balanceColumnIndex(line); got != wantBalanceIdx {
+			t.Fatalf("balance column misaligned on line %d: want index %d, got %d\n%s", i+1, wantBalanceIdx, got, view)
+		}
+		if got := notesColumnIndex(line); got != wantNotesIdx {
+			t.Fatalf("notes column misaligned on line %d: want index %d, got %d\n%s", i+1, wantNotesIdx, got, view)
+		}
+	}
+}
+
+func TestBalanceListColumnsAlignWithLongBalances(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "hsbc-109", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-25", "13010.40", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "17800.20", "(also fake)"); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = "/accounts/hsbc-109/balances/list/"
+	view := app.View()
+
+	var tableLines []string
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, " | ") && (strings.Contains(line, "date") || strings.Contains(line, "2026-05-25") || strings.Contains(line, "2026-05-01")) {
+			tableLines = append(tableLines, line)
+		}
+	}
+	if len(tableLines) != 3 {
+		t.Fatalf("expected balance header and two rows, got %d lines:\n%s", len(tableLines), view)
+	}
+	wantNotesIdx := notesColumnIndex(tableLines[0])
+	for i, line := range tableLines[1:] {
+		if got := notesColumnIndex(line); got != wantNotesIdx {
+			t.Fatalf("notes column misaligned on line %d: want index %d, got %d\n%s", i+1, wantNotesIdx, got, view)
+		}
+	}
+}
+
+func balanceColumnIndex(line string) int {
+	return strings.Index(line, " |")
 }
 
 func notesColumnIndex(line string) int {
