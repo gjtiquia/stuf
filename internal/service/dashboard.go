@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"stuf/internal/money"
@@ -10,11 +11,35 @@ import (
 )
 
 type Dashboard struct {
-	Period       string
-	Total        money.Money
-	OnBudgetGrow money.Money
-	TotalGrow    money.Money
-	Warnings     []string
+	Period                         string
+	Total                          money.Money
+	NetChangeFromMonthStart        money.Money
+	NetChangeFromMonthHigh         money.Money
+	NetChangeFromPreviousMonthHigh money.Money
+	RecentMonths                   []DashboardMonthDrop
+	Trend                          DashboardMonthTrend
+	Warnings                       []string
+}
+
+type DashboardMonthDrop struct {
+	Period string
+	Drop   money.Money
+}
+
+type DashboardMonthTrend struct {
+	FromPeriod string
+	ToPeriod   string
+	HighToHigh money.Money
+	LowToLow   money.Money
+}
+
+type dashboardAccountHistory struct {
+	Balances []dashboardBalance
+}
+
+type dashboardBalance struct {
+	Date   time.Time
+	Amount money.Money
 }
 
 type DashboardService struct {
@@ -30,7 +55,8 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	if s.Now != nil {
 		now = s.Now
 	}
-	period := now().Format("2006-01")
+	today := dateOnly(now())
+	period := today.Format("2006-01")
 	appCur, err := s.Currencies.GetByCode(ctx, s.AppCurrency)
 	if err != nil {
 		return Dashboard{}, err
@@ -39,63 +65,185 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	if err != nil {
 		return Dashboard{}, err
 	}
-	out := Dashboard{Period: period, Total: money.Money{Scale: appCur.Scale}, OnBudgetGrow: money.Money{Scale: appCur.Scale}, TotalGrow: money.Money{Scale: appCur.Scale}}
-	start, _ := time.Parse("2006-01-02", period+"-01")
-	end := start.AddDate(0, 1, 0)
+	zero := money.Money{Scale: appCur.Scale}
+	out := Dashboard{
+		Period:                         period,
+		Total:                          zero,
+		NetChangeFromMonthStart:        zero,
+		NetChangeFromMonthHigh:         zero,
+		NetChangeFromPreviousMonthHigh: zero,
+		RecentMonths: []DashboardMonthDrop{
+			{Period: today.AddDate(0, -1, 0).Format("2006-01"), Drop: zero},
+			{Period: today.AddDate(0, -2, 0).Format("2006-01"), Drop: zero},
+		},
+		Trend: DashboardMonthTrend{
+			FromPeriod: today.AddDate(0, -2, 0).Format("2006-01"),
+			ToPeriod:   today.AddDate(0, -1, 0).Format("2006-01"),
+			HighToHigh: zero,
+			LowToLow:   zero,
+		},
+	}
+	histories := []dashboardAccountHistory{}
+	warned := map[string]bool{}
 	for _, a := range accounts {
+		if !a.OnBudget {
+			continue
+		}
 		cur, err := s.Currencies.GetByID(ctx, a.CurrencyID)
 		if err != nil {
 			return Dashboard{}, err
-		}
-		if b, ok, err := s.Balances.LatestByAccount(ctx, a.ID); err != nil {
-			return Dashboard{}, err
-		} else if ok {
-			converted, err := money.Convert(b.Amount, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
-			if err != nil {
-				out.Warnings = append(out.Warnings, fmt.Sprintf("missing conversion for %s", cur.Code))
-			} else {
-				out.Total, _ = out.Total.Add(converted)
-			}
 		}
 		bs, err := s.Balances.ListByAccount(ctx, a.ID)
 		if err != nil {
 			return Dashboard{}, err
 		}
-		growthNative := boundaryValue(bs, end)
-		startNative := boundaryValue(bs, start)
-		growthNative.Amount -= startNative.Amount
-		converted, err := money.Convert(growthNative, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
-		if err == nil {
-			out.TotalGrow, _ = out.TotalGrow.Add(converted)
-			if a.OnBudget {
-				out.OnBudgetGrow, _ = out.OnBudgetGrow.Add(converted)
+		history := dashboardAccountHistory{}
+		for _, b := range bs {
+			balanceDate, err := parseDashboardDate(b.Date, today.Location())
+			if err != nil || balanceDate.After(today) {
+				continue
 			}
+			converted, err := money.Convert(b.Amount, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
+			if err != nil {
+				if !warned[cur.Code] {
+					out.Warnings = append(out.Warnings, fmt.Sprintf("missing conversion for %s", cur.Code))
+					warned[cur.Code] = true
+				}
+				continue
+			}
+			history.Balances = append(history.Balances, dashboardBalance{Date: balanceDate, Amount: converted})
+		}
+		if len(history.Balances) > 0 {
+			sort.Slice(history.Balances, func(i, j int) bool {
+				return history.Balances[i].Date.Before(history.Balances[j].Date)
+			})
+			histories = append(histories, history)
 		}
 	}
+	out.Total = totalLatestValue(histories, today, zero)
+	monthStart := totalNearestValue(histories, monthBoundary(today), zero)
+	monthHigh, _ := monthHighLow(histories, today, today, zero)
+	prevMonth := today.AddDate(0, -1, 0)
+	prevPrevMonth := today.AddDate(0, -2, 0)
+	prevHigh, prevLow := monthHighLow(histories, prevMonth, today, zero)
+	prevPrevHigh, prevPrevLow := monthHighLow(histories, prevPrevMonth, today, zero)
+	out.NetChangeFromMonthStart, _ = out.Total.Sub(monthStart)
+	out.NetChangeFromMonthHigh, _ = out.Total.Sub(monthHigh)
+	out.NetChangeFromPreviousMonthHigh, _ = out.Total.Sub(prevHigh)
+	out.RecentMonths[0].Drop, _ = prevLow.Sub(prevHigh)
+	out.RecentMonths[1].Drop, _ = prevPrevLow.Sub(prevPrevHigh)
+	out.Trend.HighToHigh, _ = prevHigh.Sub(prevPrevHigh)
+	out.Trend.LowToLow, _ = prevLow.Sub(prevPrevLow)
 	return out, nil
 }
 
-func boundaryValue(balances []repo.Balance, boundary time.Time) money.Money {
-	if len(balances) == 0 {
-		return money.Money{Scale: 2}
-	}
-	best := balances[0]
-	bestDist := absDays(best.Date, boundary)
-	for _, b := range balances[1:] {
-		dist := absDays(b.Date, boundary)
-		if dist < bestDist || (dist == bestDist && b.Date < best.Date) {
-			best, bestDist = b, dist
+func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero money.Money) money.Money {
+	total := zero
+	for _, history := range histories {
+		value, ok := latestAccountValue(history, today)
+		if ok {
+			total, _ = total.Add(value)
 		}
 	}
-	return best.Amount
+	return total
 }
 
-func absDays(date string, boundary time.Time) int {
-	t, err := time.Parse("2006-01-02", date)
-	if err != nil {
-		return 1 << 30
+func totalNearestValue(histories []dashboardAccountHistory, target time.Time, zero money.Money) money.Money {
+	total := zero
+	for _, history := range histories {
+		value, ok := nearestAccountValue(history, target)
+		if ok {
+			total, _ = total.Add(value)
+		}
 	}
-	d := int(t.Sub(boundary).Hours() / 24)
+	return total
+}
+
+func monthHighLow(histories []dashboardAccountHistory, month, today time.Time, zero money.Money) (money.Money, money.Money) {
+	var high, low money.Money
+	ok := false
+	for _, date := range monthCandidateDates(histories, month, today) {
+		value := totalNearestValue(histories, date, zero)
+		if !ok || value.Amount > high.Amount {
+			high = value
+		}
+		if !ok || value.Amount < low.Amount {
+			low = value
+		}
+		ok = true
+	}
+	if !ok {
+		return zero, zero
+	}
+	return high, low
+}
+
+func latestAccountValue(history dashboardAccountHistory, today time.Time) (money.Money, bool) {
+	for i := len(history.Balances) - 1; i >= 0; i-- {
+		if !history.Balances[i].Date.After(today) {
+			return history.Balances[i].Amount, true
+		}
+	}
+	return money.Money{}, false
+}
+
+func nearestAccountValue(history dashboardAccountHistory, target time.Time) (money.Money, bool) {
+	if len(history.Balances) == 0 {
+		return money.Money{}, false
+	}
+	best := history.Balances[0]
+	bestDist := absDuration(best.Date.Sub(target))
+	for _, balance := range history.Balances[1:] {
+		dist := absDuration(balance.Date.Sub(target))
+		if dist < bestDist || (dist == bestDist && balance.Date.Before(best.Date)) {
+			best = balance
+			bestDist = dist
+		}
+	}
+	return best.Amount, true
+}
+
+func monthCandidateDates(histories []dashboardAccountHistory, month, today time.Time) []time.Time {
+	seen := map[string]bool{}
+	var dates []time.Time
+	for _, history := range histories {
+		for _, balance := range history.Balances {
+			if balance.Date.After(today) || !sameMonth(balance.Date, month) {
+				continue
+			}
+			key := balance.Date.Format("2006-01-02")
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			dates = append(dates, balance.Date)
+		}
+	}
+	sort.Slice(dates, func(i, j int) bool {
+		return dates[i].Before(dates[j])
+	})
+	return dates
+}
+
+func sameMonth(date, month time.Time) bool {
+	return date.Format("2006-01") == month.Format("2006-01")
+}
+
+func monthBoundary(t time.Time) time.Time {
+	y, m, _ := t.Date()
+	return time.Date(y, m, 1, 0, 0, 0, 0, t.Location())
+}
+
+func parseDashboardDate(date string, loc *time.Location) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", date, loc)
+}
+
+func dateOnly(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+func absDuration(d time.Duration) time.Duration {
 	if d < 0 {
 		return -d
 	}

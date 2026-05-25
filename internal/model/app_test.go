@@ -45,14 +45,14 @@ func appWithNav(app App, frames ...navFrame) App {
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
-	for _, want := range []string{"# stuf", "total       : HKD 0.00", "period      : 2026-05", "transactions (TODO)"} {
+	for _, want := range []string{"# stuf", "total       : HKD 0.00", "period      : 2026-05", "on-budget net change to today", "on-budget mar to apr trends", "transactions (TODO)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
 	}
 }
 
-func TestDashboardRendersGrowthFromBalanceSnapshots(t *testing.T) {
+func TestDashboardRendersNetChangeFromBalanceSnapshots(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
 	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
@@ -62,23 +62,30 @@ func TestDashboardRendersGrowthFromBalanceSnapshots(t *testing.T) {
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-02", "100.00", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", ""); err != nil {
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-10", "150.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-24", "130.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "999.00", ""); err != nil {
 		t.Fatal(err)
 	}
 	view := app.View()
 	for _, want := range []string{
-		"total       : HKD 150.00",
-		"growth",
-		"on-budget   : HKD  50.00",
-		"total       : HKD  50.00",
+		"total       : HKD  130.00",
+		"on-budget net change to today",
+		"from may start : HKD   30.00",
+		"from may high  : HKD ( 20.00)",
+		"from apr high  : HKD  130.00",
 	} {
 		if !strings.Contains(view, want) {
-			t.Fatalf("dashboard growth missing %q:\n%s", want, view)
+			t.Fatalf("dashboard net change missing %q:\n%s", want, view)
 		}
 	}
 }
 
-func TestDashboardMoneyDecimalsAlignWithNegativeGrowth(t *testing.T) {
+func TestDashboardMoneyDecimalsAlignWithNegativeNetChange(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
 	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
@@ -95,13 +102,17 @@ func TestDashboardMoneyDecimalsAlignWithNegativeGrowth(t *testing.T) {
 	lines := linesContainingAny(view, []string{
 		"total       : HKD",
 		"budgeted    : HKD",
-		"on-budget   : HKD",
+		"from may start : HKD",
+		"from may high  : HKD",
+		"from apr high  : HKD",
+		"high to high    : HKD",
 		"you owe ppl : HKD",
 		"ppl owe you : HKD",
 	})
+	lines = moneyParts(lines)
 	assertSamePrimaryPunctuationIndex(t, lines, ".")
-	if !strings.Contains(view, "on-budget   : HKD (23,943.48)") {
-		t.Fatalf("negative growth should use aligned accounting format:\n%s", view)
+	if !strings.Contains(view, "from may start : HKD (23,943.48)") {
+		t.Fatalf("negative net change should use aligned accounting format:\n%s", view)
 	}
 }
 
@@ -122,9 +133,10 @@ func TestAccountListRenderOrder(t *testing.T) {
 	assertRenderOrder(t, view,
 		"# stuf",
 		"total       : HKD 0.00",
-		"growth",
-		"on-budget   : HKD 0.00",
-		"total       : HKD 0.00",
+		"on-budget net change to today",
+		"from may start : HKD 0.00",
+		"on-budget recent months",
+		"on-budget mar to apr trends",
 		"/accounts/list/",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
@@ -677,6 +689,16 @@ func linesContainingAny(text string, needles []string) []string {
 				out = append(out, line)
 				break
 			}
+		}
+	}
+	return out
+}
+
+func moneyParts(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if idx := strings.Index(line, "HKD"); idx >= 0 {
+			out = append(out, line[idx:])
 		}
 	}
 	return out
