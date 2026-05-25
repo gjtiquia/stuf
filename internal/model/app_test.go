@@ -2213,6 +2213,57 @@ func TestAccountListFilterHLDoesNotTriggerBackOrOpen(t *testing.T) {
 	}
 }
 
+func TestCtrlNFromAccountListsOpensCreate(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/accounts/create/" {
+		t.Fatalf("ctrl+n on account list should open account create, got %s", app.Path)
+	}
+	if app.Field != 0 {
+		t.Fatalf("account create should start on first field, got field=%d", app.Field)
+	}
+
+	app, _ = testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/hidden/", Menu: 0})
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/accounts/create/" {
+		t.Fatalf("ctrl+n on hidden account list should open account create, got %s", app.Path)
+	}
+}
+
+func TestPlainNStillTypesIntoAccountListFilter(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = pressRunes(app, "n")
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("plain n should stay on account list, got %s", app.Path)
+	}
+	if !strings.Contains(app.View(), "> filter : n") {
+		t.Fatalf("plain n should appear in filter:\n%s", app.View())
+	}
+}
+
+func TestCtrlNFromBalanceListOpensAdd(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+	)
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/accounts/cash/balances/add/" {
+		t.Fatalf("ctrl+n on balance list should open add balance, got %s", app.Path)
+	}
+	if app.Form["date"] != Today() || app.Field != 0 {
+		t.Fatalf("balance add defaults not initialized: form=%#v field=%d", app.Form, app.Field)
+	}
+}
+
 func TestCurrencySelectHLDoesNotPaginate(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()
@@ -2293,7 +2344,7 @@ func TestNavigationHelpFooters(t *testing.T) {
 	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
 
 	app = pressRunes(app, "1")
-	assertViewContains(t, app.View(), "h/l           : type in filter", "left/right    : back/open")
+	assertViewContains(t, app.View(), "h/l           : type in filter", "left/right    : back/open", "ctrl+n        : new")
 
 	ctx := context.Background()
 	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
@@ -2311,7 +2362,7 @@ func TestNavigationHelpFooters(t *testing.T) {
 		navFrame{Path: "/accounts/cash/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 	)
-	assertViewContains(t, app.View(), "left/right    : back/open")
+	assertViewContains(t, app.View(), "left/right    : back/open", "ctrl+n        : new")
 
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},

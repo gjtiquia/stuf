@@ -119,6 +119,8 @@ keyboard shortcuts
     - text fields and active filters: h/l types normally; left/right moves caret or page
     - list-backed detail screens: left/h and right/l move to the previous/next item in the source list order
     - only show horizontal shortcuts when the action is available (hide at boundaries)
+- ctrl+n is the canonical shortcut for creating/appending a new element from a list screen when that list has a matching create/add flow
+- plain letter keys stay available for list filters
 
 components
 - custom components, dont fight with the defaults
@@ -242,6 +244,7 @@ account flow decisions
 - left/h and right/l follow the horizontal navigation rules above
 - on menus, left/h and esc both go back; right/l and enter both open/confirm
 - on filterable lists, h/l type into the filter; left/right go back/open
+- on lists with a create/add flow, ctrl+n opens the matching new element form
 - on list-backed detail screens opened from a list, left/h and right/l move prev/next in that list before menu shortcuts apply
 - esc from a create form discards the draft immediately
 - ctrl-c quits immediately and gracefully

@@ -3,8 +3,8 @@ package model
 import (
 	"context"
 	"fmt"
-	"strings"
 	tea "github.com/charmbracelet/bubbletea"
+	"strings"
 	"stuf/internal/config"
 	"stuf/internal/service"
 )
@@ -415,11 +415,11 @@ func (a App) formHelp(fields []string) []string {
 }
 
 func listHelp() []string {
-	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func tableListHelp() []string {
-	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "enter         : confirm", "ctrl+n        : new", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {

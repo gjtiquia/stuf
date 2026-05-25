@@ -42,6 +42,12 @@ func (a App) balanceMenuKey(s, name string) App {
 }
 
 func (a App) balanceListTableKey(s, name string) App {
+	if isNewKey(s) {
+		a.Error = ""
+		a.Form = map[string]string{"date": Today()}
+		a.Field = 0
+		return a.navPush(accountBalanceAddPath(name), 0)
+	}
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		a.Error = err.Error()

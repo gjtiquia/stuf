@@ -61,6 +61,11 @@ func (a App) accountCreateKey(s string) App {
 }
 
 func (a App) accountListKey(s string, includeHidden bool) App {
+	if isNewKey(s) {
+		a.Error = ""
+		a.Field = 0
+		return a.navPush(routeAccountCreate, 0)
+	}
 	switch s {
 	case "left":
 		a.Error = ""

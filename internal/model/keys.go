@@ -5,6 +5,7 @@ package model
 // - paginated selects: left/right page; h/l stay available for filter typing
 // - list-backed detail: left/h previous item, right/l next item
 // - text fields: left/right move caret; h/l type normally
+// - list screens: ctrl+n opens the matching create/add flow when one exists
 
 func isMenuBackKey(s string) bool {
 	return s == "left" || s == "h"
@@ -20,6 +21,10 @@ func isItemPrevKey(s string) bool {
 
 func isItemNextKey(s string) bool {
 	return isMenuForwardKey(s)
+}
+
+func isNewKey(s string) bool {
+	return s == "ctrl+n"
 }
 
 func isVerticalNextKey(s string) bool {
