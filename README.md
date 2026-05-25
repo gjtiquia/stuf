@@ -76,10 +76,22 @@ outcomes of using `stuf`
 - open to making it a web app as well in the future
 
 basic top down flow
-- monthly bank statement balances -> net growth/loss
+- monthly bank statement balances -> net change / growth context
 - monthly income -> net cash flow in/out
 - lump sum (eg. credit card payment) -> cash flow out sources, percentage of expense, tagging
 - transactions -> tagging and deeper analysis; should link to lump sum to prevent "double counting"
+
+dashboard net change
+- use net change, not net growth, for the current month dashboard number
+- growth has an expectation of growth baked into the word
+- but month-to-date movement is often negative in a completely normal way
+- income usually arrives first, then expenses come after, whether income lands at the beginning, middle, or end of the month
+- so the dashboard should not make normal spending feel like failure
+- it should answer: how did i do so far this month?
+- the current month needs reference points so i can tell whether the expected drop is larger than expected, about the same, or better than before
+- previous month drops give more context for what normal spending looks like
+- longer month-to-month trends show whether assets are still growing despite the spending inside each month
+- this keeps the dashboard aligned with the app promise: balance snapshots anchor the truth, imperfect details are okay, and the app stays guilt-free
 
 lazy reconciliation
 - balance snapshots anchor everything
@@ -423,11 +435,20 @@ v1 edge rules before schema
 total       : HKD 0.00
 budgeted    : HKD 0.00
 
-period      : 2026-05
+period      : 2026-03
 
-growth
-on-budget  : HKD 0.00
-total      : HKD 0.00
+net change to today
+from mar start : HKD (2,100.00)
+from mar high  : HKD (8,000.00)
+from feb high  : HKD (4,500.00)
+
+recent months
+feb high to low : HKD (19,000.00)
+jan high to low : HKD (22,000.00)
+
+jan to feb trends
+high to high    : HKD  5,000.00
+low to low      : HKD  8,000.00
 
 you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
