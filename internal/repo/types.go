@@ -28,6 +28,28 @@ type Account struct {
 	UpdatedAt  string
 }
 
+type AccountDuplicateNameError struct {
+	Name string
+}
+
+func (e *AccountDuplicateNameError) Error() string {
+	if e.Name == "" {
+		return "account already exists; choose another name"
+	}
+	return fmt.Sprintf("account already exists: %s; choose another name", e.Name)
+}
+
+type CurrencyUnavailableError struct {
+	Code string
+}
+
+func (e *CurrencyUnavailableError) Error() string {
+	if e.Code == "" {
+		return "currency is unavailable"
+	}
+	return fmt.Sprintf("currency is unavailable: %s", e.Code)
+}
+
 type Balance struct {
 	ID        int64
 	AccountID int64

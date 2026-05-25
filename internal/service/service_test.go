@@ -51,6 +51,69 @@ func TestAccountMutationRecordsHistoryAndUndo(t *testing.T) {
 	}
 }
 
+func TestAccountDuplicateNameReturnsDomainError(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, _, _, _ := serviceStack(t)
+	cash, _, err := accounts.Create(ctx, "cash", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.Create(ctx, "cash", "", true, "duplicate"); err == nil {
+		t.Fatal("expected duplicate account name error")
+	} else {
+		var dup *repo.AccountDuplicateNameError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate account name domain error, got %T %[1]v", err)
+		}
+		if dup.Name != "cash" {
+			t.Fatalf("duplicate account name = %q", dup.Name)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("duplicate account error should hide raw sqlite error: %v", err)
+		}
+	}
+	savings, _, err := accounts.Create(ctx, "savings", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.Update(ctx, savings.ID, "cash", "HKD", true, false, "collides"); err == nil {
+		t.Fatal("expected duplicate account name error on update")
+	} else {
+		var dup *repo.AccountDuplicateNameError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate account name domain error on update, got %T %[1]v", err)
+		}
+		if dup.Name != "cash" {
+			t.Fatalf("update duplicate account name = %q", dup.Name)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("update duplicate account error should hide raw sqlite error: %v", err)
+		}
+	}
+	if got, err := accounts.GetByName(ctx, "cash"); err != nil || got.ID != cash.ID {
+		t.Fatalf("original account should remain, got %+v err=%v", got, err)
+	}
+}
+
+func TestAccountInvalidCurrencyReturnsFriendlyError(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, _, _, _ := serviceStack(t)
+	if _, _, err := accounts.Create(ctx, "cash", "ZZZ", true, ""); err == nil {
+		t.Fatal("expected invalid currency error")
+	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
+		t.Fatalf("invalid currency error = %q", got)
+	}
+	acct, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.Update(ctx, acct.ID, "cash", "ZZZ", true, false, ""); err == nil {
+		t.Fatal("expected invalid currency update error")
+	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
+		t.Fatalf("invalid currency update error = %q", got)
+	}
+}
+
 func TestBalanceMutationsAndUndo(t *testing.T) {
 	ctx := context.Background()
 	s, accounts, balances, _, history := serviceStack(t)

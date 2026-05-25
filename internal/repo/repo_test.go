@@ -68,6 +68,17 @@ func TestAccountBalanceHistoryRepos(t *testing.T) {
 	}
 	if _, err := s.Acct.Create(ctx, AccountCreate{Name: "hsbc-one", CurrencyID: hkd.ID, OnBudget: true}); err == nil {
 		t.Fatal("expected unique account name error")
+	} else {
+		var dup *AccountDuplicateNameError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate account name domain error, got %T %[1]v", err)
+		}
+		if dup.Name != "hsbc-one" {
+			t.Fatalf("duplicate account name = %q", dup.Name)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("duplicate account error should hide raw sqlite error: %v", err)
+		}
 	}
 	b, err := s.Bal.Create(ctx, BalanceCreate{AccountID: a.ID, Date: "2026-05-01", Amount: money.Money{Amount: 5000000, Scale: 2}})
 	if err != nil {
@@ -235,8 +246,10 @@ func TestCurrencyGetByIDListNotFoundAndMissingRate(t *testing.T) {
 			t.Fatalf("list not ordered by code: %+v", list)
 		}
 	}
-	if _, err := s.Cur.GetByCode(ctx, "ZZZ"); err == nil || !strings.Contains(err.Error(), "currency not found") {
+	if _, err := s.Cur.GetByCode(ctx, "ZZZ"); err == nil || err.Error() != "currency is unavailable: ZZZ" {
 		t.Fatalf("expected not found, got %v", err)
+	} else if strings.Contains(err.Error(), "sql: no rows") {
+		t.Fatalf("currency error should hide raw sql error: %v", err)
 	}
 }
 

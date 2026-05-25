@@ -2,9 +2,13 @@ package repo
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"stuf/internal/db"
+
+	"modernc.org/sqlite"
 )
 
 type AccountRepo struct{ store *Store }
@@ -27,7 +31,7 @@ func (r *AccountRepo) Create(ctx context.Context, in AccountCreate) (Account, er
 		UpdatedAt:  now,
 	})
 	if err != nil {
-		return Account{}, err
+		return Account{}, mapAccountWriteErr(err, in.Name)
 	}
 	id, _ := res.LastInsertId()
 	return r.GetByID(ctx, id)
@@ -83,7 +87,7 @@ func (r *AccountRepo) Update(ctx context.Context, a Account) (Account, error) {
 		UpdatedAt:  now,
 		ID:         a.ID,
 	}); err != nil {
-		return Account{}, err
+		return Account{}, mapAccountWriteErr(err, a.Name)
 	}
 	return r.GetByID(ctx, a.ID)
 }
@@ -105,4 +109,19 @@ func boolInt(v bool) int64 {
 		return 1
 	}
 	return 0
+}
+
+func mapAccountWriteErr(err error, name string) error {
+	if isAccountDuplicateNameErr(err) {
+		return &AccountDuplicateNameError{Name: name}
+	}
+	return err
+}
+
+func isAccountDuplicateNameErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "accounts.name")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: accounts.name")
 }

@@ -9,7 +9,7 @@ type CurrencyRepo struct{ store *Store }
 func (r *CurrencyRepo) GetByCode(ctx context.Context, code string) (Currency, error) {
 	row, err := r.store.Q.GetCurrencyByCode(ctx, code)
 	if err != nil {
-		return Currency{}, mapCurrencyErr(err)
+		return Currency{}, mapCurrencyErrWithCode(err, code)
 	}
 	return currencyFromCodeRow(row), nil
 }

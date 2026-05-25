@@ -152,7 +152,7 @@ func (a App) backupKey(s string) App {
 	if isMenuForwardKey(s) || s == "enter" || s == "1" {
 		p, err := a.Svc.Backup(a.ctx)
 		if err != nil {
-			a.Error = err.Error()
+			a.Error = "could not create backup: " + err.Error()
 		} else {
 			a.Error = ""
 			a.LastBackup = p

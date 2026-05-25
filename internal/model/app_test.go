@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -937,6 +938,179 @@ func TestCtrlSValidationErrorPreservesAccountForm(t *testing.T) {
 	}
 	if app.Form["name"] != "cash" || app.Form["notes"] != "keep me" {
 		t.Fatalf("ctrl+s validation error should preserve form, got %#v", app.Form)
+	}
+}
+
+func TestAccountCreateDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true", "notes": "keep me"}
+	app.Field = 4
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/create/" {
+		t.Fatalf("duplicate account create should stay on form, got %s", app.Path)
+	}
+	if app.Field != 4 {
+		t.Fatalf("duplicate account create should preserve field, got %d", app.Field)
+	}
+	if app.Form["name"] != "cash" || app.Form["notes"] != "keep me" {
+		t.Fatalf("duplicate account create should preserve form, got %#v", app.Form)
+	}
+	view := app.View()
+	if !strings.Contains(view, "account already exists: cash; choose another name") {
+		t.Fatalf("duplicate account create should show friendly error:\n%s", view)
+	}
+	for _, raw := range []string{"UNIQUE constraint failed", "constraint failed", "sql: no rows"} {
+		if strings.Contains(view, raw) {
+			t.Fatalf("duplicate account create should hide raw error %q:\n%s", raw, view)
+		}
+	}
+	if len(app.History) != 0 {
+		t.Fatalf("duplicate account create should not append history, got %d entries", len(app.History))
+	}
+
+	app = press(app, tea.KeyShiftTab)
+	if app.Field != 3 {
+		t.Fatalf("shift+tab after duplicate account error should move cursor to notes, got %d", app.Field)
+	}
+	app.Form["name"] = "wallet"
+	app.Field = 4
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("corrected account create should return to list, got %s", app.Path)
+	}
+	if _, err := store.Acct.GetByName(ctx, "wallet"); err != nil {
+		t.Fatalf("corrected account was not saved: %v", err)
+	}
+}
+
+func TestAccountEditDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "savings", "HKD", true, "rainy"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/cash/edit/" {
+		t.Fatalf("ctrl+e should open account edit form, got %s", app.Path)
+	}
+	app.Form = map[string]string{"name": "savings", "currency": "HKD", "on-budget": "true", "notes": "rename collision"}
+	app.Field = 4
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/edit/" {
+		t.Fatalf("duplicate account edit should stay on form, got %s", app.Path)
+	}
+	if app.Field != 4 {
+		t.Fatalf("duplicate account edit should preserve field, got %d", app.Field)
+	}
+	if app.Form["name"] != "savings" || app.Form["notes"] != "rename collision" {
+		t.Fatalf("duplicate account edit should preserve form, got %#v", app.Form)
+	}
+	view := app.View()
+	if !strings.Contains(view, "account already exists: savings; choose another name") {
+		t.Fatalf("duplicate account edit should show friendly error:\n%s", view)
+	}
+	for _, raw := range []string{"UNIQUE constraint failed", "constraint failed", "sql: no rows"} {
+		if strings.Contains(view, raw) {
+			t.Fatalf("duplicate account edit should hide raw error %q:\n%s", raw, view)
+		}
+	}
+	if len(app.History) != 0 {
+		t.Fatalf("duplicate account edit should not append history, got %d entries", len(app.History))
+	}
+
+	app.Form["name"] = "wallet"
+	app.Field = 4
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("corrected account edit should return to list, got %s", app.Path)
+	}
+	if _, err := store.Acct.GetByID(ctx, cash.ID); err != nil {
+		t.Fatalf("edited account missing: %v", err)
+	}
+	if _, err := store.Acct.GetByName(ctx, "wallet"); err != nil {
+		t.Fatalf("corrected account rename was not saved: %v", err)
+	}
+}
+
+func TestAccountFormInvalidCurrencyErrorsAreFriendlyAndRecoverable(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form = map[string]string{"name": "cash", "currency": "ZZZ", "on-budget": "true", "notes": "keep"}
+	app.Field = 4
+
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/create/" || app.Field != 4 {
+		t.Fatalf("invalid currency create should stay on form and field, path=%s field=%d", app.Path, app.Field)
+	}
+	view := app.View()
+	if !strings.Contains(view, "currency is unavailable: ZZZ") {
+		t.Fatalf("invalid currency create should show friendly error:\n%s", view)
+	}
+	for _, raw := range []string{"sql: no rows", "currency not found"} {
+		if strings.Contains(view, raw) {
+			t.Fatalf("invalid currency create should hide raw error %q:\n%s", raw, view)
+		}
+	}
+	if app.Form["currency"] != "ZZZ" || app.Form["notes"] != "keep" {
+		t.Fatalf("invalid currency create should preserve form, got %#v", app.Form)
+	}
+
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "wallet", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/wallet/", Menu: 2}, navFrame{Path: "/accounts/wallet/edit/", Menu: 0})
+	app.Form = map[string]string{"name": "wallet", "currency": "ZZZ", "on-budget": "true", "notes": "edit keep"}
+	app.Field = 4
+
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/wallet/edit/" || app.Field != 4 {
+		t.Fatalf("invalid currency edit should stay on form and field, path=%s field=%d", app.Path, app.Field)
+	}
+	view = app.View()
+	if !strings.Contains(view, "currency is unavailable: ZZZ") {
+		t.Fatalf("invalid currency edit should show friendly error:\n%s", view)
+	}
+	for _, raw := range []string{"sql: no rows", "currency not found"} {
+		if strings.Contains(view, raw) {
+			t.Fatalf("invalid currency edit should hide raw error %q:\n%s", raw, view)
+		}
+	}
+	if app.Form["currency"] != "ZZZ" || app.Form["notes"] != "edit keep" {
+		t.Fatalf("invalid currency edit should preserve form, got %#v", app.Form)
+	}
+	if got, err := app.Svc.Accounts.GetByName(ctx, "wallet"); err != nil || got.ID != acct.ID || got.Code != "HKD" {
+		t.Fatalf("invalid currency edit should not mutate account, got %+v err=%v", got, err)
+	}
+}
+
+func TestBackupFailureHasContextAndStaysOnBackup(t *testing.T) {
+	app, _ := testApp(t)
+	app.Svc.Backup = func(context.Context) (string, error) {
+		return "", errors.New("disk full")
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/backup/", Menu: 0})
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/backup/" {
+		t.Fatalf("backup failure should stay on backup screen, got %s", app.Path)
+	}
+	view := app.View()
+	if !strings.Contains(view, "could not create backup: disk full") {
+		t.Fatalf("backup failure should show contextual error:\n%s", view)
 	}
 }
 

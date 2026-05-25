@@ -73,7 +73,17 @@ func currencyFromListRow(row db.ListCurrenciesRow) Currency {
 }
 
 func mapCurrencyErr(err error) error {
+	if err == sql.ErrNoRows {
+		return &CurrencyUnavailableError{}
+	}
 	return fmt.Errorf("currency not found: %w", err)
+}
+
+func mapCurrencyErrWithCode(err error, code string) error {
+	if err == sql.ErrNoRows {
+		return &CurrencyUnavailableError{Code: code}
+	}
+	return mapCurrencyErr(err)
 }
 
 func balanceFromDB(b db.Balance) Balance {
