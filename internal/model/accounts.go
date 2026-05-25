@@ -531,20 +531,17 @@ func (a App) accountDetailScreen(name string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
-	bal, ok, _ := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID)
-	amount, asOf := zero(acct.Code), "(no balance entered yet)"
-	if ok {
-		amount, asOf = bal.Amount.Format(acct.Code), bal.Date
+	context, err := a.accountDashboardContext(name)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
-	hidden := ""
 	actions := []string{"balances", "transactions (TODO)", "edit account", "hide account"}
 	if acct.Hidden {
-		hidden = "hidden    : true\n"
 		actions = []string{"balances", "transactions (TODO)", "edit account", "show account"}
 	}
 	return screen{
 		Path:    accountPath(name),
-		Context: strings.TrimRight(fmt.Sprintf("name      : %s\nbalance   : %s\nas of     : %s\non-budget : %t\n%snotes     : %s", acct.Name, amount, asOf, acct.OnBudget, hidden, acct.Notes), "\n"),
+		Context: context,
 		Actions: actions,
 	}
 }

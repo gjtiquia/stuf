@@ -11,6 +11,7 @@ import (
 )
 
 type Dashboard struct {
+	AsOf                           string
 	Period                         string
 	Total                          money.Money
 	NetChangeFromMonthStart        money.Money
@@ -51,12 +52,7 @@ type DashboardService struct {
 }
 
 func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-	today := dateOnly(now())
-	period := today.Format("2006-01")
+	today := s.today()
 	appCur, err := s.Currencies.GetByCode(ctx, s.AppCurrency)
 	if err != nil {
 		return Dashboard{}, err
@@ -65,8 +61,102 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	if err != nil {
 		return Dashboard{}, err
 	}
-	zero := money.Money{Scale: appCur.Scale}
+	histories := []dashboardAccountHistory{}
+	warnings := []string{}
+	warned := map[string]bool{}
+	for _, a := range accounts {
+		if !a.OnBudget {
+			continue
+		}
+		cur, err := s.Currencies.GetByID(ctx, a.CurrencyID)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		history, accountWarnings, err := s.accountHistory(ctx, a.ID, cur, appCur, today)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		for _, warning := range accountWarnings {
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+		}
+		if len(history.Balances) > 0 {
+			histories = append(histories, history)
+		}
+	}
+	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
+	out.Warnings = warnings
+	return out, nil
+}
+
+func (s DashboardService) AccountSummary(ctx context.Context, accountID int64) (Dashboard, error) {
+	today := s.today()
+	acct, err := s.Accounts.GetByID(ctx, accountID)
+	if err != nil {
+		return Dashboard{}, err
+	}
+	cur, err := s.Currencies.GetByID(ctx, acct.CurrencyID)
+	if err != nil {
+		return Dashboard{}, err
+	}
+	history, warnings, err := s.accountHistory(ctx, accountID, cur, cur, today)
+	if err != nil {
+		return Dashboard{}, err
+	}
+	var histories []dashboardAccountHistory
+	if len(history.Balances) > 0 {
+		histories = append(histories, history)
+	}
+	out := dashboardFromHistories(today, money.Money{Scale: cur.Scale}, histories)
+	out.Warnings = warnings
+	return out, nil
+}
+
+func (s DashboardService) today() time.Time {
+	now := time.Now
+	if s.Now != nil {
+		now = s.Now
+	}
+	return dateOnly(now())
+}
+
+func (s DashboardService) accountHistory(ctx context.Context, accountID int64, cur repo.Currency, target repo.Currency, today time.Time) (dashboardAccountHistory, []string, error) {
+	bs, err := s.Balances.ListByAccount(ctx, accountID)
+	if err != nil {
+		return dashboardAccountHistory{}, nil, err
+	}
+	history := dashboardAccountHistory{}
+	var warnings []string
+	warned := false
+	for _, b := range bs {
+		balanceDate, err := parseDashboardDate(b.Date, today.Location())
+		if err != nil || balanceDate.After(today) {
+			continue
+		}
+		converted, err := money.Convert(b.Amount, cur.RateToUSD, target.RateToUSD, target.Scale)
+		if err != nil {
+			if !warned {
+				warnings = append(warnings, fmt.Sprintf("missing conversion for %s", cur.Code))
+				warned = true
+			}
+			continue
+		}
+		history.Balances = append(history.Balances, dashboardBalance{Date: balanceDate, Amount: converted})
+	}
+	if len(history.Balances) > 0 {
+		sort.Slice(history.Balances, func(i, j int) bool {
+			return history.Balances[i].Date.Before(history.Balances[j].Date)
+		})
+	}
+	return history, warnings, nil
+}
+
+func dashboardFromHistories(today time.Time, zero money.Money, histories []dashboardAccountHistory) Dashboard {
+	period := today.Format("2006-01")
 	out := Dashboard{
+		AsOf:                           today.Format("2006-01-02"),
 		Period:                         period,
 		Total:                          zero,
 		NetChangeFromMonthStart:        zero,
@@ -83,43 +173,6 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 			LowToLow:   zero,
 		},
 	}
-	histories := []dashboardAccountHistory{}
-	warned := map[string]bool{}
-	for _, a := range accounts {
-		if !a.OnBudget {
-			continue
-		}
-		cur, err := s.Currencies.GetByID(ctx, a.CurrencyID)
-		if err != nil {
-			return Dashboard{}, err
-		}
-		bs, err := s.Balances.ListByAccount(ctx, a.ID)
-		if err != nil {
-			return Dashboard{}, err
-		}
-		history := dashboardAccountHistory{}
-		for _, b := range bs {
-			balanceDate, err := parseDashboardDate(b.Date, today.Location())
-			if err != nil || balanceDate.After(today) {
-				continue
-			}
-			converted, err := money.Convert(b.Amount, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
-			if err != nil {
-				if !warned[cur.Code] {
-					out.Warnings = append(out.Warnings, fmt.Sprintf("missing conversion for %s", cur.Code))
-					warned[cur.Code] = true
-				}
-				continue
-			}
-			history.Balances = append(history.Balances, dashboardBalance{Date: balanceDate, Amount: converted})
-		}
-		if len(history.Balances) > 0 {
-			sort.Slice(history.Balances, func(i, j int) bool {
-				return history.Balances[i].Date.Before(history.Balances[j].Date)
-			})
-			histories = append(histories, history)
-		}
-	}
 	out.Total = totalLatestValue(histories, today, zero)
 	monthStart := totalNearestValue(histories, monthBoundary(today), zero)
 	monthHigh, _ := totalMonthHighLow(histories, today, today, zero)
@@ -134,7 +187,7 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	out.RecentMonths[1].Drop, _ = prevPrevLow.Sub(prevPrevHigh)
 	out.Trend.HighToHigh, _ = prevHigh.Sub(prevPrevHigh)
 	out.Trend.LowToLow, _ = prevLow.Sub(prevPrevLow)
-	return out, nil
+	return out
 }
 
 func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero money.Money) money.Money {

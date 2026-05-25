@@ -46,7 +46,7 @@ func appWithNav(app App, frames ...navFrame) App {
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
-	for _, want := range []string{"# stuf", "total       : HKD 0.00", "period      : 2026-05", "on-budget net change to today", "on-budget mar to apr trends", "transactions (TODO)"} {
+	for _, want := range []string{"# stuf", "total       : HKD 0.00", "as of       : 2026-05-24", "on-budget net change to today", "on-budget mar to apr trends", "transactions (TODO)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -161,9 +161,10 @@ func TestBalanceListRenderOrder(t *testing.T) {
 	view := app.View()
 	assertRenderOrder(t, view,
 		"# stuf",
-		"name        : cash",
-		"balance     : HKD 50,000.00",
-		"as of       : 2026-05-21",
+		"account   : cash",
+		"balance   : HKD 50,000.00",
+		"as of     : 2026-05-21",
+		"net change to today",
 		"/accounts/cash/balances/list/",
 		"  date       | balance       | notes",
 		"> 2026-05-21 | HKD 50,000.00",
@@ -749,11 +750,13 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/"
 	view := app.View()
 	for _, want := range []string{
-		"name      : cash",
+		"account   : cash",
 		"balance   : HKD 0.00",
 		"as of     : (no balance entered yet)",
 		"on-budget : true",
 		"notes     : wallet",
+		"net change to today",
+		"recent months",
 		"> 1) balances",
 		"  2) transactions (TODO)",
 		"  3) edit account",
@@ -1325,7 +1328,7 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/list/"
 	view := app.View()
-	for _, want := range []string{"name        : cash", "balance     : HKD 0.00", "/accounts/cash/balances/list/", "(no balances yet)"} {
+	for _, want := range []string{"account   : cash", "balance   : HKD 0.00", "net change to today", "/accounts/cash/balances/list/", "(no balances yet)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("empty balances list missing %q:\n%s", want, view)
 		}
@@ -1342,7 +1345,7 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/2026-05-21/"
 	view = app.View()
-	for _, want := range []string{"account : cash", "date    : 2026-05-21", "balance : HKD 50,000.00", "> 1) edit balance", "2) delete balance"} {
+	for _, want := range []string{"account   : cash", "net change to today", "date    : 2026-05-21", "balance : HKD 50,000.00", "> 1) edit balance", "2) delete balance"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance detail missing %q:\n%s", want, view)
 		}

@@ -207,6 +207,48 @@ func TestDashboardSingleAccountTotalUsesLatestAndStartUsesNearestBoundary(t *tes
 	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, -220000)
 }
 
+func TestDashboardSummaryExposesAsOfDate(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.AsOf != "2026-05-25" {
+		t.Fatalf("as of = %s", summary.AsOf)
+	}
+}
+
+func TestDashboardAccountSummaryUsesNativeAccountCurrency(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	acct, _, err := accounts.Create(ctx, "checking", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.SetHidden(ctx, acct.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, acct.ID, "2026-04-08", "3500.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, acct.ID, "2026-05-25", "1300.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := dashboard.AccountSummary(ctx, acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.AsOf != "2026-05-25" {
+		t.Fatalf("as of = %s", summary.AsOf)
+	}
+	assertMoneyAmount(t, "account total", summary.Total, 130000)
+	assertMoneyAmount(t, "account month start", summary.NetChangeFromMonthStart, -220000)
+	assertMoneyAmount(t, "account month high", summary.NetChangeFromMonthHigh, 0)
+}
+
 func TestDashboardSingleAccountSameDateSnapshotIsNotFutureInLocalTimezone(t *testing.T) {
 	ctx := context.Background()
 	_, accounts, balances, dashboard, _ := serviceStack(t)

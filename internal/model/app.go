@@ -307,9 +307,13 @@ func (a App) screen() screen {
 			return a.accountDetailScreen(name)
 		}
 		if name, ok := balanceListName(a.Path); ok {
+			context, err := a.accountDashboardContext(name)
+			if err != nil {
+				return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+			}
 			return screen{
 				Path:    a.Path,
-				Context: strings.TrimRight(a.balanceSummary(name), "\n"),
+				Context: context,
 				Body:    a.balanceListBody(name),
 				Help:    tableListHelp(),
 			}

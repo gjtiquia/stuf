@@ -7,6 +7,7 @@ import (
 
 	"stuf/internal/component"
 	"stuf/internal/money"
+	"stuf/internal/service"
 )
 
 func (a App) dashboardContext() (string, error) {
@@ -28,42 +29,102 @@ func (a App) dashboardContext() (string, error) {
 		component.MoneyCell(money.Money{Scale: 2}, cur),
 		component.MoneyCell(money.Money{Scale: 2}, cur),
 	)
+	warnings := dashboardWarnings(d.Warnings)
+	body := fmt.Sprintf(`total       : %s
+budgeted    : %s
+as of       : %s
+
+%s
+you owe ppl : %s
+ppl owe you : %s
+%s`, values[0], values[1], d.AsOf, dashboardSectionsWithValues(d, "on-budget ", values[2:9]), values[9], values[10], warnings)
+	return strings.TrimRight(body, "\n"), nil
+}
+
+func (a App) accountDashboardContext(name string) (string, error) {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return "", err
+	}
+	d, err := a.Svc.Dashboard.AccountSummary(a.ctx, acct.ID)
+	if err != nil {
+		return "", err
+	}
+	bal, ok, _ := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID)
+	asOf := "(no balance entered yet)"
+	if ok {
+		asOf = bal.Date
+	}
+	values := alignedMoneyValues(
+		component.MoneyCell(d.Total, acct.Code),
+		component.MoneyCell(d.NetChangeFromMonthStart, acct.Code),
+		component.MoneyCell(d.NetChangeFromMonthHigh, acct.Code),
+		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, acct.Code),
+		component.MoneyCell(d.RecentMonths[0].Drop, acct.Code),
+		component.MoneyCell(d.RecentMonths[1].Drop, acct.Code),
+		component.MoneyCell(d.Trend.HighToHigh, acct.Code),
+		component.MoneyCell(d.Trend.LowToLow, acct.Code),
+	)
+	lines := []string{
+		fmt.Sprintf("account   : %s", acct.Name),
+		fmt.Sprintf("balance   : %s", values[0]),
+		fmt.Sprintf("as of     : %s", asOf),
+		fmt.Sprintf("on-budget : %t", acct.OnBudget),
+	}
+	if acct.Hidden {
+		lines = append(lines, "hidden    : true")
+	}
+	lines = append(lines, fmt.Sprintf("notes     : %s", acct.Notes), "", dashboardSectionsWithValues(d, "", values[1:8]))
+	if warnings := dashboardWarnings(d.Warnings); warnings != "" {
+		lines = append(lines, warnings)
+	}
+	return strings.TrimRight(strings.Join(lines, "\n"), "\n"), nil
+}
+
+func dashboardSections(d service.Dashboard, cur, headingPrefix string) string {
+	values := alignedMoneyValues(
+		component.MoneyCell(d.NetChangeFromMonthStart, cur),
+		component.MoneyCell(d.NetChangeFromMonthHigh, cur),
+		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, cur),
+		component.MoneyCell(d.RecentMonths[0].Drop, cur),
+		component.MoneyCell(d.RecentMonths[1].Drop, cur),
+		component.MoneyCell(d.Trend.HighToHigh, cur),
+		component.MoneyCell(d.Trend.LowToLow, cur),
+	)
+	return dashboardSectionsWithValues(d, headingPrefix, values)
+}
+
+func dashboardSectionsWithValues(d service.Dashboard, headingPrefix string, values []string) string {
 	currentLabel := monthLabel(d.Period)
 	prevLabel := monthLabel(d.RecentMonths[0].Period)
 	prevPrevLabel := monthLabel(d.RecentMonths[1].Period)
-	warnings := ""
-	if len(d.Warnings) > 0 {
-		warnings = "\nwarning: " + strings.Join(d.Warnings, "; ") + "\n"
-	}
-	body := fmt.Sprintf(`total       : %s
-budgeted    : %s
-
-period      : %s
-
-on-budget net change to today
+	return fmt.Sprintf(`%snet change to today
 from %s start : %s
 from %s high  : %s
 from %s high  : %s
 
-on-budget recent months
+%srecent months
 %s high to low : %s
 %s high to low : %s
 
-on-budget %s to %s trends
+%s%s to %s trends
 high to high    : %s
-low to low      : %s
+low to low      : %s`,
+		headingPrefix,
+		currentLabel, values[0],
+		currentLabel, values[1],
+		prevLabel, values[2],
+		headingPrefix,
+		prevLabel, values[3],
+		prevPrevLabel, values[4],
+		headingPrefix, prevPrevLabel, prevLabel, values[5], values[6])
+}
 
-you owe ppl : %s
-ppl owe you : %s
-%s`, values[0], values[1], d.Period,
-		currentLabel, values[2],
-		currentLabel, values[3],
-		prevLabel, values[4],
-		prevLabel, values[5],
-		prevPrevLabel, values[6],
-		prevPrevLabel, prevLabel, values[7], values[8],
-		values[9], values[10], warnings)
-	return strings.TrimRight(body, "\n"), nil
+func dashboardWarnings(warnings []string) string {
+	if len(warnings) == 0 {
+		return ""
+	}
+	return "warning: " + strings.Join(warnings, "; ") + "\n"
 }
 
 func monthLabel(period string) string {

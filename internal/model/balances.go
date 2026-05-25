@@ -341,6 +341,10 @@ func (a App) balanceDetailScreen(name, date string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
+	context, err := a.accountDashboardContext(name)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
 	currentIdx := -1
 	for i, row := range rows {
 		if row.Date == date {
@@ -350,7 +354,8 @@ func (a App) balanceDetailScreen(name, date string) screen {
 	}
 	return screen{
 		Path:    accountBalancePath(name, date),
-		Context: fmt.Sprintf("account : %s\ndate    : %s\nbalance : %s\nnotes   : %s", name, date, bal.Amount.Format(acct.Code), bal.Notes),
+		Context: context,
+		Body:    fmt.Sprintf("date    : %s\nbalance : %s\nnotes   : %s\n", date, bal.Amount.Format(acct.Code), bal.Notes),
 		Actions: []string{"edit balance", "delete balance"},
 		Help:    balanceDetailHelp(currentIdx, len(rows)),
 	}
