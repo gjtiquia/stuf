@@ -33,6 +33,7 @@ type App struct {
 	Form            map[string]string
 	Field           int
 	SelectedAccount string
+	AccountVisible  accountVisibilityMode
 }
 
 type screen struct {
@@ -101,13 +102,9 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch a.Path {
 	case routeRoot:
-		a = a.menuKey(s, []string{routeAccounts, "/transactions/", "/budgets/", "/owed/", "/reports/", routeSettings, routeBackup})
-	case routeAccounts:
-		a = a.menuKey(s, []string{routeAccountList, routeAccountHidden, routeAccountCreate})
+		a = a.menuKey(s, []string{routeAccountList, "/transactions/", "/budgets/", "/owed/", "/reports/", routeSettings, routeBackup})
 	case routeAccountList:
-		a = a.accountListKey(s, false)
-	case routeAccountHidden:
-		a = a.accountListKey(s, true)
+		a = a.accountListKey(s)
 	case routeAccountCreate:
 		a = a.accountCreateKey(s)
 	case routeBackup:
@@ -128,8 +125,6 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.balanceDetailKey(s, name, date)
 		} else if name, ok := balanceListName(a.Path); ok {
 			a = a.balanceListTableKey(s, name)
-		} else if name, ok := balancesName(a.Path); ok {
-			a = a.balanceMenuKey(s, name)
 		} else if name, ok := accountEditName(a.Path); ok {
 			a = a.accountEditKey(s, name)
 		}
@@ -280,20 +275,13 @@ func (a App) screen() screen {
 			s.Actions = exitConfirmActions()
 		}
 		return s
-	case a.Path == routeAccounts:
-		s := a.dashboardScreen()
-		s.Path = routeAccounts
-		s.Actions = []string{"list", "hidden", "create"}
-		return s
 	case a.Path == routeAccountList:
 		context, err := a.dashboardContext()
 		if err != nil {
 			return screen{Path: routeAccountList, Body: "error: " + err.Error() + "\n"}
 		}
-		body := strings.TrimRight(a.accountListContext(false)+"\n\n"+strings.TrimRight(a.accountListBody(false), "\n"), "\n")
+		body := strings.TrimRight(a.accountList(), "\n")
 		return screen{Path: routeAccountList, Context: context, Body: body, Help: listHelp()}
-	case a.Path == routeAccountHidden:
-		return screen{Path: routeAccountHidden, Body: a.accountListBody(true), Help: listHelp()}
 	case a.Path == routeAccountCreate:
 		return screen{Path: routeAccountCreate, Body: a.accountFormView(nil), Help: a.accountFormHelp()}
 	case a.Path == routeSettings:
@@ -309,13 +297,6 @@ func (a App) screen() screen {
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
 			return a.accountDetailScreen(name)
-		}
-		if name, ok := balancesName(a.Path); ok {
-			return screen{
-				Path:    accountBalancesPath(name),
-				Context: strings.TrimRight(a.balanceSummary(name), "\n"),
-				Actions: []string{"list", "add balance"},
-			}
 		}
 		if name, ok := balanceListName(a.Path); ok {
 			return screen{
@@ -415,7 +396,7 @@ func (a App) formHelp(fields []string) []string {
 }
 
 func listHelp() []string {
-	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "ctrl+h        : hidden", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func tableListHelp() []string {

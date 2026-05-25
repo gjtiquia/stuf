@@ -19,11 +19,6 @@ func TestRouteBuildersAndParsers(t *testing.T) {
 		t.Fatalf("accountEditPath(%q) = false", editPath)
 	}
 
-	balancesPath := accountBalancesPath(name)
-	if got, ok := balancesName(balancesPath); !ok || got != name {
-		t.Fatalf("balancesName(%q) = %q, %v", balancesPath, got, ok)
-	}
-
 	listPath := accountBalanceListPath(name)
 	if got, ok := balanceListName(listPath); !ok || got != name {
 		t.Fatalf("balanceListName(%q) = %q, %v", listPath, got, ok)

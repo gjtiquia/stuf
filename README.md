@@ -161,15 +161,19 @@ scoped shortcuts
 - labels can be context-aware, but label logic should live with the canonical action
 
 resource route shape
-- resource routes are menus, not mixed list/action screens
-- list/history browsing lives under `/list/`
+- resource routes are list-first, not branch menus
+- list/history browsing lives under `/list/`, and parent resource actions open those lists directly
+- lists own browsing, filtering, and list-scoped shortcuts
 - append/create forms live under explicit action routes like `/add/`, `/create/`, or domain verbs
 - after successful add/edit/delete, return to the relevant `/list/` page when that page confirms the result
 - use `create` for new containers/objects and `add`/`allocate` for appending records/events to existing objects
+- ctrl+n opens the matching create/add flow from lists
+- ctrl+h cycles hidden visibility on lists that support hidden resources
 - examples:
-    - `/accounts/{account}/balances/` branches to `list` and `add balance`
-    - `/budgets/{budget}/allocations/` branches to `list` and `allocate`
-    - `/owed/{owed-ref}/settlements/` branches to `list` and `add settlement`
+    - `/` accounts opens `/accounts/list/`
+    - `/accounts/{account}/` balances opens `/accounts/{account}/balances/list/`
+    - `/budgets/{budget}/allocations/list/` uses ctrl+n or a domain shortcut to allocate
+    - `/owed/{owed-ref}/settlements/list/` uses ctrl+n to add settlement
 
 session action history / undo support
 - everytime a mutation occurs (create account / edit something), we log it above
@@ -548,22 +552,37 @@ total      : HKD  6,200.00
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
-/accounts/
+/accounts/list/
 
-> 1) list
-  2) hidden
-  3) create
+total       : HKD  50,000.00
+on-budget   : HKD  230,000.00
+off-budget  : HKD (180,000.00)
+
+showing : non-hidden
+
+> filter : (type anything...)
+
+    on-budget accounts
+    name           | balance                         | notes
+    TOTAL          | HKD   50,000.00                 |
+
+  > hsbc-one       | HKD   35,000.00                 | main chequing ac
+    hsbc-usd       | HKD    7,800.00 (USD 1,000.00) |
+    hsbc-cad       | HKD    4,600.00 (CAD   800.00) |
 
 ---
-up/down : navigate
-left/h  : back
-right/l : open
-enter   : confirm
-esc     : back
-?       : help
+type          : filter
+h/l           : type in filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+ctrl+n        : new
+ctrl+h        : hidden
+esc           : back
+?             : help
 ```
 
-- user presses 3 (create)
+- user presses ctrl+n to create
 
 - dashboard hides, focus on create account flow
 - keyboard shortcuts changes too, as we are now in /accounts/create/
@@ -821,6 +840,8 @@ total       : HKD  50,000.00
 on-budget   : HKD  230,000.00
 off-budget  : HKD (180,000.00)
 
+showing : non-hidden
+
 > filter : (type anything...)
 
     on-budget accounts
@@ -844,6 +865,8 @@ h/l           : type in filter
 up/down       : navigate
 left/right    : back/open
 enter         : confirm
+ctrl+n        : new
+ctrl+h        : hidden
 esc           : back
 ?             : help
 ```
@@ -901,14 +924,14 @@ esc     : back
 ```
 # stuf
 
-/accounts/hsbc-one/transactions/
+/accounts/hsbc-one/transactions/list/
 
-> 1) list
-  2) add income
-  3) add expense
+  date       | amount | notes
 
 ---
 up/down : navigate
+enter   : confirm
+ctrl+n  : new
 enter   : confirm
 esc     : back
 ?       : help
@@ -1065,20 +1088,22 @@ name        : hsbc-one
 balance     : HKD 0.00
 as of       : (no balance entered yet)
 
-/accounts/hsbc-one/balances/
+/accounts/hsbc-one/balances/list/
 
-> 1) list
-  2) add balance
+  date       | balance | notes
+  (no balances yet)
 
 ---
-up/down : navigate
-enter   : confirm
+up/down/j/k : navigate
+left/right  : back/open
+enter       : confirm
+ctrl+n      : new
 esc     : back
 ?       : help
 ```
 
-- pressing 1 (list) opens the account balances list
-- pressing 2 (add balance) opens the add balance flow
+- pressing balances from account detail opens the account balances list
+- ctrl+n from the balances list opens the add balance flow
 - date defaults to today
 - date is required
 - balance is required
@@ -1284,7 +1309,9 @@ esc       : back
 ```
 # stuf
 
-/accounts/hidden/
+/accounts/list/
+
+showing : hidden-only
 
 > filter : (type anything...)
 
@@ -1292,10 +1319,15 @@ esc       : back
 > old-account | HKD    0.00 | closed account
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+type          : filter
+h/l           : type in filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+ctrl+n        : new
+ctrl+h        : hidden
+esc           : back
+?             : help
 ```
 
 ```
@@ -1354,16 +1386,22 @@ esc     : back
 ```
 # stuf
 
-/tags/
+/tags/list/
 
-> 1) list
-  2) create
+showing : all
+
+> filter : (type anything...)
+
+  name | notes
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+type          : filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+ctrl+n        : new
+esc           : back
+?             : help
 ```
 
 ```
@@ -1555,16 +1593,20 @@ budget categories
 ```
 # stuf
 
-/budgets/categories/
+/budgets/categories/list/
 
-> 1) list
-  2) create
+> filter : (type anything...)
+
+  name | notes
 
 ---
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+type          : filter
+up/down       : navigate
+left/right    : back/open
+enter         : confirm
+ctrl+n        : new
+esc           : back
+?             : help
 ```
 
 ```
@@ -1952,14 +1994,15 @@ allocations
 ```
 # stuf
 
-/budgets/groceries/allocations/
+/budgets/groceries/allocations/list/
 
-> 1) list
-  2) allocate
+  date       | change       | allocated
+> 2026-05-21 | HKD 1,000.00 | HKD 1,000.00
 
 ---
 up/down : navigate
 enter   : confirm
+ctrl+n  : allocate
 esc     : back
 ?       : help
 ```
@@ -2197,11 +2240,9 @@ report integration
 ```
 # stuf
 
-/transactions/
+/transactions/list/
 
-> 1) list
-  2) add income
-  3) add expense
+  date       | amount | account | notes
 
 ---
 up/down : navigate
@@ -3152,14 +3193,16 @@ esc     : back
 ```
 # stuf
 
-/owed/people/
+/owed/people/list/
 
-> 1) list
-  2) create
+> filter : (type anything...)
+
+  person | notes
 
 ---
 up/down : navigate
 enter   : confirm
+ctrl+n  : new
 esc     : back
 ?       : help
 ```
@@ -3497,14 +3540,15 @@ esc     : back
 ```
 # stuf
 
-/owed/owed-000001/settlements/
+/owed/owed-000001/settlements/list/
 
-> 1) list
-  2) add settlement
+  date       | amount     | notes
+> 2026-05-21 | HKD 100.00 | partial
 
 ---
 up/down : navigate
 enter   : confirm
+ctrl+n  : new
 esc     : back
 ?       : help
 ```

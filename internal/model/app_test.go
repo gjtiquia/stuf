@@ -112,7 +112,7 @@ func TestURLRendersImmediatelyAboveActions(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	view = app.View()
-	assertOrdered(t, view, "ppl owe you : HKD 0.00", "\n/accounts/\n\n> 1) list")
+	assertOrdered(t, view, "ppl owe you : HKD 0.00", "\n/accounts/list/\n\n")
 }
 
 func TestAccountListRenderOrder(t *testing.T) {
@@ -128,6 +128,7 @@ func TestAccountListRenderOrder(t *testing.T) {
 		"/accounts/list/",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
+		"showing : non-hidden",
 		"> filter : (type anything...)",
 		"---",
 	)
@@ -173,28 +174,27 @@ func TestMenuNavigationMovesVisibleSelection(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyCtrlH})
 	app = m.(App)
 	view = app.View()
-	if !strings.Contains(view, "> 2) hidden") {
-		t.Fatalf("j did not move account menu marker:\n%s", view)
+	if !strings.Contains(view, "showing : hidden-only") {
+		t.Fatalf("ctrl+h did not cycle account list visibility:\n%s", view)
 	}
 }
 
-func TestAccountsDashboardMatchesReadmeActions(t *testing.T) {
+func TestAccountsActionOpensList(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	view := app.View()
 	for _, want := range []string{
 		"total       : HKD 0.00",
-		"/accounts/",
-		"> 1) list",
-		"  2) hidden",
-		"  3) create",
+		"/accounts/list/",
+		"showing : non-hidden",
+		"> filter : (type anything...)",
 	} {
 		if !strings.Contains(view, want) {
-			t.Fatalf("accounts dashboard missing %q:\n%s", want, view)
+			t.Fatalf("accounts list missing %q:\n%s", want, view)
 		}
 	}
 }
@@ -202,8 +202,6 @@ func TestAccountsDashboardMatchesReadmeActions(t *testing.T) {
 func TestAccountsListSummaryNavigation(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
-	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
 		t.Fatalf("expected /accounts/list/, got %s", app.Path)
@@ -214,6 +212,7 @@ func TestAccountsListSummaryNavigation(t *testing.T) {
 		"total       : HKD 0.00",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
+		"showing : non-hidden",
 		"> filter : (type anything...)",
 	} {
 		if !strings.Contains(view, want) {
@@ -233,6 +232,7 @@ func TestAccountsListSummaryTotals(t *testing.T) {
 		"total       : HKD  575.00",
 		"on-budget   : HKD  600.00",
 		"off-budget  : HKD ( 25.00)",
+		"showing : non-hidden",
 		"> filter : (type anything...)",
 	} {
 		if !strings.Contains(view, want) {
@@ -261,6 +261,7 @@ func TestAccountListReadmeShape(t *testing.T) {
 	view := app.View()
 	for _, want := range []string{
 		"total       : HKD 0.00",
+		"showing : non-hidden",
 		"> filter : (type anything...)",
 		"on-budget accounts",
 		"| balance",
@@ -277,20 +278,64 @@ func TestAccountListReadmeShape(t *testing.T) {
 		t.Fatalf("account list rows should not render menu numbers:\n%s", view)
 	}
 	assertOrdered(t, view, "TOTAL |", "\n\n> cash")
-	app.Path = "/accounts/hidden/"
+	app.AccountVisible = accountVisibilityHiddenOnly
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"> filter : (type anything...)", "| balance", "> investment", "brokerage"} {
+	for _, want := range []string{"showing : hidden-only", "> filter : (type anything...)", "| balance", "> investment", "brokerage"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden accounts missing %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "on-budget   : 1") || strings.Contains(view, "off-budget  : 1") {
-		t.Fatalf("hidden accounts should not show list summary:\n%s", view)
-	}
 	if strings.Contains(view, "> 1) investment") {
 		t.Fatalf("hidden account rows should not render menu numbers:\n%s", view)
 	}
+}
+
+func TestAccountListVisibilityCyclesAndResets(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "main cash"); err != nil {
+		t.Fatal(err)
+	}
+	hidden, _, err := app.Svc.Accounts.Create(ctx, "old-account", "HKD", true, "closed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.SetHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 7})
+
+	view := app.View()
+	assertViewContains(t, view, "showing : non-hidden", "> cash")
+	if strings.Contains(view, "old-account") {
+		t.Fatalf("default account list should exclude hidden accounts:\n%s", view)
+	}
+
+	app = press(app, tea.KeyCtrlH)
+	view = app.View()
+	assertViewContains(t, view, "showing : hidden-only", "> old-account")
+	if app.Menu != 0 || strings.Contains(view, "cash |") {
+		t.Fatalf("hidden-only should clamp cursor and exclude visible accounts: menu=%d\n%s", app.Menu, view)
+	}
+
+	app = press(app, tea.KeyCtrlH)
+	view = app.View()
+	assertViewContains(t, view, "showing : all", "hidden", "old-account", "true", "cash")
+
+	app = press(app, tea.KeyCtrlH)
+	assertViewContains(t, app.View(), "showing : non-hidden")
+
+	app = pressRunes(app, "hl")
+	if app.AccountVisible != accountVisibilityNonHidden || !strings.Contains(app.View(), "> filter : hl") {
+		t.Fatalf("plain h/l should type into the filter without cycling visibility:\n%s", app.View())
+	}
+
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlH)
+	app = press(app, tea.KeyEsc)
+	app = pressRunes(app, "1")
+	assertViewContains(t, app.View(), "showing : non-hidden")
 }
 
 func TestAccountListNoResultsShape(t *testing.T) {
@@ -800,7 +845,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 
 func TestCtrlSFromAccountNameFieldSubmits(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app = pressRunes(app, "cash")
 	app = press(app, tea.KeyCtrlS)
 	if app.Path != "/accounts/list/" {
@@ -817,7 +862,7 @@ func TestCtrlSFromAccountNameFieldSubmits(t *testing.T) {
 
 func TestCtrlSFromCurrencyFilterSubmitsCommittedCurrency(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form["name"] = "cash"
 	app.Field = 1
 	app = pressRunes(app, "j")
@@ -839,7 +884,7 @@ func TestCtrlSFromCurrencyFilterSubmitsCommittedCurrency(t *testing.T) {
 
 func TestCtrlSFromAccountSelectSubmitsSelectedValue(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form["name"] = "off-budget-cash"
 	app.Field = 2
 	app = press(app, tea.KeyDown)
@@ -862,7 +907,7 @@ func TestCtrlSValidationErrorPreservesAccountForm(t *testing.T) {
 	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
 		t.Fatal(err)
 	}
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true", "notes": "keep me"}
 	app = press(app, tea.KeyCtrlS)
 	if app.Path != "/accounts/create/" || app.Error == "" {
@@ -1082,17 +1127,12 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app.Path = "/accounts/cash/balances/"
-	view := app.View()
-	for _, want := range []string{"name        : cash", "balance     : HKD 0.00", "/accounts/cash/balances/", "> 1) list", "2) add balance"} {
-		if !strings.Contains(view, want) {
-			t.Fatalf("empty balances menu missing %q:\n%s", want, view)
-		}
-	}
 	app.Path = "/accounts/cash/balances/list/"
-	view = app.View()
-	if !strings.Contains(view, "(no balances yet)") {
-		t.Fatalf("empty balances list missing no-results state:\n%s", view)
+	view := app.View()
+	for _, want := range []string{"name        : cash", "balance     : HKD 0.00", "/accounts/cash/balances/list/", "(no balances yet)"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("empty balances list missing %q:\n%s", want, view)
+		}
 	}
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
 		t.Fatal(err)
@@ -1160,7 +1200,7 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 
 func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	app, _ := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	if view := app.View(); !strings.Contains(view, "> 1) name     : |") || strings.Contains(view, "(type anything...)|") || strings.Contains(view, "currency : HKD|") {
 		t.Fatalf("initial focused caret or unfocused field rendering wrong:\n%s", view)
 	}
@@ -1183,8 +1223,8 @@ func TestFormFocusBackspaceAndEscapeAreVisible(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	if app.Path != "/accounts/" || app.Error != "" {
-		t.Fatalf("esc should discard form and return to account menu: path=%s error=%q", app.Path, app.Error)
+	if app.Path != "/accounts/list/" || app.Error != "" {
+		t.Fatalf("esc should discard form and return to account list: path=%s error=%q", app.Path, app.Error)
 	}
 }
 
@@ -1353,7 +1393,7 @@ func TestBalanceAddEnterAdvancesFields(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
 	)
 	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
@@ -1408,7 +1448,7 @@ func TestBalanceAddEnterOnConfirmSubmits(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
 	)
 	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
@@ -1447,7 +1487,7 @@ func TestBalanceAddCtrlSSubmitsFromBalanceField(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
 	)
 	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
@@ -1689,7 +1729,7 @@ func TestBalanceListDetailEditDeleteNavigation(t *testing.T) {
 
 func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=!!!")})
 	app = m.(App)
 	app.Field = 4
@@ -1821,7 +1861,7 @@ func TestExitConfirmationRequiresYesToQuit(t *testing.T) {
 
 func TestExitConfirmationHistoryWarningAndCancel(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=cash")})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=HKD")})
@@ -1860,7 +1900,7 @@ func TestExitConfirmationHistoryWarningAndCancel(t *testing.T) {
 
 func TestManualAccountAndBalanceFlow(t *testing.T) {
 	app, _ := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	for _, r := range "cash" {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
@@ -1885,13 +1925,13 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("balances path = %s", app.Path)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
 	app = m.(App)
 	if app.Path != "/accounts/cash/balances/add/" {
-		t.Fatalf("add balance menu should open add form, got %s", app.Path)
+		t.Fatalf("ctrl+n on balance list should open add form, got %s", app.Path)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
@@ -1912,18 +1952,16 @@ func TestMenuCursorRestoresOnBackFromAccountList(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
-	app = m.(App)
 	if app.Path != "/accounts/list/" {
 		t.Fatalf("expected account list, got %s", app.Path)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	if app.Path != "/accounts/" {
-		t.Fatalf("expected accounts menu, got %s", app.Path)
+	if app.Path != "/" {
+		t.Fatalf("expected home, got %s", app.Path)
 	}
-	if view := app.View(); !strings.Contains(view, "> 1) list") {
-		t.Fatalf("expected list cursor restored on accounts menu:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "> 1) accounts") {
+		t.Fatalf("expected accounts cursor restored on home:\n%s", view)
 	}
 }
 
@@ -1948,7 +1986,7 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.Path = "/accounts/cash/"
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -2001,13 +2039,11 @@ func TestMenuCursorDoesNotPersistAfterLeavingStack(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyCtrlH})
 	app = m.(App)
-	if app.Path != "/accounts/hidden/" {
-		t.Fatalf("expected hidden accounts, got %s", app.Path)
+	if app.Path != "/accounts/list/" || app.AccountVisible != accountVisibilityHiddenOnly {
+		t.Fatalf("expected hidden-only account list, got path=%s mode=%s", app.Path, app.AccountVisible.label())
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("7")})
@@ -2016,8 +2052,8 @@ func TestMenuCursorDoesNotPersistAfterLeavingStack(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 1) list") {
-		t.Fatalf("expected default accounts cursor after re-entering popped screen:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "showing : non-hidden") {
+		t.Fatalf("expected default account visibility after re-entering list:\n%s", view)
 	}
 }
 
@@ -2027,7 +2063,7 @@ func TestUndoResetsNavigationStack(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
 	app.Field = 4
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -2045,8 +2081,8 @@ func TestUndoResetsNavigationStack(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 1) list") {
-		t.Fatalf("accounts menu should start fresh after undo clears navigation stack:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "showing : non-hidden") {
+		t.Fatalf("account list should start fresh after undo clears navigation stack:\n%s", view)
 	}
 }
 
@@ -2057,8 +2093,6 @@ func TestAccountDetailResetsCursorAfterLeaveAndReturn(t *testing.T) {
 		t.Fatal(err)
 	}
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
-	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
@@ -2091,7 +2125,7 @@ func TestAccountDetailResetsCursorAfterLeaveAndReturn(t *testing.T) {
 
 func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
 	app, store := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
 	app.Field = 4
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -2107,11 +2141,11 @@ func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	if app.Path != "/accounts/" {
-		t.Fatalf("expected accounts menu, got %s", app.Path)
+	if app.Path != "/" {
+		t.Fatalf("expected home, got %s", app.Path)
 	}
-	if view := app.View(); !strings.Contains(view, "> 1) list") {
-		t.Fatalf("expected list selected after backing out of post-create list:\n%s", view)
+	if view := app.View(); !strings.Contains(view, "> 1) accounts") {
+		t.Fatalf("expected accounts selected after backing out of post-create list:\n%s", view)
 	}
 }
 
@@ -2129,16 +2163,14 @@ func TestTabNavigatesMenus(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
-	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 2) hidden") || strings.Contains(view, "> 1) list") {
-		t.Fatalf("tab should move accounts menu cursor down:\n%s", view)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("entering accounts should open list, got %s", app.Path)
 	}
 }
 
 func TestTabDoesNotNavigateCurrencySelectOptions(t *testing.T) {
 	app, _ := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Field = 1
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
@@ -2154,13 +2186,13 @@ func TestMenuHorizontalBackAndOpen(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
 	app = m.(App)
-	if app.Path != "/accounts/" {
+	if app.Path != "/accounts/list/" {
 		t.Fatalf("right/l should open selected menu item, got %s", app.Path)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	app = m.(App)
 	if app.Path != "/" {
-		t.Fatalf("left/h should go back from menu, got %s", app.Path)
+		t.Fatalf("left arrow should go back from list, got %s", app.Path)
 	}
 }
 
@@ -2217,7 +2249,7 @@ func TestAccountListLeftRightBackOpen(t *testing.T) {
 	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
 		t.Fatal(err)
 	}
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRight})
 	app = m.(App)
 	if app.Path != "/accounts/cash/" {
@@ -2232,7 +2264,7 @@ func TestAccountListLeftRightBackOpen(t *testing.T) {
 
 func TestCurrencySelectHLFilterText(t *testing.T) {
 	app, _ := testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Field = 1
 	for _, r := range "hl" {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
@@ -2299,15 +2331,15 @@ func TestBalanceDetailPrevNextNavigation(t *testing.T) {
 func TestMenuHorizontalArrowKeys(t *testing.T) {
 	app, _ := testApp(t)
 	app = pressRunes(app, "1")
-	if app.Path != "/accounts/" {
-		t.Fatalf("expected accounts menu, got %s", app.Path)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("expected account list, got %s", app.Path)
 	}
 	app = press(app, tea.KeyLeft)
 	if app.Path != "/" {
-		t.Fatalf("left arrow should go back from menu, got %s", app.Path)
+		t.Fatalf("left arrow should go back from account list, got %s", app.Path)
 	}
 	app = press(app, tea.KeyRight)
-	if app.Path != "/accounts/" {
+	if app.Path != "/accounts/list/" {
 		t.Fatalf("right arrow should open selected menu item, got %s", app.Path)
 	}
 }
@@ -2335,7 +2367,7 @@ func TestAccountDetailHorizontalBackAndOpen(t *testing.T) {
 	}
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
 	app = press(app, tea.KeyRight)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/balances/list/" {
 		t.Fatalf("right/l should open highlighted action, got %s", app.Path)
 	}
 	app = press(app, tea.KeyLeft)
@@ -2448,17 +2480,15 @@ func TestBalanceListLeftRightBackOpen(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 	)
 	app = press(app, tea.KeyLeft)
-	if app.Path != "/accounts/cash/balances/" {
+	if app.Path != "/accounts/cash/" {
 		t.Fatalf("left on balance list should go back, got %s", app.Path)
 	}
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/cash/", Menu: 0},
-		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 	)
 	app = press(app, tea.KeyRight)
@@ -2495,10 +2525,11 @@ func TestCtrlNFromAccountListsOpensCreate(t *testing.T) {
 	}
 
 	app, _ = testApp(t)
-	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/hidden/", Menu: 0})
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlH)
 	app = press(app, tea.KeyCtrlN)
 	if app.Path != "/accounts/create/" {
-		t.Fatalf("ctrl+n on hidden account list should open account create, got %s", app.Path)
+		t.Fatalf("ctrl+n on hidden-only account list should open account create, got %s", app.Path)
 	}
 }
 
@@ -2608,9 +2639,6 @@ func TestSettingsHorizontalBack(t *testing.T) {
 
 func TestNavigationHelpFooters(t *testing.T) {
 	app, _ := testApp(t)
-	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
-
-	app = pressRunes(app, "1")
 	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
 
 	app = pressRunes(app, "1")

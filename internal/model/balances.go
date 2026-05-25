@@ -31,16 +31,6 @@ func (a App) balanceAddKey(s, name string) App {
 	return next.navReplace(accountBalanceListPath(name), 0)
 }
 
-func (a App) balanceMenuKey(s, name string) App {
-	routes := []string{accountBalanceListPath(name), accountBalanceAddPath(name)}
-	a = a.menuKey(s, routes)
-	if a.Path == accountBalanceAddPath(name) {
-		a.Form = map[string]string{"date": Today()}
-		a.Field = 0
-	}
-	return a
-}
-
 func (a App) balanceListTableKey(s, name string) App {
 	if isNewKey(s) {
 		a.Error = ""

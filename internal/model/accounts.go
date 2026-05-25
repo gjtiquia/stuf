@@ -15,6 +15,37 @@ type accountListRow struct {
 	Notes    string
 	OnBudget bool
 	AsOf     string
+	Hidden   bool
+}
+
+type accountVisibilityMode int
+
+const (
+	accountVisibilityNonHidden accountVisibilityMode = iota
+	accountVisibilityHiddenOnly
+	accountVisibilityAll
+)
+
+func (m accountVisibilityMode) label() string {
+	switch m {
+	case accountVisibilityHiddenOnly:
+		return "hidden-only"
+	case accountVisibilityAll:
+		return "all"
+	default:
+		return "non-hidden"
+	}
+}
+
+func (m accountVisibilityMode) next() accountVisibilityMode {
+	switch m {
+	case accountVisibilityNonHidden:
+		return accountVisibilityHiddenOnly
+	case accountVisibilityHiddenOnly:
+		return accountVisibilityAll
+	default:
+		return accountVisibilityNonHidden
+	}
 }
 
 func (a App) accountCreateKey(s string) App {
@@ -42,7 +73,8 @@ func (a App) accountCreateKey(s string) App {
 	next.Field = 0
 	next.Error = ""
 	listIdx := 0
-	if rows, err := next.accountListRows(false); err == nil {
+	next.AccountVisible = accountVisibilityNonHidden
+	if rows, err := next.accountListRows(); err == nil {
 		for i, row := range rows {
 			if row.Name == acct.Name {
 				listIdx = i
@@ -52,26 +84,29 @@ func (a App) accountCreateKey(s string) App {
 	}
 	next.Nav.Pop()
 	next = next.syncFromNav()
-	if next.Path == routeAccounts {
-		next = next.navReplace(next.Path, 0)
-	} else {
-		next = next.navPush(routeAccounts, 0)
+	if next.Path == routeAccountList {
+		return next.navReplace(routeAccountList, listIdx)
 	}
 	return next.navPush(routeAccountList, listIdx)
 }
 
-func (a App) accountListKey(s string, includeHidden bool) App {
+func (a App) accountListKey(s string) App {
 	if isNewKey(s) {
 		a.Error = ""
 		a.Field = 0
 		return a.navPush(routeAccountCreate, 0)
+	}
+	if isHiddenCycleKey(s) {
+		a.Error = ""
+		a.AccountVisible = a.AccountVisible.next()
+		return a.navSetMenu(clampListCursor(0, a.accountListRowCount()))
 	}
 	switch s {
 	case "left":
 		a.Error = ""
 		return a.goBack()
 	case "right":
-		rows, err := a.accountListRows(includeHidden)
+		rows, err := a.accountListRows()
 		if err != nil {
 			a.Error = err.Error()
 			return a
@@ -82,7 +117,7 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
 		return a.navPush(accountPath(rows[a.Menu].Name), 0)
 	case "up", "shift+tab":
-		rows, err := a.accountListRows(includeHidden)
+		rows, err := a.accountListRows()
 		if err != nil {
 			a.Error = err.Error()
 			return a
@@ -92,7 +127,7 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		}
 		return a
 	case "down", "tab":
-		rows, err := a.accountListRows(includeHidden)
+		rows, err := a.accountListRows()
 		if err != nil {
 			a.Error = err.Error()
 			return a
@@ -105,10 +140,10 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 		input := newFilteredListInput(a.listFilter(), nil)
 		updated, _ := input.handleKey("backspace")
 		a.setListFilter(updated.value())
-		a = a.navSetMenu(clampListCursor(a.Menu, a.accountListRowCount(includeHidden)))
+		a = a.navSetMenu(clampListCursor(a.Menu, a.accountListRowCount()))
 		return a
 	case "enter":
-		rows, err := a.accountListRows(includeHidden)
+		rows, err := a.accountListRows()
 		if err != nil {
 			a.Error = err.Error()
 			return a
@@ -128,8 +163,8 @@ func (a App) accountListKey(s string, includeHidden bool) App {
 	}
 }
 
-func (a App) accountListRowCount(includeHidden bool) int {
-	rows, err := a.accountListRows(includeHidden)
+func (a App) accountListRowCount() int {
+	rows, err := a.accountListRows()
 	if err != nil {
 		return 0
 	}
@@ -149,7 +184,7 @@ func (a App) accountDetailKey(s, name string) App {
 	a = a.navSetMenu(action)
 	switch action {
 	case 0:
-		return a.navPush(accountBalancesPath(name), 0)
+		return a.navPush(accountBalanceListPath(name), 0)
 	case 1:
 		return a.navPush(accountTransactionsPath(name), 0)
 	case 2:
@@ -233,51 +268,60 @@ func accountSummary(rows []accountListRow, appCurrency string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (a App) accountListContext(includeHidden bool) string {
-	if includeHidden {
+func (a App) accountListContext() string {
+	if a.AccountVisible != accountVisibilityNonHidden {
 		return ""
 	}
-	allRows, err := a.accountListRowsWithFilter(includeHidden, "")
+	allRows, err := a.accountListRowsWithFilter("")
 	if err != nil {
 		return "error: " + err.Error()
 	}
 	return accountSummary(allRows, a.Config.Config.Currency)
 }
 
-func (a App) accountList(includeHidden bool) string {
-	context := a.accountListContext(includeHidden)
-	body := a.accountListBody(includeHidden)
+func (a App) accountList() string {
+	context := a.accountListContext()
+	body := a.accountListBody()
 	if context == "" {
 		return body
 	}
 	return context + "\n\n" + body
 }
 
-func (a App) accountListBody(includeHidden bool) string {
-	visible, err := a.accountListRows(includeHidden)
+func (a App) accountListBody() string {
+	visible, err := a.accountListRows()
 	if err != nil {
 		return "error: " + err.Error() + "\n"
 	}
 	filter := a.listFilter()
 	var lines []string
+	lines = append(lines, "showing : "+a.AccountVisible.label(), "")
 	lines = append(lines, "> filter : "+placeholder(filter, "(type anything...)"), "")
 	if len(visible) == 0 {
 		lines = append(lines, "  (no results)")
 		return strings.Join(lines, "\n") + "\n"
 	}
-	layout := accountListTableLayoutFor(visible, a.Config.Config.Currency)
-	if includeHidden {
+	layout := accountListTableLayoutFor(visible, a.Config.Config.Currency, a.AccountVisible == accountVisibilityAll)
+	if a.AccountVisible != accountVisibilityNonHidden {
 		lines = append(lines, layout.Header("  "))
 		for i, row := range visible {
 			prefix := "  "
 			if i == a.Menu {
 				prefix = "> "
 			}
-			lines = append(lines, layout.RowCells(prefix, []component.Cell{
+			cells := []component.Cell{
 				component.TextCell(row.Name),
 				row.Balance,
 				component.TextCell(row.Notes),
-			}))
+			}
+			if a.AccountVisible == accountVisibilityAll {
+				hidden := ""
+				if row.Hidden {
+					hidden = "true"
+				}
+				cells = append(cells, component.TextCell(hidden))
+			}
+			lines = append(lines, layout.RowCells(prefix, cells))
 		}
 		return strings.Join(lines, "\n") + "\n"
 	}
@@ -287,25 +331,41 @@ func (a App) accountListBody(includeHidden bool) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-func accountListTableLayoutFor(rows []accountListRow, appCurrency string) component.TableLayout {
+func accountListTableLayoutFor(rows []accountListRow, appCurrency string, includeHiddenColumn bool) component.TableLayout {
 	tableRows := make([][]component.Cell, 0, len(rows)+2)
 	for _, onBudget := range []bool{true, false} {
 		if total, ok := accountSectionTotal(rows, onBudget); ok {
-			tableRows = append(tableRows, []component.Cell{
+			cells := []component.Cell{
 				component.TextCell("TOTAL"),
 				component.MoneyCell(total, appCurrency),
 				component.TextCell(""),
-			})
+			}
+			if includeHiddenColumn {
+				cells = append(cells, component.TextCell(""))
+			}
+			tableRows = append(tableRows, cells)
 		}
 	}
 	for _, row := range rows {
-		tableRows = append(tableRows, []component.Cell{
+		cells := []component.Cell{
 			component.TextCell(row.Name),
 			row.Balance,
 			component.TextCell(row.Notes),
-		})
+		}
+		if includeHiddenColumn {
+			hidden := ""
+			if row.Hidden {
+				hidden = "true"
+			}
+			cells = append(cells, component.TextCell(hidden))
+		}
+		tableRows = append(tableRows, cells)
 	}
-	return component.NewTableLayoutCells([]string{"name", "balance", "notes"}, tableRows)
+	headers := []string{"name", "balance", "notes"}
+	if includeHiddenColumn {
+		headers = append(headers, "hidden")
+	}
+	return component.NewTableLayoutCells(headers, tableRows)
 }
 
 func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, bool) {
@@ -327,18 +387,21 @@ func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, boo
 	return total, found
 }
 
-func (a App) accountListRows(includeHidden bool) ([]accountListRow, error) {
-	return a.accountListRowsWithFilter(includeHidden, a.listFilter())
+func (a App) accountListRows() ([]accountListRow, error) {
+	return a.accountListRowsWithFilter(a.listFilter())
 }
 
-func (a App) accountListRowsWithFilter(includeHidden bool, filter string) ([]accountListRow, error) {
-	accounts, err := a.Svc.Accounts.List(a.ctx, includeHidden)
+func (a App) accountListRowsWithFilter(filter string) ([]accountListRow, error) {
+	accounts, err := a.Svc.Accounts.List(a.ctx, a.AccountVisible != accountVisibilityNonHidden)
 	if err != nil {
 		return nil, err
 	}
 	var visible []accountListRow
 	for _, acct := range accounts {
-		if includeHidden && !acct.Hidden {
+		if a.AccountVisible == accountVisibilityNonHidden && acct.Hidden {
+			continue
+		}
+		if a.AccountVisible == accountVisibilityHiddenOnly && !acct.Hidden {
 			continue
 		}
 		if filter != "" && !strings.Contains(acct.Name, filter) && !strings.Contains(acct.Notes, filter) {
@@ -363,6 +426,7 @@ func (a App) accountListRowsWithFilter(includeHidden bool, filter string) ([]acc
 			Notes:    acct.Notes,
 			OnBudget: acct.OnBudget,
 			AsOf:     asOf,
+			Hidden:   acct.Hidden,
 		})
 	}
 	return visible, nil

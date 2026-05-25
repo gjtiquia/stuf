@@ -6,6 +6,7 @@ package model
 // - list-backed detail: left/h previous item, right/l next item
 // - text fields: left/right move caret; h/l type normally
 // - list screens: ctrl+n opens the matching create/add flow when one exists
+// - account list: ctrl+h cycles hidden visibility
 // - forms: ctrl+s submits committed form values immediately
 
 func isMenuBackKey(s string) bool {
@@ -26,6 +27,10 @@ func isItemNextKey(s string) bool {
 
 func isNewKey(s string) bool {
 	return s == "ctrl+n"
+}
+
+func isHiddenCycleKey(s string) bool {
+	return s == "ctrl+h"
 }
 
 func isSubmitKey(s string) bool {

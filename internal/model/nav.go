@@ -1,8 +1,12 @@
 package model
 
 func (a App) syncFromNav() App {
+	prevPath := a.Path
 	cur := a.Nav.Current()
 	a.Path = cur.Path
+	if a.Path == routeAccountList && prevPath != routeAccountList {
+		a.AccountVisible = accountVisibilityNonHidden
+	}
 	a.Menu = clampListCursor(cur.Menu, a.menuCountFor(cur.Path))
 	a.Nav.setCurrentMenu(a.Menu)
 	return a
@@ -42,20 +46,13 @@ func (a App) menuCountFor(path string) int {
 	switch path {
 	case routeRoot:
 		return 7
-	case routeAccounts:
-		return 3
 	case routeAccountList:
-		return a.accountListRowCount(false)
-	case routeAccountHidden:
-		return a.accountListRowCount(true)
+		return a.accountListRowCount()
 	case routeBackup:
 		return 1
 	default:
 		if _, ok := accountDetailName(path); ok {
 			return 4
-		}
-		if _, ok := balancesName(path); ok {
-			return 2
 		}
 		if name, ok := balanceListName(path); ok {
 			acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
