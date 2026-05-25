@@ -115,3 +115,28 @@ func TestMoneyCellWithTrailingKeepsPrimaryAmountAligned(t *testing.T) {
 		t.Fatalf("trailing native amount missing:\n%s", lines[1])
 	}
 }
+
+func TestMoneyColumnAlignsDashboardShape(t *testing.T) {
+	cells := []Cell{
+		MoneyCell(money.Money{Amount: 1301040, Scale: 2}, "HKD"),
+		MoneyCell(money.Money{Amount: 0, Scale: 2}, "HKD"),
+		MoneyCell(money.Money{Amount: -2394348, Scale: 2}, "HKD"),
+		MoneyCell(money.Money{Amount: -2394348, Scale: 2}, "HKD"),
+	}
+	column := NewMoneyColumn(cells...)
+	lines := []string{
+		column.Render(cells[0]),
+		column.Render(cells[1]),
+		column.Render(cells[2]),
+		column.Render(cells[3]),
+	}
+	decimalAt := strings.Index(lines[0], ".")
+	for _, line := range lines[1:] {
+		if got := strings.Index(line, "."); got != decimalAt {
+			t.Fatalf("dashboard-shaped money decimals shifted:\n%s", strings.Join(lines, "\n"))
+		}
+	}
+	if !strings.Contains(lines[2], "HKD (23,943.48)") {
+		t.Fatalf("negative accounting output changed unexpectedly: %q", lines[2])
+	}
+}

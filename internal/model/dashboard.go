@@ -32,8 +32,8 @@ budgeted    : %s
 period      : %s
 
 growth
-on-budget  : %s
-total      : %s
+on-budget   : %s
+total       : %s
 
 you owe ppl : %s
 ppl owe you : %s

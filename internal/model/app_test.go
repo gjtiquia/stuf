@@ -69,12 +69,39 @@ func TestDashboardRendersGrowthFromBalanceSnapshots(t *testing.T) {
 	for _, want := range []string{
 		"total       : HKD 150.00",
 		"growth",
-		"on-budget  : HKD  50.00",
-		"total      : HKD  50.00",
+		"on-budget   : HKD  50.00",
+		"total       : HKD  50.00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dashboard growth missing %q:\n%s", want, view)
 		}
+	}
+}
+
+func TestDashboardMoneyDecimalsAlignWithNegativeGrowth(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "36953.88", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-24", "13010.40", ""); err != nil {
+		t.Fatal(err)
+	}
+	view := app.View()
+	lines := linesContainingAny(view, []string{
+		"total       : HKD",
+		"budgeted    : HKD",
+		"on-budget   : HKD",
+		"you owe ppl : HKD",
+		"ppl owe you : HKD",
+	})
+	assertSamePrimaryPunctuationIndex(t, lines, ".")
+	if !strings.Contains(view, "on-budget   : HKD (23,943.48)") {
+		t.Fatalf("negative growth should use aligned accounting format:\n%s", view)
 	}
 }
 
@@ -96,8 +123,8 @@ func TestAccountListRenderOrder(t *testing.T) {
 		"# stuf",
 		"total       : HKD 0.00",
 		"growth",
-		"on-budget  : HKD 0.00",
-		"total      : HKD 0.00",
+		"on-budget   : HKD 0.00",
+		"total       : HKD 0.00",
 		"/accounts/list/",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
@@ -193,7 +220,7 @@ func TestAccountsListSummaryNavigation(t *testing.T) {
 			t.Fatalf("list summary empty state missing %q:\n%s", want, view)
 		}
 	}
-	assertOrdered(t, view, "total      : HKD 0.00", "\n/accounts/list/\n\ntotal       : HKD 0.00")
+	assertOrdered(t, view, "total       : HKD 0.00", "\n/accounts/list/\n\ntotal       : HKD 0.00")
 	assertOrdered(t, view, "off-budget  : HKD 0.00", "\n> filter : (type anything...)")
 }
 
@@ -587,6 +614,19 @@ func linesContaining(text string, needles []string) []string {
 		if !strings.Contains(line, "|") {
 			continue
 		}
+		for _, needle := range needles {
+			if strings.Contains(line, needle) {
+				out = append(out, line)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func linesContainingAny(text string, needles []string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
 		for _, needle := range needles {
 			if strings.Contains(line, needle) {
 				out = append(out, line)
