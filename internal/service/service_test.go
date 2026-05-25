@@ -188,7 +188,7 @@ func TestDashboardNetChangeUsesOnBudgetSnapshotTotals(t *testing.T) {
 	}
 	assertMoneyAmount(t, "total", summary.Total, 15000)
 	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, 3000)
-	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, -1000)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, -2000)
 	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, 2500)
 	if len(summary.RecentMonths) != 2 {
 		t.Fatalf("recent months = %+v", summary.RecentMonths)
@@ -201,8 +201,8 @@ func TestDashboardNetChangeUsesOnBudgetSnapshotTotals(t *testing.T) {
 	if summary.Trend.FromPeriod != "2026-03" || summary.Trend.ToPeriod != "2026-04" {
 		t.Fatalf("trend periods = %+v", summary.Trend)
 	}
-	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 2000)
-	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1000)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 2500)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1500)
 }
 
 func TestDashboardTotalSumsLatestPerAccountWithDifferentSnapshotDates(t *testing.T) {
@@ -298,6 +298,56 @@ func TestDashboardTotalSumsLatestPerAccountInLocalTimezone(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertMoneyAmount(t, "total", summary.Total, 205000)
+}
+
+func TestDashboardHighLowMetricsUsePerAccountValuesThenSum(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	checking, _, err := accounts.Create(ctx, "checking", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	savings, _, err := accounts.Create(ctx, "savings", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{checking.ID, "2026-03-05", "100.00"},
+		{checking.ID, "2026-03-20", "50.00"},
+		{savings.ID, "2026-03-10", "200.00"},
+		{savings.ID, "2026-03-25", "120.00"},
+		{checking.ID, "2026-04-05", "300.00"},
+		{checking.ID, "2026-04-20", "100.00"},
+		{savings.ID, "2026-04-10", "150.00"},
+		{savings.ID, "2026-04-25", "80.00"},
+		{checking.ID, "2026-05-05", "500.00"},
+		{checking.ID, "2026-05-25", "200.00"},
+		{savings.ID, "2026-05-10", "50.00"},
+		{savings.ID, "2026-05-20", "400.00"},
+		{savings.ID, "2026-05-25", "300.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 50000)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, -40000)
+	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, 5000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -27000)
+	assertMoneyAmount(t, "mar drop", summary.RecentMonths[1].Drop, -13000)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 15000)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1000)
 }
 
 func TestDashboardMissingHistoryUsesZeroValues(t *testing.T) {

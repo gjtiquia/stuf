@@ -122,11 +122,11 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	}
 	out.Total = totalLatestValue(histories, today, zero)
 	monthStart := totalNearestValue(histories, monthBoundary(today), zero)
-	monthHigh, _ := monthHighLow(histories, today, today, zero)
+	monthHigh, _ := totalMonthHighLow(histories, today, today, zero)
 	prevMonth := today.AddDate(0, -1, 0)
 	prevPrevMonth := today.AddDate(0, -2, 0)
-	prevHigh, prevLow := monthHighLow(histories, prevMonth, today, zero)
-	prevPrevHigh, prevPrevLow := monthHighLow(histories, prevPrevMonth, today, zero)
+	prevHigh, prevLow := totalMonthHighLow(histories, prevMonth, today, zero)
+	prevPrevHigh, prevPrevLow := totalMonthHighLow(histories, prevPrevMonth, today, zero)
 	out.NetChangeFromMonthStart, _ = out.Total.Sub(monthStart)
 	out.NetChangeFromMonthHigh, _ = out.Total.Sub(monthHigh)
 	out.NetChangeFromPreviousMonthHigh, _ = out.Total.Sub(prevHigh)
@@ -159,23 +159,44 @@ func totalNearestValue(histories []dashboardAccountHistory, target time.Time, ze
 	return total
 }
 
-func monthHighLow(histories []dashboardAccountHistory, month, today time.Time, zero money.Money) (money.Money, money.Money) {
-	var high, low money.Money
+func totalMonthHighLow(histories []dashboardAccountHistory, month, today time.Time, zero money.Money) (money.Money, money.Money) {
+	totalHigh := zero
+	totalLow := zero
 	ok := false
-	for _, date := range monthCandidateDates(histories, month, today) {
-		value := totalNearestValue(histories, date, zero)
-		if !ok || value.Amount > high.Amount {
-			high = value
+	for _, history := range histories {
+		high, low, accountOK := accountMonthHighLow(history, month, today)
+		if !accountOK {
+			continue
 		}
-		if !ok || value.Amount < low.Amount {
-			low = value
-		}
+		totalHigh, _ = totalHigh.Add(high)
+		totalLow, _ = totalLow.Add(low)
 		ok = true
 	}
 	if !ok {
 		return zero, zero
 	}
-	return high, low
+	return totalHigh, totalLow
+}
+
+func accountMonthHighLow(history dashboardAccountHistory, month, today time.Time) (money.Money, money.Money, bool) {
+	var high, low money.Money
+	ok := false
+	for _, balance := range history.Balances {
+		if balance.Date.After(today) || !sameMonth(balance.Date, month) {
+			continue
+		}
+		if !ok || balance.Amount.Amount > high.Amount {
+			high = balance.Amount
+		}
+		if !ok || balance.Amount.Amount < low.Amount {
+			low = balance.Amount
+		}
+		ok = true
+	}
+	if !ok {
+		return money.Money{}, money.Money{}, false
+	}
+	return high, low, true
 }
 
 func latestAccountValue(history dashboardAccountHistory, today time.Time) (money.Money, bool) {
@@ -201,28 +222,6 @@ func nearestAccountValue(history dashboardAccountHistory, target time.Time) (mon
 		}
 	}
 	return best.Amount, true
-}
-
-func monthCandidateDates(histories []dashboardAccountHistory, month, today time.Time) []time.Time {
-	seen := map[string]bool{}
-	var dates []time.Time
-	for _, history := range histories {
-		for _, balance := range history.Balances {
-			if balance.Date.After(today) || !sameMonth(balance.Date, month) {
-				continue
-			}
-			key := balance.Date.Format("2006-01-02")
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			dates = append(dates, balance.Date)
-		}
-	}
-	sort.Slice(dates, func(i, j int) bool {
-		return dates[i].Before(dates[j])
-	})
-	return dates
 }
 
 func sameMonth(date, month time.Time) bool {
