@@ -1674,7 +1674,7 @@ func TestSanitizedNameSubmitsAndEditRedirectsToNewSlug(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app.Path = "/accounts/my-cash/edit/"
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/my-cash/", Menu: 2}, navFrame{Path: "/accounts/my-cash/edit/", Menu: 0})
 	app.Form = map[string]string{"name": acct.Name, "currency": "HKD", "on-budget": "true"}
 	app.Field = 0
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=New CASH Account!!")})
@@ -2611,6 +2611,83 @@ func TestCtrlEFromAccountListOpensEdit(t *testing.T) {
 		if app.Form[key] != want {
 			t.Fatalf("edit form %s = %q, want %q; form=%#v", key, app.Form[key], want, app.Form)
 		}
+	}
+}
+
+func TestAccountListEditSubmitReturnsToList(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "main cash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "savings", "USD", false, "rainy day"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 1})
+	app = press(app, tea.KeyCtrlE)
+	app.Form["notes"] = "updated note"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("ctrl+s from list-launched account edit should return to list, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> savings") || !strings.Contains(view, "updated note") {
+		t.Fatalf("updated account should be selected in list:\n%s", view)
+	}
+	acct, err := store.Acct.GetByName(ctx, "savings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.Notes != "updated note" {
+		t.Fatalf("account notes = %q", acct.Notes)
+	}
+}
+
+func TestAccountListEditConfirmReturnsToList(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "main cash"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlE)
+	app.Form["notes"] = "confirmed note"
+	app.Field = 4
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("confirm from list-launched account edit should return to list, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> cash") || !strings.Contains(view, "confirmed note") {
+		t.Fatalf("confirmed edit should be visible on list:\n%s", view)
+	}
+}
+
+func TestAccountListEditPreservesFilterAndVisibility(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "visible"); err != nil {
+		t.Fatal(err)
+	}
+	hidden, _, err := app.Svc.Accounts.Create(ctx, "old-account", "HKD", true, "closed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.SetHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app.AccountVisible = accountVisibilityHiddenOnly
+	app.Form[formKeyFilter] = "old"
+	app = press(app, tea.KeyCtrlE)
+	app.Form["name"] = "archived-account"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/list/" || app.AccountVisible != accountVisibilityHiddenOnly || app.Form[formKeyFilter] != "old" {
+		t.Fatalf("list edit should preserve list state, path=%s mode=%s filter=%q", app.Path, app.AccountVisible.label(), app.Form[formKeyFilter])
+	}
+	if app.Menu != 0 {
+		t.Fatalf("list cursor should clamp after edited account leaves filter, got %d", app.Menu)
+	}
+	if view := app.View(); !strings.Contains(view, "showing : hidden-only") || !strings.Contains(view, "> filter : old") || !strings.Contains(view, "(no results)") {
+		t.Fatalf("filtered hidden list state not preserved:\n%s", view)
 	}
 }
 

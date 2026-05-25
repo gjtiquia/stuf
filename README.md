@@ -998,8 +998,9 @@ esc     : back
 - account currency can be edited only if the account has no balances
 - if balances exist, currency field is read-only/disabled
 - changing currency after balances exist should be modeled by creating a separate account
-- after edit success, goes to the account detail page
-- if account name changed, goes to the new account URL
+- after edit success from account detail, goes to the updated account detail page
+- after ctrl+e edit success from /accounts/list/, returns to /accounts/list/
+- if account name changed from detail edit, goes to the new account URL
 
 ```
 history (ctrl-z to undo)

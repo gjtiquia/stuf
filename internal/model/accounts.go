@@ -112,7 +112,9 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		a.Error = ""
+		filter := a.listFilter()
 		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Form[formKeyFilter] = filter
 		a.Field = 0
 		return a.navPush(accountEditPathFor(acct.Name), 0)
 	}
@@ -242,16 +244,39 @@ func (a App) accountEditKey(s, name string) App {
 		next.Error = err.Error()
 		return next
 	}
+	returnFilter := next.Form[formKeyFilter]
+	returnVisibility := next.AccountVisible
 	next.History = append(next.History, entry)
 	next.Form = map[string]string{}
 	next.Field = 0
 	next.Error = ""
 	next.Nav.Pop()
 	next = next.syncFromNav()
+	if next.Path == routeAccountList {
+		next.AccountVisible = returnVisibility
+		next.Form[formKeyFilter] = returnFilter
+		return next.selectAccountInCurrentList(updated.Name)
+	}
 	if next.Path != accountPath(updated.Name) {
 		next = next.navReplace(accountPath(updated.Name), next.Menu)
 	}
 	return next
+}
+
+func (a App) selectAccountInCurrentList(name string) App {
+	rows, err := a.accountListRows()
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	idx := clampListCursor(a.Menu, len(rows))
+	for i, row := range rows {
+		if row.Name == name {
+			idx = i
+			break
+		}
+	}
+	return a.navReplace(routeAccountList, idx)
 }
 
 func accountSummary(rows []accountListRow, appCurrency string) string {
