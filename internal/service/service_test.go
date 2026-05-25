@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +67,53 @@ func TestBalanceMutationsAndUndo(t *testing.T) {
 	}
 	if _, err := s.Bal.GetByID(ctx, b.ID); err == nil {
 		t.Fatal("balance still exists after undo")
+	}
+}
+
+func TestBalanceDuplicateDateReturnsDomainError(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, _, _ := serviceStack(t)
+	a, _, err := accounts.Create(ctx, "cash", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, a.ID, "2026-05-24", "10.50", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, a.ID, "2026-05-24", "11.00", "duplicate"); err == nil {
+		t.Fatal("expected duplicate balance date error")
+	} else {
+		var dup *repo.BalanceDuplicateDateError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate date domain error, got %T %[1]v", err)
+		}
+		if dup.Date != "2026-05-24" {
+			t.Fatalf("duplicate error date = %q", dup.Date)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("duplicate error should hide raw sqlite error: %v", err)
+		}
+	}
+	if _, _, err := balances.Add(ctx, a.ID, "2026-05-25", "12.00", "second"); err != nil {
+		t.Fatal(err)
+	}
+	first, err := balances.GetByAccountDate(ctx, a.ID, "2026-05-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Update(ctx, first.ID, "2026-05-25", "12.50", "collides"); err == nil {
+		t.Fatal("expected duplicate balance date error on update")
+	} else {
+		var dup *repo.BalanceDuplicateDateError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate date domain error on update, got %T %[1]v", err)
+		}
+		if dup.Date != "2026-05-25" {
+			t.Fatalf("update duplicate error date = %q", dup.Date)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("update duplicate error should hide raw sqlite error: %v", err)
+		}
 	}
 }
 

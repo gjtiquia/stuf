@@ -1532,6 +1532,100 @@ func TestBalanceAddCtrlSSubmitsFromBalanceField(t *testing.T) {
 	}
 }
 
+func TestBalanceAddDuplicateDateErrorPreservesFormAndRecovers(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-24", "100.00", "original"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-24", "balance": "125.00", "notes": "corrected"}
+	app.Field = 3
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/balances/add/" {
+		t.Fatalf("duplicate balance add should stay on form, got %s", app.Path)
+	}
+	if app.Field != 3 {
+		t.Fatalf("duplicate balance add should preserve field, got %d", app.Field)
+	}
+	if app.Form["date"] != "2026-05-24" || app.Form["balance"] != "125.00" || app.Form["notes"] != "corrected" {
+		t.Fatalf("duplicate balance add should preserve form, got %#v", app.Form)
+	}
+	view := app.View()
+	if !strings.Contains(view, "balance already exists for 2026-05-24; edit the existing balance instead") {
+		t.Fatalf("duplicate balance add should show friendly error:\n%s", view)
+	}
+	if strings.Contains(view, "UNIQUE constraint failed") {
+		t.Fatalf("duplicate balance add should hide raw sqlite error:\n%s", view)
+	}
+	if len(app.History) != 0 {
+		t.Fatalf("duplicate balance add should not append history, got %d entries", len(app.History))
+	}
+
+	app = press(app, tea.KeyShiftTab)
+	if app.Field != 2 {
+		t.Fatalf("shift+tab after duplicate error should move cursor to notes, got %d", app.Field)
+	}
+	app.Field = 0
+	app.Form["date"] = "2026-05-25"
+	app.Field = 3
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("corrected balance add should return to list, got %s", app.Path)
+	}
+	if _, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-25"); err != nil {
+		t.Fatalf("corrected balance was not saved: %v", err)
+	}
+}
+
+func TestBalanceAddDuplicateDateErrorCanReturnToListAndEditExisting(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-24", "100.00", "original"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-24", "balance": "125.00", "notes": "duplicate"}
+	app.Field = 3
+
+	app = press(app, tea.KeyEnter)
+	app = press(app, tea.KeyEsc)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("esc after duplicate error should return to balance list, got %s", app.Path)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> 2026-05-24") || !strings.Contains(view, "original") {
+		t.Fatalf("existing balance should remain selectable after duplicate error:\n%s", view)
+	}
+
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/cash/balances/2026-05-24/edit/" {
+		t.Fatalf("ctrl+e after duplicate error should edit selected balance, got %s", app.Path)
+	}
+	if app.Form["date"] != "2026-05-24" || app.Form["balance"] != "100.00" || app.Form["notes"] != "original" {
+		t.Fatalf("edit existing should populate selected balance, got %#v", app.Form)
+	}
+}
+
 func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -1609,6 +1703,67 @@ func TestBalanceEditCtrlSSubmitsFromBalanceField(t *testing.T) {
 	}
 	if got := saved.Amount.Format("HKD"); got != "HKD 60,000.00" {
 		t.Fatalf("updated balance = %q", got)
+	}
+}
+
+func TestBalanceEditDuplicateDateErrorPreservesFormAndRecovers(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-24", "100.00", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-25", "200.00", "second"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 1},
+	)
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/cash/balances/2026-05-24/edit/" {
+		t.Fatalf("ctrl+e should open older balance edit form, got %s", app.Path)
+	}
+	app.Form = map[string]string{"date": "2026-05-25", "balance": "125.00", "notes": "collides"}
+	app.Field = 3
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/balances/2026-05-24/edit/" {
+		t.Fatalf("duplicate balance edit should stay on form, got %s", app.Path)
+	}
+	if app.Field != 3 {
+		t.Fatalf("duplicate balance edit should preserve field, got %d", app.Field)
+	}
+	if app.Form["date"] != "2026-05-25" || app.Form["balance"] != "125.00" || app.Form["notes"] != "collides" {
+		t.Fatalf("duplicate balance edit should preserve form, got %#v", app.Form)
+	}
+	view := app.View()
+	if !strings.Contains(view, "balance already exists for 2026-05-25; edit the existing balance instead") {
+		t.Fatalf("duplicate balance edit should show friendly error:\n%s", view)
+	}
+	if strings.Contains(view, "UNIQUE constraint failed") {
+		t.Fatalf("duplicate balance edit should hide raw sqlite error:\n%s", view)
+	}
+	if len(app.History) != 0 {
+		t.Fatalf("duplicate balance edit should not append history, got %d entries", len(app.History))
+	}
+
+	app = press(app, tea.KeyShiftTab)
+	if app.Field != 2 {
+		t.Fatalf("shift+tab after duplicate edit error should move cursor to notes, got %d", app.Field)
+	}
+	app.Form["date"] = "2026-05-26"
+	app.Field = 3
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("corrected balance edit should return to list, got %s", app.Path)
+	}
+	if _, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-26"); err != nil {
+		t.Fatalf("corrected balance edit was not saved: %v", err)
 	}
 }
 

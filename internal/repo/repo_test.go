@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,6 +75,17 @@ func TestAccountBalanceHistoryRepos(t *testing.T) {
 	}
 	if _, err := s.Bal.Create(ctx, BalanceCreate{AccountID: a.ID, Date: "2026-05-01", Amount: money.Money{Amount: 1, Scale: 2}}); err == nil {
 		t.Fatal("expected unique balance date error")
+	} else {
+		var dup *BalanceDuplicateDateError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate date domain error, got %T %[1]v", err)
+		}
+		if dup.Date != "2026-05-01" {
+			t.Fatalf("duplicate error date = %q", dup.Date)
+		}
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			t.Fatalf("duplicate error should hide raw sqlite error: %v", err)
+		}
 	}
 	latest, ok, err := s.Bal.LatestByAccount(ctx, a.ID)
 	if err != nil || !ok || latest.ID != b.ID {

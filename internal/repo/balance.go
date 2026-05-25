@@ -3,10 +3,14 @@ package repo
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"strings"
 	"time"
 
 	"stuf/internal/db"
 	"stuf/internal/money"
+
+	"modernc.org/sqlite"
 )
 
 type BalanceRepo struct{ store *Store }
@@ -30,7 +34,7 @@ func (r *BalanceRepo) Create(ctx context.Context, in BalanceCreate) (Balance, er
 		UpdatedAt: now,
 	})
 	if err != nil {
-		return Balance{}, err
+		return Balance{}, mapBalanceWriteErr(err, in.Date)
 	}
 	id, _ := res.LastInsertId()
 	return r.GetByID(ctx, id)
@@ -120,11 +124,26 @@ func (r *BalanceRepo) Update(ctx context.Context, b Balance) (Balance, error) {
 		UpdatedAt: now,
 		ID:        b.ID,
 	}); err != nil {
-		return Balance{}, err
+		return Balance{}, mapBalanceWriteErr(err, b.Date)
 	}
 	return r.GetByID(ctx, b.ID)
 }
 
 func (r *BalanceRepo) Delete(ctx context.Context, id int64) error {
 	return r.store.Q.DeleteBalance(ctx, id)
+}
+
+func mapBalanceWriteErr(err error, date string) error {
+	if isBalanceDuplicateDateErr(err) {
+		return &BalanceDuplicateDateError{Date: date}
+	}
+	return err
+}
+
+func isBalanceDuplicateDateErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "balances.account_id, balances.date")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: balances.account_id, balances.date")
 }

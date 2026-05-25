@@ -1151,7 +1151,10 @@ esc     : back
 - fiat balances accept up to 2 decimal places for v1
 - positive, zero, and negative balances are allowed
 - balances sort newest first
-- only one balance is allowed per account per date
+- stuf intentionally allows only one balance snapshot per account per date
+- dates are day-level anchors; v1 does not track time-of-day differences inside a date
+- per-day timing is intentionally out of scope because it adds precision without useful clarity for this app
+- be intentional about which balance represents that day
 - duplicate account/date balances are rejected
 - user should edit the existing balance instead of replacing through add
 
