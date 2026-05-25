@@ -91,6 +91,12 @@ dashboard net change
 - the current month needs reference points so i can tell whether the expected drop is larger than expected, about the same, or better than before
 - previous month drops give more context for what normal spending looks like
 - longer month-to-month trends show whether assets are still growing despite the spending inside each month
+- the dashboard net change should focus on on-budget accounts by default
+- this makes it about on-budget balance rhythm, not the full asset picture
+- healthy on-budget movement can mean growing or staying roughly flat
+- flat can be good if surplus is intentionally moved to investments / off-budget accounts
+- the dashboard mostly answers whether day-to-day money is stable, growing, or dropping within the usual range
+- broader asset growth belongs in reports, where off-budget / investment accounts can add context without making the home screen noisy
 - this keeps the dashboard aligned with the app promise: balance snapshots anchor the truth, imperfect details are okay, and the app stays guilt-free
 
 lazy reconciliation
@@ -437,16 +443,16 @@ budgeted    : HKD 0.00
 
 period      : 2026-03
 
-net change to today
+on-budget net change to today
 from mar start : HKD (2,100.00)
 from mar high  : HKD (8,000.00)
 from feb high  : HKD (4,500.00)
 
-recent months
+on-budget recent months
 feb high to low : HKD (19,000.00)
 jan high to low : HKD (22,000.00)
 
-jan to feb trends
+on-budget jan to feb trends
 high to high    : HKD  5,000.00
 low to low      : HKD  8,000.00
 
