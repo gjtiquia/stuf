@@ -97,6 +97,9 @@ dashboard net change
 - flat can be good if surplus is intentionally moved to investments / off-budget accounts
 - the dashboard mostly answers whether day-to-day money is stable, growing, or dropping within the usual range
 - broader asset growth belongs in reports, where off-budget / investment accounts can add context without making the home screen noisy
+- the most useful balance snapshots are probably beginning of month, end of month, highs, and lows
+- daily balance snapshots would be great too, cuz more info = more insight
+- but even just those key snapshots basically works, because the app is designed around useful anchors instead of perfect bookkeeping
 - this keeps the dashboard aligned with the app promise: balance snapshots anchor the truth, imperfect details are okay, and the app stays guilt-free
 
 lazy reconciliation
