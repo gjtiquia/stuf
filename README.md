@@ -120,6 +120,7 @@ keyboard shortcuts
     - list-backed detail screens: left/h and right/l move to the previous/next item in the source list order
     - only show horizontal shortcuts when the action is available (hide at boundaries)
 - ctrl+n is the canonical shortcut for creating/appending a new element from a list screen when that list has a matching create/add flow
+- ctrl+e and ctrl+d are canonical shortcuts for editing/deleting the selected list element when supported
 - plain letter keys stay available for list filters
 - ctrl+s is the canonical shortcut for submitting a form immediately with currently committed form values
 
@@ -250,6 +251,7 @@ account flow decisions
 - on menus, left/h and esc both go back; right/l and enter both open/confirm
 - on filterable lists, h/l type into the filter; left/right go back/open
 - on lists with a create/add flow, ctrl+n opens the matching new element form
+- on lists with edit/delete flows, ctrl+e opens edit and ctrl+d deletes the selected element
 - on forms, ctrl+s submits immediately as if `[confirm]` was focused and enter was pressed
 - on list-backed detail screens opened from a list, left/h and right/l move prev/next in that list before menu shortcuts apply
 - esc from a create form discards the draft immediately
@@ -577,6 +579,7 @@ up/down       : navigate
 left/right    : back/open
 enter         : confirm
 ctrl+n        : new
+ctrl+e        : edit
 ctrl+h        : hidden
 esc           : back
 ?             : help
@@ -876,6 +879,8 @@ esc           : back
 - accounts list shows app currency first for comparison
 - if account currency differs from app currency, show account currency in parentheses
 - pressing enter on an account opens the account detail page
+- ctrl+e edits the selected account directly from the list
+- ctrl+d is reserved for lists with delete flows; existing accounts should be hidden instead of deleted for v1
 
 ```
 history (ctrl-z to undo)
@@ -1098,6 +1103,8 @@ up/down/j/k : navigate
 left/right  : back/open
 enter       : confirm
 ctrl+n      : new
+ctrl+e      : edit
+ctrl+d      : delete
 esc     : back
 ?       : help
 ```
@@ -1166,11 +1173,16 @@ as of       : 2026-05-21
 up/down/j/k : navigate
 left/right  : back/open
 enter       : confirm
+ctrl+n      : new
+ctrl+e      : edit
+ctrl+d      : delete
 esc         : back
 ?           : help
 ```
 
 - pressing enter on a balance opens the balance detail page
+- ctrl+e edits the selected balance directly from the list
+- ctrl+d deletes the selected balance directly from the list
 - detail pages show the selected resource, not necessarily the parent summary
 - parent identity can be shown as a field when useful
 - left/right move between older/newer balances
@@ -1325,6 +1337,7 @@ up/down       : navigate
 left/right    : back/open
 enter         : confirm
 ctrl+n        : new
+ctrl+e        : edit
 ctrl+h        : hidden
 esc           : back
 ?             : help

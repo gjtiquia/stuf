@@ -96,6 +96,26 @@ func (a App) accountListKey(s string) App {
 		a.Field = 0
 		return a.navPush(routeAccountCreate, 0)
 	}
+	if isEditKey(s) {
+		rows, err := a.accountListRows()
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		acct, err := a.Svc.Accounts.GetByName(a.ctx, rows[a.Menu].Name)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		a.Error = ""
+		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Field = 0
+		return a.navPush(accountEditPathFor(acct.Name), 0)
+	}
 	if isHiddenCycleKey(s) {
 		a.Error = ""
 		a.AccountVisible = a.AccountVisible.next()

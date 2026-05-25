@@ -281,7 +281,7 @@ func (a App) screen() screen {
 			return screen{Path: routeAccountList, Body: "error: " + err.Error() + "\n"}
 		}
 		body := strings.TrimRight(a.accountList(), "\n")
-		return screen{Path: routeAccountList, Context: context, Body: body, Help: listHelp()}
+		return screen{Path: routeAccountList, Context: context, Body: body, Help: accountListHelp()}
 	case a.Path == routeAccountCreate:
 		return screen{Path: routeAccountCreate, Body: a.accountFormView(nil), Help: a.accountFormHelp()}
 	case a.Path == routeSettings:
@@ -395,12 +395,12 @@ func (a App) formHelp(fields []string) []string {
 	return []string{"tab     : next field", "enter   : next field", "ctrl+s  : submit", "esc     : discard", "?       : help"}
 }
 
-func listHelp() []string {
-	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "ctrl+h        : hidden", "esc           : back", "?             : help", "ctrl-z        : undo"}
+func accountListHelp() []string {
+	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "ctrl+e        : edit", "ctrl+h        : hidden", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func tableListHelp() []string {
-	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "enter         : confirm", "ctrl+n        : new", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "enter         : confirm", "ctrl+n        : new", "ctrl+e        : edit", "ctrl+d        : delete", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {

@@ -6,6 +6,7 @@ package model
 // - list-backed detail: left/h previous item, right/l next item
 // - text fields: left/right move caret; h/l type normally
 // - list screens: ctrl+n opens the matching create/add flow when one exists
+// - list screens: ctrl+e edits and ctrl+d deletes the selected element when supported
 // - account list: ctrl+h cycles hidden visibility
 // - forms: ctrl+s submits committed form values immediately
 
@@ -31,6 +32,14 @@ func isNewKey(s string) bool {
 
 func isHiddenCycleKey(s string) bool {
 	return s == "ctrl+h"
+}
+
+func isEditKey(s string) bool {
+	return s == "ctrl+e"
+}
+
+func isDeleteKey(s string) bool {
+	return s == "ctrl+d"
 }
 
 func isSubmitKey(s string) bool {

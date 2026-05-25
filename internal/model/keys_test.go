@@ -34,4 +34,10 @@ func TestHorizontalNavKeyPredicates(t *testing.T) {
 			t.Fatalf("%q should be vertical prev", key)
 		}
 	}
+	if !isEditKey("ctrl+e") || isEditKey("e") {
+		t.Fatal("ctrl+e should be the edit shortcut")
+	}
+	if !isDeleteKey("ctrl+d") || isDeleteKey("d") {
+		t.Fatal("ctrl+d should be the delete shortcut")
+	}
 }

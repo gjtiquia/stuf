@@ -2497,6 +2497,54 @@ func TestBalanceListLeftRightBackOpen(t *testing.T) {
 	}
 }
 
+func TestBalanceListCtrlEditDeleteShortcuts(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 1},
+	)
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/cash/balances/2026-05-01/edit/" {
+		t.Fatalf("ctrl+e on balance list should open selected edit form, got %s", app.Path)
+	}
+	if app.Form["date"] != "2026-05-01" || app.Form["balance"] != "100.00" || app.Form["notes"] != "start" {
+		t.Fatalf("ctrl+e should populate selected balance form, got %#v", app.Form)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 1},
+	)
+	app = press(app, tea.KeyCtrlD)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("ctrl+d on balance list should stay on list, got %s", app.Path)
+	}
+	if _, err := store.Bal.GetByAccountDate(ctx, acct.ID, "2026-05-01"); err == nil {
+		t.Fatal("ctrl+d should delete the selected balance")
+	}
+	if len(app.History) != 1 {
+		t.Fatalf("ctrl+d should append undo history, got %d entries", len(app.History))
+	}
+	view := app.View()
+	if !strings.Contains(view, "> 2026-06-01") || strings.Contains(view, "| HKD 100.00 | start") {
+		t.Fatalf("ctrl+d should clamp selection to remaining balance:\n%s", view)
+	}
+}
+
 func TestAccountListFilterHLDoesNotTriggerBackOrOpen(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -2542,6 +2590,27 @@ func TestPlainNStillTypesIntoAccountListFilter(t *testing.T) {
 	}
 	if !strings.Contains(app.View(), "> filter : n") {
 		t.Fatalf("plain n should appear in filter:\n%s", app.View())
+	}
+}
+
+func TestCtrlEFromAccountListOpensEdit(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "main cash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "savings", "USD", false, "rainy day"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 1})
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/savings/edit/" {
+		t.Fatalf("ctrl+e on account list should open selected account edit, got %s", app.Path)
+	}
+	for key, want := range map[string]string{"name": "savings", "currency": "USD", "on-budget": "false", "notes": "rainy day"} {
+		if app.Form[key] != want {
+			t.Fatalf("edit form %s = %q, want %q; form=%#v", key, app.Form[key], want, app.Form)
+		}
 	}
 }
 

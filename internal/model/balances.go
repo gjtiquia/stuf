@@ -48,6 +48,27 @@ func (a App) balanceListTableKey(s, name string) App {
 		a.Error = err.Error()
 		return a
 	}
+	if isEditKey(s) || isDeleteKey(s) {
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		bal := rows[a.Menu]
+		if isEditKey(s) {
+			a.Error = ""
+			a.Form = map[string]string{"date": bal.Date, "balance": rawAmount(bal.Amount.Amount, bal.Amount.Scale), "notes": bal.Notes}
+			a.Field = 0
+			return a.navPush(accountBalanceEditPath(name, bal.Date), 0)
+		}
+		entry, err := a.Svc.Balances.Delete(a.ctx, bal.ID)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		a.History = append(a.History, entry)
+		a.Error = ""
+		return a.navSetMenu(clampListCursor(a.Menu, len(rows)-1))
+	}
 	switch s {
 	case "left":
 		a.Error = ""
