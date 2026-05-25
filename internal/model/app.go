@@ -406,12 +406,12 @@ func (a App) helpLines(s screen) []string {
 
 func (a App) formHelp(fields []string) []string {
 	if a.Field >= len(fields) {
-		return []string{"shift-tab : previous field", "enter     : confirm", "esc       : discard", "?         : help"}
+		return []string{"shift-tab : previous field", "enter     : confirm", "ctrl+s    : submit", "esc       : discard", "?         : help"}
 	}
 	if a.Field < len(fields) && fields[a.Field] == "notes" {
-		return []string{"tab     : next field", "enter   : next field", "esc     : discard"}
+		return []string{"tab     : next field", "enter   : next field", "ctrl+s  : submit", "esc     : discard"}
 	}
-	return []string{"tab     : next field", "enter   : next field", "esc     : discard", "?       : help"}
+	return []string{"tab     : next field", "enter   : next field", "ctrl+s  : submit", "esc     : discard", "?       : help"}
 }
 
 func listHelp() []string {
@@ -424,13 +424,13 @@ func tableListHelp() []string {
 
 func (a App) accountFormHelp() []string {
 	if a.Field == 1 {
-		return []string{"type       : filter", "h/l        : type in filter", "up/down    : move cursor", "left/right : next/prev page", "enter      : confirm", "tab        : navigate", "esc        : back", "?          : help"}
+		return []string{"type       : filter", "h/l        : type in filter", "up/down    : move cursor", "left/right : next/prev page", "enter      : confirm", "ctrl+s     : submit", "tab        : navigate", "esc        : back", "?          : help"}
 	}
 	if a.Field == 2 {
-		return []string{"up/down : move cursor", "enter   : confirm", "tab     : navigate", "esc     : back", "?       : help"}
+		return []string{"up/down : move cursor", "enter   : confirm", "ctrl+s  : submit", "tab     : navigate", "esc     : back", "?       : help"}
 	}
 	if a.Field >= 4 {
-		return []string{"shift-tab : navigate", "enter     : confirm", "esc       : back", "?         : help"}
+		return []string{"shift-tab : navigate", "enter     : confirm", "ctrl+s    : submit", "esc       : back", "?         : help"}
 	}
 	return a.formHelp([]string{"name", "currency", "on-budget", "notes"})
 }

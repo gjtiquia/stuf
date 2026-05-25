@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"stuf/internal/component"
 	"stuf/internal/money"
 )
 
@@ -20,6 +21,15 @@ func menuItems(items []string, selected int) string {
 }
 
 func zero(code string) string { return code + " 0.00" }
+
+func alignedMoneyValues(values ...component.Cell) []string {
+	column := component.NewMoneyColumn(values...)
+	out := make([]string, len(values))
+	for i, value := range values {
+		out[i] = column.Render(value)
+	}
+	return out
+}
 
 func placeholder(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {

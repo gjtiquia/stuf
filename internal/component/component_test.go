@@ -3,6 +3,8 @@ package component
 import (
 	"strings"
 	"testing"
+
+	"stuf/internal/money"
 )
 
 func TestSmallComponents(t *testing.T) {
@@ -47,5 +49,69 @@ func TestTableLayoutTreatsPrefixOutsideColumnWidths(t *testing.T) {
 	selected := layout.Row("> ", []string{"2026-05-25", "HKD 13,010.40"})
 	if strings.Index(unselected, "|") != strings.Index(selected, "|") {
 		t.Fatalf("prefix should not shift columns:\nunselected: %q\nselected:   %q", unselected, selected)
+	}
+}
+
+func TestTableLayoutAlignsMoneyCells(t *testing.T) {
+	rows := [][]Cell{
+		{TextCell("small"), MoneyCell(money.Money{Amount: 1000, Scale: 2}, "HKD"), TextCell("")},
+		{TextCell("medium"), MoneyCell(money.Money{Amount: 100000, Scale: 2}, "HKD"), TextCell("")},
+		{TextCell("large"), MoneyCell(money.Money{Amount: 123456789, Scale: 2}, "HKD"), TextCell("")},
+		{TextCell("negative"), MoneyCell(money.Money{Amount: -123456, Scale: 2}, "HKD"), TextCell("")},
+	}
+	layout := NewTableLayoutCells([]string{"name", "balance", "notes"}, rows)
+
+	rendered := []string{
+		layout.RowCells("  ", rows[0]),
+		layout.RowCells("> ", rows[1]),
+		layout.RowCells("  ", rows[2]),
+		layout.RowCells("  ", rows[3]),
+	}
+	decimalAt := -1
+	commaAt := -1
+	for _, line := range rendered {
+		if strings.Index(line, "HKD") < 0 {
+			t.Fatalf("currency missing from %q", line)
+		}
+		gotDecimal := strings.Index(line, ".")
+		if decimalAt < 0 {
+			decimalAt = gotDecimal
+		} else if gotDecimal != decimalAt {
+			t.Fatalf("decimal shifted:\n%s", strings.Join(rendered, "\n"))
+		}
+		if strings.Contains(line, ",") {
+			gotComma := strings.LastIndex(line, ",")
+			if commaAt < 0 {
+				commaAt = gotComma
+			} else if gotComma != commaAt {
+				t.Fatalf("comma shifted:\n%s", strings.Join(rendered, "\n"))
+			}
+		}
+	}
+	if strings.Index(rendered[0], "|") != strings.Index(rendered[1], "|") {
+		t.Fatalf("prefix should not shift columns:\n%s", strings.Join(rendered, "\n"))
+	}
+	if !strings.Contains(rendered[3], "HKD (") || !strings.Contains(rendered[3], ")") {
+		t.Fatalf("negative accounting parens missing:\n%s", rendered[3])
+	}
+}
+
+func TestMoneyCellWithTrailingKeepsPrimaryAmountAligned(t *testing.T) {
+	rows := [][]Cell{
+		{TextCell("cash"), MoneyCell(money.Money{Amount: 100000, Scale: 2}, "HKD")},
+		{TextCell("yen"), MoneyCellWithTrailing(money.Money{Amount: 100000, Scale: 2}, "HKD", "(JPY 20,000)")},
+		{TextCell("debt"), MoneyCell(money.Money{Amount: -2500, Scale: 2}, "HKD")},
+	}
+	layout := NewTableLayoutCells([]string{"name", "balance"}, rows)
+	lines := []string{
+		layout.RowCells("  ", rows[0]),
+		layout.RowCells("  ", rows[1]),
+		layout.RowCells("  ", rows[2]),
+	}
+	if strings.Index(lines[0], ".") != strings.Index(lines[1], ".") || strings.Index(lines[1], ".") != strings.Index(lines[2], ".") {
+		t.Fatalf("primary decimals should align:\n%s", strings.Join(lines, "\n"))
+	}
+	if !strings.Contains(lines[1], "(JPY 20,000)") {
+		t.Fatalf("trailing native amount missing:\n%s", lines[1])
 	}
 }

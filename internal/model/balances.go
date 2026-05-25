@@ -241,18 +241,26 @@ func (a App) balanceListBody(name string) string {
 		lines = append(lines, "  (no balances yet)")
 		return strings.Join(lines, "\n") + "\n"
 	}
-	tableRows := make([][]string, 0, len(rows))
+	tableRows := make([][]component.Cell, 0, len(rows))
 	for _, row := range rows {
-		tableRows = append(tableRows, []string{row.Date, row.Amount.Format(acct.Code), row.Notes})
+		tableRows = append(tableRows, []component.Cell{
+			component.TextCell(row.Date),
+			component.MoneyCell(row.Amount, acct.Code),
+			component.TextCell(row.Notes),
+		})
 	}
-	layout := component.NewTableLayout([]string{"date", "balance", "notes"}, tableRows)
+	layout := component.NewTableLayoutCells([]string{"date", "balance", "notes"}, tableRows)
 	lines[0] = layout.Header("  ")
 	for i, row := range rows {
 		prefix := "  "
 		if a.Menu == i {
 			prefix = "> "
 		}
-		lines = append(lines, layout.Row(prefix, []string{row.Date, row.Amount.Format(acct.Code), row.Notes}))
+		lines = append(lines, layout.RowCells(prefix, []component.Cell{
+			component.TextCell(row.Date),
+			component.MoneyCell(row.Amount, acct.Code),
+			component.TextCell(row.Notes),
+		}))
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

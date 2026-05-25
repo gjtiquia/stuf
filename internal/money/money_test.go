@@ -28,14 +28,14 @@ func TestParseFormatAndArithmetic(t *testing.T) {
 
 func TestFormatDecimalText(t *testing.T) {
 	tests := map[string]string{
-		"":           "",
-		"0":          "0",
-		"123":        "123",
-		"1234":       "1,234",
-		"1234567":    "1,234,567",
-		"1234.56":    "1,234.56",
-		"-1234.56":   "-1,234.56",
-		".5":         "0.5",
+		"":         "",
+		"0":        "0",
+		"123":      "123",
+		"1234":     "1,234",
+		"1234567":  "1,234,567",
+		"1234.56":  "1,234.56",
+		"-1234.56": "-1,234.56",
+		".5":       "0.5",
 	}
 	for input, want := range tests {
 		if got := FormatDecimalText(input); got != want {
@@ -59,6 +59,26 @@ func TestFormatWithThousandsSeparators(t *testing.T) {
 	for _, tc := range tests {
 		if got := tc.m.Format(tc.code); got != tc.want {
 			t.Fatalf("Format(%+v, %q) = %q, want %q", tc.m, tc.code, got, tc.want)
+		}
+	}
+}
+
+func TestFormatParts(t *testing.T) {
+	tests := []struct {
+		name string
+		m    Money
+		code string
+		want FormatParts
+	}{
+		{"zero", Money{Amount: 0, Scale: 2}, "HKD", FormatParts{Currency: "HKD", Number: "0.00"}},
+		{"short positive", Money{Amount: 1000, Scale: 2}, "HKD", FormatParts{Currency: "HKD", Number: "10.00"}},
+		{"large positive", Money{Amount: 123456789, Scale: 2}, "HKD", FormatParts{Currency: "HKD", Number: "1,234,567.89"}},
+		{"negative accounting", Money{Amount: -123456, Scale: 2}, "HKD", FormatParts{Currency: "HKD", Number: "1,234.56", Negative: true}},
+		{"scale zero", Money{Amount: 1000, Scale: 0}, "JPY", FormatParts{Currency: "JPY", Number: "1,000"}},
+	}
+	for _, tc := range tests {
+		if got := tc.m.FormatParts(tc.code); got != tc.want {
+			t.Fatalf("%s FormatParts = %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
 }

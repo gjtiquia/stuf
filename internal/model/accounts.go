@@ -10,7 +10,7 @@ import (
 
 type accountListRow struct {
 	Name     string
-	Balance  string
+	Balance  component.Cell
 	Amount   money.Money
 	Notes    string
 	OnBudget bool
@@ -213,22 +213,23 @@ func accountSummary(rows []accountListRow, appCurrency string) string {
 	onBudgetTotal, hasOnBudget := accountSectionTotal(rows, true)
 	offBudgetTotal, hasOffBudget := accountSectionTotal(rows, false)
 
-	totalStr := total.Format(appCurrency)
+	totalCell := component.MoneyCell(total, appCurrency)
 	if len(rows) == 0 {
-		totalStr = zero(appCurrency)
+		totalCell = component.MoneyCell(money.Money{Scale: 2}, appCurrency)
 	}
-	var lines []string
-	lines = append(lines, fmt.Sprintf("total       : %s", totalStr))
+	onBudgetCell := component.MoneyCell(money.Money{Scale: 2}, appCurrency)
 	if hasOnBudget {
-		lines = append(lines, fmt.Sprintf("on-budget   : %s", onBudgetTotal.Format(appCurrency)))
-	} else {
-		lines = append(lines, fmt.Sprintf("on-budget   : %s", zero(appCurrency)))
+		onBudgetCell = component.MoneyCell(onBudgetTotal, appCurrency)
 	}
+	offBudgetCell := component.MoneyCell(money.Money{Scale: 2}, appCurrency)
 	if hasOffBudget {
-		lines = append(lines, fmt.Sprintf("off-budget  : %s", offBudgetTotal.Format(appCurrency)))
-	} else {
-		lines = append(lines, fmt.Sprintf("off-budget  : %s", zero(appCurrency)))
+		offBudgetCell = component.MoneyCell(offBudgetTotal, appCurrency)
 	}
+	values := alignedMoneyValues(totalCell, onBudgetCell, offBudgetCell)
+	var lines []string
+	lines = append(lines, fmt.Sprintf("total       : %s", values[0]))
+	lines = append(lines, fmt.Sprintf("on-budget   : %s", values[1]))
+	lines = append(lines, fmt.Sprintf("off-budget  : %s", values[2]))
 	return strings.Join(lines, "\n")
 }
 
@@ -272,7 +273,11 @@ func (a App) accountListBody(includeHidden bool) string {
 			if i == a.Menu {
 				prefix = "> "
 			}
-			lines = append(lines, layout.Row(prefix, []string{row.Name, row.Balance, row.Notes}))
+			lines = append(lines, layout.RowCells(prefix, []component.Cell{
+				component.TextCell(row.Name),
+				row.Balance,
+				component.TextCell(row.Notes),
+			}))
 		}
 		return strings.Join(lines, "\n") + "\n"
 	}
@@ -283,16 +288,24 @@ func (a App) accountListBody(includeHidden bool) string {
 }
 
 func accountListTableLayoutFor(rows []accountListRow, appCurrency string) component.TableLayout {
-	tableRows := make([][]string, 0, len(rows)+2)
+	tableRows := make([][]component.Cell, 0, len(rows)+2)
 	for _, onBudget := range []bool{true, false} {
 		if total, ok := accountSectionTotal(rows, onBudget); ok {
-			tableRows = append(tableRows, []string{"TOTAL", total.Format(appCurrency), ""})
+			tableRows = append(tableRows, []component.Cell{
+				component.TextCell("TOTAL"),
+				component.MoneyCell(total, appCurrency),
+				component.TextCell(""),
+			})
 		}
 	}
 	for _, row := range rows {
-		tableRows = append(tableRows, []string{row.Name, row.Balance, row.Notes})
+		tableRows = append(tableRows, []component.Cell{
+			component.TextCell(row.Name),
+			row.Balance,
+			component.TextCell(row.Notes),
+		})
 	}
-	return component.NewTableLayout([]string{"name", "balance", "notes"}, tableRows)
+	return component.NewTableLayoutCells([]string{"name", "balance", "notes"}, tableRows)
 }
 
 func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, bool) {
@@ -355,27 +368,27 @@ func (a App) accountListRowsWithFilter(includeHidden bool, filter string) ([]acc
 	return visible, nil
 }
 
-func (a App) accountListBalance(code string, native money.Money) (money.Money, string, error) {
+func (a App) accountListBalance(code string, native money.Money) (money.Money, component.Cell, error) {
 	appCur, err := a.Svc.Currency.Get(a.ctx, a.Config.Config.Currency)
 	if err != nil {
-		return money.Money{}, "", err
+		return money.Money{}, component.Cell{}, err
 	}
 	if code == appCur.Code {
 		appAmount, err := native.ConvertToScale(appCur.Scale)
 		if err != nil {
-			return money.Money{}, "", err
+			return money.Money{}, component.Cell{}, err
 		}
-		return appAmount, appAmount.Format(appCur.Code), nil
+		return appAmount, component.MoneyCell(appAmount, appCur.Code), nil
 	}
 	cur, err := a.Svc.Currency.Get(a.ctx, code)
 	if err != nil {
-		return money.Money{}, "", err
+		return money.Money{}, component.Cell{}, err
 	}
 	appAmount, err := money.Convert(native, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
 	if err != nil {
-		return money.Money{}, "", err
+		return money.Money{}, component.Cell{}, err
 	}
-	return appAmount, fmt.Sprintf("%s (%s)", appAmount.Format(appCur.Code), native.Format(code)), nil
+	return appAmount, component.MoneyCellWithTrailing(appAmount, appCur.Code, fmt.Sprintf("(%s)", native.Format(code))), nil
 }
 
 func appendAccountSection(lines []string, title string, rows []accountListRow, onBudget bool, selected int, appCurrency string, layout component.TableLayout) []string {
@@ -385,7 +398,11 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 	}
 	lines = append(lines, "  "+title)
 	lines = append(lines, layout.Header("  "))
-	lines = append(lines, layout.Row("  ", []string{"TOTAL", total.Format(appCurrency), ""}))
+	lines = append(lines, layout.RowCells("  ", []component.Cell{
+		component.TextCell("TOTAL"),
+		component.MoneyCell(total, appCurrency),
+		component.TextCell(""),
+	}))
 	lines = append(lines, "")
 	for i, row := range rows {
 		if row.OnBudget != onBudget {
@@ -395,7 +412,11 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 		if i == selected {
 			prefix = "> "
 		}
-		lines = append(lines, layout.Row(prefix, []string{row.Name, row.Balance, row.Notes}))
+		lines = append(lines, layout.RowCells(prefix, []component.Cell{
+			component.TextCell(row.Name),
+			row.Balance,
+			component.TextCell(row.Notes),
+		}))
 	}
 	return lines
 }

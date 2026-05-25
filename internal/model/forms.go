@@ -8,6 +8,10 @@ import (
 
 func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 	fields := []string{"name", "currency", "on-budget", "notes"}
+	if isSubmitKey(s) {
+		a.clearCurrentTextCursor(fields)
+		return a, true
+	}
 	if a.Field == 1 && locked != nil && locked["currency"] {
 		switch s {
 		case "enter", "tab", "down":
@@ -145,6 +149,10 @@ func (a App) currencyOptions() []string {
 }
 
 func (a App) submitFormKey(s string, fields []string) (App, bool) {
+	if isSubmitKey(s) {
+		a.clearCurrentTextCursor(fields)
+		return a, true
+	}
 	if s == "enter" {
 		if a.Field >= len(fields) {
 			return a, true

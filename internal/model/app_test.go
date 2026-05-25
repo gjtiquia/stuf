@@ -69,8 +69,8 @@ func TestDashboardRendersGrowthFromBalanceSnapshots(t *testing.T) {
 	for _, want := range []string{
 		"total       : HKD 150.00",
 		"growth",
-		"on-budget  : HKD 50.00",
-		"total      : HKD 50.00",
+		"on-budget  : HKD  50.00",
+		"total      : HKD  50.00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dashboard growth missing %q:\n%s", want, view)
@@ -203,9 +203,9 @@ func TestAccountsListSummaryTotals(t *testing.T) {
 	app.Path = routeAccountList
 	view := app.View()
 	for _, want := range []string{
-		"total       : HKD 575.00",
-		"on-budget   : HKD 600.00",
-		"off-budget  : HKD (25.00)",
+		"total       : HKD  575.00",
+		"on-budget   : HKD  600.00",
+		"off-budget  : HKD ( 25.00)",
 		"> filter : (type anything...)",
 	} {
 		if !strings.Contains(view, want) {
@@ -497,11 +497,11 @@ func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 	app.Path = routeAccountList
 	view := app.View()
 	for _, want := range []string{
-		"| HKD 600.00",
+		"| HKD  600.00",
 		"> cash",
 		"usd-savings",
-		"HKD 500.00 (USD 50.00)",
-		"| HKD (25.00)",
+		"HKD  500.00  (USD 50.00)",
+		"| HKD ( 25.00)",
 		"student-loan",
 		"negative until fully paid",
 	} {
@@ -511,12 +511,52 @@ func TestAccountListTotalsAndForeignCurrencyDisplay(t *testing.T) {
 	}
 }
 
+func TestAccountListMoneyColumnsAlignPunctuation(t *testing.T) {
+	app, store := testApp(t)
+	seedStandardAccounts(t, app, store)
+	app.Path = routeAccountList
+	view := app.View()
+	lines := linesContaining(view, []string{"TOTAL", "cash", "usd-savings", "student-loan"})
+	assertSamePrimaryPunctuationIndex(t, lines, ".")
+	assertSamePrimaryPunctuationIndexIfPresent(t, lines, ",")
+}
+
+func TestBalanceListMoneyColumnAlignsPositiveNegativeAndLargeValues(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range []struct {
+		date   string
+		amount string
+	}{
+		{"2026-05-21", "10.00"},
+		{"2026-05-22", "1000.00"},
+		{"2026-05-23", "1234567.89"},
+		{"2026-05-24", "-1234.56"},
+	} {
+		if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, entry.date, entry.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app.Path = "/accounts/cash/balances/list/"
+	view := app.View()
+	lines := linesContaining(view, []string{"2026-05-21", "2026-05-22", "2026-05-23", "2026-05-24"})
+	assertSamePrimaryPunctuationIndex(t, lines, ".")
+	assertSamePrimaryPunctuationIndex(t, lines, ",")
+	if !strings.Contains(view, "HKD (    1,234.56)") {
+		t.Fatalf("negative balance should reserve accounting parens without shifting decimals:\n%s", view)
+	}
+}
+
 func TestNegativeBalanceDisplayUsesBracketsEditUsesMinus(t *testing.T) {
 	app, store := testApp(t)
 	seedStandardAccounts(t, app, store)
 	app.Path = routeAccountList
 	view := app.View()
-	for _, want := range []string{"student-loan", "HKD (25.00)"} {
+	for _, want := range []string{"student-loan", "HKD ( 25.00)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("rendered negative balance missing %q:\n%s", want, view)
 		}
@@ -539,6 +579,56 @@ func TestNegativeBalanceDisplayUsesBracketsEditUsesMinus(t *testing.T) {
 		t.Fatalf("context summary should use bracket notation:\n%s", view)
 	}
 	_ = store
+}
+
+func linesContaining(text string, needles []string) []string {
+	var out []string
+	for _, line := range strings.Split(text, "\n") {
+		if !strings.Contains(line, "|") {
+			continue
+		}
+		for _, needle := range needles {
+			if strings.Contains(line, needle) {
+				out = append(out, line)
+				break
+			}
+		}
+	}
+	return out
+}
+
+func assertSamePrimaryPunctuationIndex(t *testing.T, lines []string, punctuation string) {
+	t.Helper()
+	assertSamePrimaryPunctuationIndexFor(t, lines, punctuation, true)
+}
+
+func assertSamePrimaryPunctuationIndexIfPresent(t *testing.T, lines []string, punctuation string) {
+	t.Helper()
+	assertSamePrimaryPunctuationIndexFor(t, lines, punctuation, false)
+}
+
+func assertSamePrimaryPunctuationIndexFor(t *testing.T, lines []string, punctuation string, require bool) {
+	t.Helper()
+	want := -1
+	for _, line := range lines {
+		idx := strings.Index(line, punctuation)
+		if punctuation == "," {
+			idx = strings.LastIndex(line, punctuation)
+		}
+		if idx < 0 {
+			continue
+		}
+		if want < 0 {
+			want = idx
+			continue
+		}
+		if idx != want {
+			t.Fatalf("%q shifted in money column:\n%s", punctuation, strings.Join(lines, "\n"))
+		}
+	}
+	if require && want < 0 {
+		t.Fatalf("no %q found in lines:\n%s", punctuation, strings.Join(lines, "\n"))
+	}
 }
 
 func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
@@ -628,7 +718,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page", "ctrl+s     : submit"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
@@ -636,7 +726,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 3) on-budget", "     > true", "false"} {
+	for _, want := range []string{"> 3) on-budget", "     > true", "false", "ctrl+s  : submit"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("on-budget select missing %q:\n%s", want, view)
 		}
@@ -650,7 +740,7 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "> [confirm]") || !strings.Contains(view, "shift-tab : navigate") {
+	if view = app.View(); !strings.Contains(view, "> [confirm]") || !strings.Contains(view, "shift-tab : navigate") || !strings.Contains(view, "ctrl+s    : submit") {
 		t.Fatalf("confirm focus/footer missing:\n%s", view)
 	}
 	app.Form["name"] = "off-budget-cash"
@@ -665,6 +755,81 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	}
 	if acct.OnBudget {
 		t.Fatal("expected account to be created off-budget")
+	}
+}
+
+func TestCtrlSFromAccountNameFieldSubmits(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app = pressRunes(app, "cash")
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("ctrl+s from name field should submit account form, got %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.Code != "HKD" || !acct.OnBudget {
+		t.Fatalf("created account defaults = code %s onBudget %t", acct.Code, acct.OnBudget)
+	}
+}
+
+func TestCtrlSFromCurrencyFilterSubmitsCommittedCurrency(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form["name"] = "cash"
+	app.Field = 1
+	app = pressRunes(app, "j")
+	if view := app.View(); !strings.Contains(view, "filter  : J") || !strings.Contains(view, "> JPY") {
+		t.Fatalf("expected JPY highlighted by currency filter:\n%s", view)
+	}
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("ctrl+s from currency filter should submit account form, got %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.Code != "HKD" {
+		t.Fatalf("ctrl+s should submit committed currency HKD, got %s", acct.Code)
+	}
+}
+
+func TestCtrlSFromAccountSelectSubmitsSelectedValue(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form["name"] = "off-budget-cash"
+	app.Field = 2
+	app = press(app, tea.KeyDown)
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/list/" {
+		t.Fatalf("ctrl+s from on-budget select should submit account form, got %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "off-budget-cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if acct.OnBudget {
+		t.Fatal("ctrl+s should submit selected on-budget=false value")
+	}
+}
+
+func TestCtrlSValidationErrorPreservesAccountForm(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/", Menu: 2}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true", "notes": "keep me"}
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/create/" || app.Error == "" {
+		t.Fatalf("ctrl+s validation error should stay on form with error, path=%s error=%q", app.Path, app.Error)
+	}
+	if app.Form["name"] != "cash" || app.Form["notes"] != "keep me" {
+		t.Fatalf("ctrl+s validation error should preserve form, got %#v", app.Form)
 	}
 }
 
@@ -1233,6 +1398,38 @@ func TestBalanceAddEnterOnConfirmSubmits(t *testing.T) {
 	}
 }
 
+func TestBalanceAddCtrlSSubmitsFromBalanceField(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/add/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-24", "balance": "100.00", "notes": "test note"}
+	app.Field = 1
+
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("ctrl+s should submit add balance and return to list, got %s", app.Path)
+	}
+	acct, err := app.Svc.Accounts.GetByName(ctx, "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Amount.Format("HKD"); got != "HKD 100.00" {
+		t.Fatalf("saved balance = %q", got)
+	}
+}
+
 func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -1280,6 +1477,39 @@ func TestBalanceEditEnterOnConfirmSubmits(t *testing.T) {
 	}
 }
 
+func TestBalanceEditCtrlSSubmitsFromBalanceField(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-21/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/2026-05-21/edit/", Menu: 0},
+	)
+	app.Form = map[string]string{"date": "2026-05-21", "balance": "60000.00", "notes": "updated"}
+	app.Field = 1
+
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("ctrl+s should submit edit balance and return to list, got %s", app.Path)
+	}
+	saved, err := app.Svc.Balances.GetByAccountDate(ctx, acct.ID, "2026-05-21")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := saved.Amount.Format("HKD"); got != "HKD 60,000.00" {
+		t.Fatalf("updated balance = %q", got)
+	}
+}
+
 func TestBalanceFormHelpEnterSemantics(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -1290,17 +1520,17 @@ func TestBalanceFormHelpEnterSemantics(t *testing.T) {
 	app.Form = map[string]string{"date": "2026-05-24"}
 	app.Field = 0
 	view := app.View()
-	if !strings.Contains(view, "enter   : next field") {
+	if !strings.Contains(view, "enter   : next field") || !strings.Contains(view, "ctrl+s  : submit") {
 		t.Fatalf("date field help should say enter advances:\n%s", view)
 	}
 	app.Field = 2
 	view = app.View()
-	if !strings.Contains(view, "enter   : next field") || strings.Contains(view, "?       : help") {
+	if !strings.Contains(view, "enter   : next field") || !strings.Contains(view, "ctrl+s  : submit") || strings.Contains(view, "?       : help") {
 		t.Fatalf("notes field help should say enter advances and hide ?:\n%s", view)
 	}
 	app.Field = 3
 	view = app.View()
-	if !strings.Contains(view, "enter     : confirm") {
+	if !strings.Contains(view, "enter     : confirm") || !strings.Contains(view, "ctrl+s    : submit") {
 		t.Fatalf("confirm row help should say enter submits:\n%s", view)
 	}
 }

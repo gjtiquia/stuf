@@ -15,6 +15,12 @@ type Money struct {
 	Scale  int
 }
 
+type FormatParts struct {
+	Currency string
+	Number   string
+	Negative bool
+}
+
 var moneyPattern = regexp.MustCompile(`^\s*([+-]?)(\d+)(?:\.(\d+))?\s*$`)
 
 func Parse(input string) (Money, error) {
@@ -35,24 +41,29 @@ func Parse(input string) (Money, error) {
 }
 
 func (m Money) Format(currencyCode string) string {
+	parts := m.FormatParts(currencyCode)
+	if parts.Negative {
+		return fmt.Sprintf("%s (%s)", parts.Currency, parts.Number)
+	}
+	return fmt.Sprintf("%s %s", parts.Currency, parts.Number)
+}
+
+func (m Money) FormatParts(currencyCode string) FormatParts {
 	negative := m.Amount < 0
 	amount := m.Amount
 	if negative {
 		amount = -amount
 	}
-	var formatted string
+	var number string
 	if m.Scale == 0 {
-		formatted = addThousandsSeparators(strconv.FormatInt(amount, 10))
+		number = addThousandsSeparators(strconv.FormatInt(amount, 10))
 	} else {
 		div := pow10(m.Scale)
 		whole := amount / div
 		frac := amount % div
-		formatted = fmt.Sprintf("%s.%0*d", addThousandsSeparators(strconv.FormatInt(whole, 10)), m.Scale, frac)
+		number = fmt.Sprintf("%s.%0*d", addThousandsSeparators(strconv.FormatInt(whole, 10)), m.Scale, frac)
 	}
-	if negative {
-		return fmt.Sprintf("%s (%s)", currencyCode, formatted)
-	}
-	return fmt.Sprintf("%s %s", currencyCode, formatted)
+	return FormatParts{Currency: currencyCode, Number: number, Negative: negative}
 }
 
 // FormatDecimalText formats a sanitized decimal amount string with thousands separators.
