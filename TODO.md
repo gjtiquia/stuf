@@ -17,3 +17,7 @@ Jan to Feb trends
 high to high    : HKD  5,000.00
 low to low      : HKD  8,000.00
 ```
+
+- usecase: reuse existing aggregations (bank/octopus spending summaries and categories)
+  - instead of inputting individual transaction, can simply keep track of one parent and edit date to today and new amount
+
