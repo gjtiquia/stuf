@@ -112,9 +112,8 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		a.Error = ""
-		filter := a.listFilter()
+		a = a.captureAccountListReturn(acct.Name)
 		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
-		a.Form[formKeyFilter] = filter
 		a.Field = 0
 		return a.navPush(accountEditPathFor(acct.Name), 0)
 	}
@@ -212,6 +211,7 @@ func (a App) accountDetailKey(s, name string) App {
 	case 2:
 		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
 		a.Field = 0
+		a.ListReturn = listReturnState{}
 		return a.navPush(accountEditPathFor(name), 0)
 	case 3:
 		updated, entry, err := a.Svc.Accounts.SetHidden(a.ctx, acct.ID, !acct.Hidden)
@@ -244,18 +244,14 @@ func (a App) accountEditKey(s, name string) App {
 		next.Error = err.Error()
 		return next
 	}
-	returnFilter := next.Form[formKeyFilter]
-	returnVisibility := next.AccountVisible
 	next.History = append(next.History, entry)
 	next.Form = map[string]string{}
 	next.Field = 0
 	next.Error = ""
 	next.Nav.Pop()
 	next = next.syncFromNav()
-	if next.Path == routeAccountList {
-		next.AccountVisible = returnVisibility
-		next.Form[formKeyFilter] = returnFilter
-		return next.selectAccountInCurrentList(updated.Name)
+	if returned, ok := next.returnToListOrigin(updated.Name); ok {
+		return returned
 	}
 	if next.Path != accountPath(updated.Name) {
 		next = next.navReplace(accountPath(updated.Name), next.Menu)

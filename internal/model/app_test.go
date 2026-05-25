@@ -2567,6 +2567,69 @@ func TestBalanceListCtrlEditDeleteShortcuts(t *testing.T) {
 	}
 }
 
+func TestBalanceListEditSubmitReturnsToList(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-06-01", "150.00", "end"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 1},
+	)
+	app = press(app, tea.KeyCtrlE)
+	app.Form["date"] = "2026-05-15"
+	app.Form["notes"] = "updated"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("ctrl+s from list-launched balance edit should return to list, got %s", app.Path)
+	}
+	view := app.View()
+	if !strings.Contains(view, "> 2026-05-15") || !strings.Contains(view, "updated") {
+		t.Fatalf("updated balance should be selected in list:\n%s", view)
+	}
+	if strings.Contains(view, "2026-05-01") {
+		t.Fatalf("old balance date should not remain in list:\n%s", view)
+	}
+}
+
+func TestBalanceListEditConfirmReturnsToList(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	acct, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-01", "100.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/cash/", Menu: 0},
+		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
+	)
+	app = press(app, tea.KeyCtrlE)
+	app.Form["notes"] = "confirmed"
+	app.Field = 3
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/cash/balances/list/" {
+		t.Fatalf("confirm from list-launched balance edit should return to list, got %s", app.Path)
+	}
+	if view := app.View(); !strings.Contains(view, "> 2026-05-01") || !strings.Contains(view, "confirmed") {
+		t.Fatalf("confirmed balance edit should be visible on list:\n%s", view)
+	}
+}
+
 func TestAccountListFilterHLDoesNotTriggerBackOrOpen(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()

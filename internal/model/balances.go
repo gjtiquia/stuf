@@ -58,6 +58,7 @@ func (a App) balanceListTableKey(s, name string) App {
 			a.Error = ""
 			a.Form = map[string]string{"date": bal.Date, "balance": rawAmount(bal.Amount.Amount, bal.Amount.Scale), "notes": bal.Notes}
 			a.Field = 0
+			a = a.captureBalanceListReturn(name, bal.Date)
 			return a.navPush(accountBalanceEditPath(name, bal.Date), 0)
 		}
 		entry, err := a.Svc.Balances.Delete(a.ctx, bal.ID)
@@ -144,6 +145,7 @@ func (a App) balanceDetailKey(s, name, date string) App {
 	case 0:
 		a.Form = map[string]string{"date": bal.Date, "balance": rawAmount(bal.Amount.Amount, bal.Amount.Scale), "notes": bal.Notes}
 		a.Field = 0
+		a = a.captureBalanceListReturnFromDetail(name, date)
 		return a.navPush(accountBalanceEditPath(name, date), 0)
 	case 1:
 		entry, err := a.Svc.Balances.Delete(a.ctx, bal.ID)
@@ -175,7 +177,7 @@ func (a App) balanceEditKey(s, name, date string) App {
 	if !submit {
 		return next
 	}
-	_, entry, err := next.Svc.Balances.Update(next.ctx, bal.ID, next.Form["date"], next.Form["balance"], next.Form["notes"])
+	updated, entry, err := next.Svc.Balances.Update(next.ctx, bal.ID, next.Form["date"], next.Form["balance"], next.Form["notes"])
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -185,8 +187,24 @@ func (a App) balanceEditKey(s, name, date string) App {
 	next.Field = 0
 	next.Error = ""
 	next.Nav.Pop()
+	next = next.syncFromNav()
+	if returned, ok := next.returnToListOrigin(updated.Date); ok {
+		return returned
+	}
 	next.Nav.Pop()
 	return next.syncFromNav()
+}
+
+func (a App) captureBalanceListReturnFromDetail(name, date string) App {
+	if len(a.Nav.frames) < 2 {
+		a.ListReturn = listReturnState{}
+		return a
+	}
+	if a.Nav.frames[len(a.Nav.frames)-2].Path != accountBalanceListPath(name) {
+		a.ListReturn = listReturnState{}
+		return a
+	}
+	return a.captureBalanceListReturn(name, date)
 }
 
 func (a App) balanceSummary(name string) string {
@@ -283,6 +301,31 @@ func (a App) balanceListTable(name string) string {
 		return body
 	}
 	return context + "\n\n" + body
+}
+
+func (a App) selectBalanceInList(path, date string) App {
+	name, ok := balanceListName(path)
+	if !ok {
+		return a.navReplace(path, 0)
+	}
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	rows, err := a.Svc.Balances.List(a.ctx, acct.ID)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	idx := clampListCursor(a.Menu, len(rows))
+	for i, row := range rows {
+		if row.Date == date {
+			idx = i
+			break
+		}
+	}
+	return a.navReplace(path, idx)
 }
 
 func (a App) balanceDetailScreen(name, date string) screen {

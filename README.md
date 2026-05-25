@@ -142,6 +142,7 @@ keyboard shortcuts
     - only show horizontal shortcuts when the action is available (hide at boundaries)
 - ctrl+n is the canonical shortcut for creating/appending a new element from a list screen when that list has a matching create/add flow
 - ctrl+e and ctrl+d are canonical shortcuts for editing/deleting the selected list element when supported
+- forms launched from list shortcuts return to that list after successful submit
 - plain letter keys stay available for list filters
 - ctrl+s is the canonical shortcut for submitting a form immediately with currently committed form values
 
@@ -273,6 +274,7 @@ account flow decisions
 - on filterable lists, h/l type into the filter; left/right go back/open
 - on lists with a create/add flow, ctrl+n opens the matching new element form
 - on lists with edit/delete flows, ctrl+e opens edit and ctrl+d deletes the selected element
+- forms opened from a list return to that list after success and reselect the edited item when visible
 - on forms, ctrl+s submits immediately as if `[confirm]` was focused and enter was pressed
 - on list-backed detail screens opened from a list, left/h and right/l move prev/next in that list before menu shortcuts apply
 - esc from a create form discards the draft immediately
@@ -1029,7 +1031,7 @@ esc     : back
 - if balances exist, currency field is read-only/disabled
 - changing currency after balances exist should be modeled by creating a separate account
 - after edit success from account detail, goes to the updated account detail page
-- after ctrl+e edit success from /accounts/list/, returns to /accounts/list/
+- after ctrl+e edit success from /accounts/list/, follows the general list-origin rule and returns to /accounts/list/
 - if account name changed from detail edit, goes to the new account URL
 
 ```
@@ -1212,7 +1214,7 @@ esc         : back
 ```
 
 - pressing enter on a balance opens the balance detail page
-- ctrl+e edits the selected balance directly from the list
+- ctrl+e edits the selected balance directly from the list and returns to /accounts/hsbc-one/balances/list/ after success
 - ctrl+d deletes the selected balance directly from the list
 - detail pages show the selected resource, not necessarily the parent summary
 - parent identity can be shown as a field when useful

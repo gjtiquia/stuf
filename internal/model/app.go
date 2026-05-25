@@ -34,6 +34,7 @@ type App struct {
 	Field           int
 	SelectedAccount string
 	AccountVisible  accountVisibilityMode
+	ListReturn      listReturnState
 }
 
 type screen struct {
@@ -43,6 +44,13 @@ type screen struct {
 	Options string
 	Actions []string
 	Help    []string
+}
+
+type listReturnState struct {
+	Path           string
+	Item           string
+	Filter         string
+	AccountVisible accountVisibilityMode
 }
 
 const currencyPageSize = 8
