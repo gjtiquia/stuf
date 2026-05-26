@@ -459,26 +459,26 @@ v1 edge rules before schema
 ```
 # stuf
 
-total       : HKD 0.00
-budgeted    : HKD 0.00
+total           : HKD       0.00
+budgeted        : HKD       0.00
 
-period      : 2026-03
+period          : 2026-03
 
 on-budget net change to today
-from mar start : HKD (2,100.00)
-from mar high  : HKD (8,000.00)
-from feb high  : HKD (4,500.00)
+from mar start  : HKD  (2,100.00)
+from mar high   : HKD  (8,000.00)
+from feb high   : HKD  (4,500.00)
 
 on-budget recent months
 feb high to low : HKD (19,000.00)
 jan high to low : HKD (22,000.00)
 
 on-budget jan to feb trends
-high to high    : HKD  5,000.00
-low to low      : HKD  8,000.00
+high to high    : HKD   5,000.00
+low to low      : HKD   8,000.00
 
-you owe ppl : HKD 0.00
-ppl owe you : HKD 0.00
+you owe ppl     : HKD       0.00
+ppl owe you     : HKD       0.00
 
 /
 
@@ -522,8 +522,8 @@ budgeted    : HKD 0.00
 period      : 2026-05
 
 growth
-on-budget  : HKD 0.00
-total      : HKD 0.00
+on-budget   : HKD 0.00
+total       : HKD 0.00
 
 you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
@@ -555,8 +555,8 @@ budgeted    : HKD 0.00
 period      : 2026-05
 
 growth
-on-budget  : HKD 0.00
-total      : HKD 0.00
+on-budget   : HKD 0.00
+total       : HKD 0.00
 
 you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
@@ -591,16 +591,16 @@ ctrl-c  : quit
 # stuf
 
 total       : HKD 550,000.00
-budgeted    : HKD  3,000.00
+budgeted    : HKD   3,000.00
 
 period      : 2026-05
 
 growth
-on-budget  : HKD  5,200.00
-total      : HKD 36,200.00
+on-budget   : HKD   5,200.00
+total       : HKD  36,200.00
 
-you owe ppl : HKD     23.00
-ppl owe you : HKD    456.00
+you owe ppl : HKD      23.00
+ppl owe you : HKD     456.00
 
 /accounts/list/
 
@@ -608,9 +608,9 @@ total       : HKD 550,000.00
 on-budget   : HKD  50,000.00
 off-budget  : HKD 500,000.00
 
-showing : non-hidden
+showing     : non-hidden
 
-> filter : (type anything...)
+> filter    : (type anything...)
 
     on-budget accounts
     name             | balance                         | notes
@@ -618,8 +618,8 @@ showing : non-hidden
 
   > hsbc-one         | HKD  47,400.00                  |
       hsbc-hkd       | HKD  35,000.00                  | daily cash
-      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)  |
-      hsbc-cad       | HKD   4,600.00 (CAD   800.00)  |
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |
 
     wallet           | HKD   2,600.00                  |
 
@@ -628,7 +628,7 @@ showing : non-hidden
     TOTAL            | HKD 500,000.00                  |
 
     investment       | HKD 500,000.00                  | broker total
-      investment-usd | HKD 320,000.00 (USD 41,025.64) |
+      investment-usd | HKD 320,000.00 (USD 41,025.64)  |
       investment-hkd | HKD 100,000.00                  |
       remaining      | HKD  80,000.00                  |
 
@@ -886,16 +886,16 @@ history (ctrl-z to undo)
 # stuf
 
 total       : HKD 550,000.00
-budgeted    : HKD  3,000.00
+budgeted    : HKD   3,000.00
 
 period      : 2026-05
 
 growth
-on-budget  : HKD  5,200.00
-total      : HKD 36,200.00
+on-budget   : HKD   5,200.00
+total       : HKD  36,200.00
 
-you owe ppl : HKD     23.00
-ppl owe you : HKD    456.00
+you owe ppl : HKD      23.00
+ppl owe you : HKD     456.00
 
 /accounts/list/
 
@@ -903,9 +903,9 @@ total       : HKD 550,000.00
 on-budget   : HKD  50,000.00
 off-budget  : HKD 500,000.00
 
-showing : non-hidden
+showing     : non-hidden
 
-> filter : (type anything...)
+> filter    : (type anything...)
 
     on-budget accounts
     name             | balance                         | notes
@@ -913,8 +913,8 @@ showing : non-hidden
 
   > hsbc-one         | HKD  47,400.00                  |
       hsbc-hkd       | HKD  35,000.00                  | daily cash
-      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)  |
-      hsbc-cad       | HKD   4,600.00 (CAD   800.00)  |
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |
 
     wallet           | HKD   2,600.00                  |
 
@@ -923,7 +923,7 @@ showing : non-hidden
     TOTAL            | HKD 500,000.00                  |
 
     investment       | HKD 500,000.00                  | broker total
-      investment-usd | HKD 320,000.00 (USD 41,025.64) |
+      investment-usd | HKD 320,000.00 (USD 41,025.64)  |
       investment-hkd | HKD 100,000.00                  |
       remaining      | HKD  80,000.00                  |
 
@@ -957,7 +957,7 @@ history (ctrl-z to undo)
 name        : hsbc-one
 balance     : HKD 47,400.00
 children    : HKD 47,400.00
-remaining   : HKD 0.00
+remaining   : HKD      0.00
 as of       : 2026-05-21
 on-budget   : true
 notes       :
@@ -1043,7 +1043,7 @@ as of       : 2026-05-21
 /accounts/investment/children/list/
 
   name             | balance                         | notes
-> investment-usd   | HKD 320,000.00 (USD 41,025.64) |
+> investment-usd   | HKD 320,000.00 (USD 41,025.64)  |
   investment-hkd   | HKD 100,000.00                  |
 
 ---
@@ -1063,8 +1063,8 @@ esc     : back
 ```
 # stuf
 
-parent      : investment
-on-budget   : false
+parent         : investment
+on-budget      : false
 
 /accounts/investment/children/create/
 
@@ -1267,8 +1267,8 @@ enter       : confirm
 ctrl+n      : new
 ctrl+e      : edit
 ctrl+d      : delete
-esc     : back
-?       : help
+esc         : back
+?           : help
 ```
 
 - pressing balances from account detail opens the account balances list
@@ -1292,9 +1292,9 @@ history (ctrl-z to undo)
 
 # stuf
 
-name        : hsbc-one
-balance     : HKD 0.00
-as of       : (no balance entered yet)
+name         : hsbc-one
+balance      : HKD 0.00
+as of        : (no balance entered yet)
 
 /accounts/hsbc-one/balances/add/
 
@@ -1391,7 +1391,7 @@ history (ctrl-z to undo)
 
 # stuf
 
-account     : hsbc-one
+account      : hsbc-one
 
 /accounts/hsbc-one/balances/2026-05-21/edit/
 
@@ -1446,9 +1446,9 @@ esc     : back
 ```
 # stuf
 
-name        : hsbc-one
-balance     : HKD 50,000.00
-as of       : 2026-05-21
+name         : hsbc-one
+balance      : HKD 50,000.00
+as of        : 2026-05-21
 
 /accounts/hsbc-one/balances/add/
 
@@ -1488,12 +1488,12 @@ esc       : back
 
 /accounts/list/
 
-showing : hidden-only
+showing  : hidden-only
 
 > filter : (type anything...)
 
   name        | balance      | notes
-> old-account | HKD    0.00 | closed account
+> old-account | HKD    0.00  | closed account
 
 ---
 type          : filter
@@ -1566,7 +1566,7 @@ esc     : back
 
 /tags/list/
 
-showing : all
+showing  : all
 
 > filter : (type anything...)
 
@@ -2204,7 +2204,7 @@ esc     : back
 ```
 # stuf
 
-current : HKD 800.00
+current     : HKD 800.00
 
 /budgets/groceries/allocations/add/
 
@@ -2438,7 +2438,7 @@ esc     : back
 
   date       | type    | amount                   | account  | notes
 > 2026-05-15 | income  | HKD 20,000.00            | hsbc-one | salary
-  2026-04-28 | expense | JPY 12,000 (HKD 620.00) | hsbc-one | ramen in tokyo
+  2026-04-28 | expense | JPY 12,000 (HKD 620.00)  | hsbc-one | ramen in tokyo
   2026-05-16 | expense | HKD    200.00            | hsbc-one | groceries
 
 ---
@@ -2750,14 +2750,14 @@ esc     : back
 # stuf
 
 larger expense
-date      : 2026-05-16
-amount    : HKD 10,000.00
-currency  : HKD
-account   : hsbc-one
-budget    : (none)
-tags      : [bank, credit-card]
-notes     : credit card payment
-remaining : HKD  6,500.00
+date         : 2026-05-16
+amount       : HKD 10,000.00
+currency     : HKD
+account      : hsbc-one
+budget       : (none)
+tags         : [bank, credit-card]
+notes        : credit card payment
+remaining    : HKD  6,500.00
 
 /transactions/tx-000002/children/add-expense/
 
@@ -2958,8 +2958,8 @@ esc     : back
 
 current month
 
-period   : 2026-05
-coverage : 2026-04-30 -> 2026-05-31
+period     : 2026-05
+coverage   : 2026-04-30 -> 2026-05-31
 
 growth
 on-budget  : HKD  5,200.00
@@ -2968,7 +2968,7 @@ total      : HKD 35,200.00
 
 /reports/monthly/
 
-> filter : (type anything...)
+> filter   : (type anything...)
 
   month   | on-budget     | off-budget    | total
 > 2026-05 | HKD  5,200.00 | HKD 30,000.00 | HKD 35,200.00
@@ -2992,8 +2992,8 @@ esc           : back
 ```
 # stuf
 
-period   : 2026-05
-coverage : 2026-04-30 -> 2026-05-31
+period     : 2026-05
+coverage   : 2026-04-30 -> 2026-05-31
 
 growth
 on-budget  : HKD  5,200.00
@@ -3005,7 +3005,7 @@ expenses   : HKD      0.00
 
 /reports/monthly/2026-05/
 
-> filter : (type anything...)
+> filter   : (type anything...)
 
   on-budget accounts
   account           | start          | end            | change
@@ -3041,16 +3041,16 @@ esc           : back
 ```
 # stuf
 
-period   : 2026-05
-coverage : 2026-04-30 -> 2026-05-31
+period      : 2026-05
+coverage    : 2026-04-30 -> 2026-05-31
 
 growth
-on-budget  : HKD  5,200.00
-off-budget : HKD  1,000.00
-total      : HKD  6,200.00
+on-budget   : HKD  5,200.00
+off-budget  : HKD  1,000.00
+total       : HKD  6,200.00
 
 income
-entered : HKD 20,000.00
+entered     : HKD 20,000.00
 
 expenses
 derived     : HKD 14,800.00
@@ -3059,7 +3059,7 @@ unexplained : HKD  6,800.00
 
 /reports/monthly/2026-05/expenses/
 
-> filter : (type anything...)
+> filter    : (type anything...)
 
   date       | amount        | budget      | notes
 > 2026-05-16 | HKD 1,200.00  | groceries   | supermarket
@@ -3111,12 +3111,12 @@ esc     : back
 ```
 # stuf
 
-date    : 2026-05-16
-amount  : HKD 6,500.00
-account : hsbc-one
-budget  : (none)
-tags    : [bank]
-notes   : credit card payment
+date      : 2026-05-16
+amount    : HKD  6,500.00
+account   : hsbc-one
+budget    : (none)
+tags      : [bank]
+notes     : credit card payment
 
 this is the part of a larger expense that has not been explained yet
 
@@ -3326,8 +3326,8 @@ settlements
 ```
 # stuf
 
-you owe ppl : HKD   500.00
-ppl owe you : HKD   300.00
+you owe ppl : HKD 500.00
+ppl owe you : HKD 300.00
 
 /owed/
 
@@ -3462,8 +3462,8 @@ owes you : HKD 0.00
 
   settled
   direction   | amount      | notes
-> you owe ppl | HKD 500.00 | netflix yearly
-  owes you    | HKD 300.00 | dinner split
+> you owe ppl | HKD 500.00  | netflix yearly
+  owes you    | HKD 300.00  | dinner split
 
 ---
 up/down : navigate
@@ -3485,15 +3485,15 @@ esc     : back
 
 /owed/people/alex/add-you-owe/
 
-  1) date   : 2026-05-21
+  1) date     : 2026-05-21
 
-  2) person : alex
+  2) person   : alex
 
-> 3) amount : =1000/2
+> 3) amount   : =1000/2
 
   4) currency : HKD
 
-  5) notes  :
+  5) notes    :
 
   [confirm]
 
@@ -3506,15 +3506,15 @@ esc     : back
 ```
 
 ```
-  1) date   : 2026-05-21
+  1) date     : 2026-05-21
 
-  2) person : alex
+  2) person   : alex
 
-  3) amount : HKD 500.00 (=1000/2)
+  3) amount   : HKD 500.00 (=1000/2)
 
   4) currency : HKD
 
-> 5) notes  : netflix yearly
+> 5) notes    : netflix yearly
 ```
 
 ```
@@ -3522,15 +3522,15 @@ esc     : back
 
 /owed/people/alex/add-owes-you/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) person : alex
+  2) person   : alex
 
-  3) amount : (type amount or =formula...)
+  3) amount   : (type amount or =formula...)
 
   4) currency : HKD
 
-  5) notes  :
+  5) notes    :
 
   [confirm]
 
@@ -3615,15 +3615,15 @@ esc     : back
 
 /owed/add-you-owe/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) person : alex
+  2) person   : alex
 
-  3) amount : (type amount or =formula...)
+  3) amount   : (type amount or =formula...)
 
   4) currency : HKD
 
-  5) notes  :
+  5) notes    :
 
   [confirm]
 
@@ -3640,15 +3640,15 @@ esc     : back
 
 /owed/add-ppl-owe-you/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) person : ben
+  2) person   : ben
 
-  3) amount : (type amount or =formula...)
+  3) amount   : (type amount or =formula...)
 
   4) currency : HKD
 
-  5) notes  :
+  5) notes    :
 
   [confirm]
 
@@ -3705,15 +3705,15 @@ esc     : back
 
 /owed/owed-000001/edit/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) person : alex
+  2) person   : alex
 
-  3) amount : =1000/2
+  3) amount   : =1000/2
 
   4) currency : HKD
 
-  5) notes  : netflix yearly
+  5) notes    : netflix yearly
 
   [confirm]
 
@@ -3747,7 +3747,7 @@ esc     : back
 /owed/owed-000001/settlements/list/
 
   date       | amount       | notes
-> 2026-05-21 | HKD 200.00  | paid by fps
+> 2026-05-21 | HKD 200.00   | paid by fps
 
 ---
 up/down : navigate
@@ -3767,17 +3767,17 @@ esc     : back
 ```
 # stuf
 
-remaining : HKD 300.00
+remaining     : HKD 300.00
 
 /owed/owed-000001/settlements/add/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) amount : HKD 300.00
+  2) amount   : HKD 300.00
 
   3) currency : HKD
 
-  4) notes  :
+  4) notes    :
 
   [confirm]
 
@@ -3792,10 +3792,10 @@ esc     : back
 ```
 # stuf
 
-date   : 2026-05-21
-amount : HKD 200.00
+date     : 2026-05-21
+amount   : HKD 200.00
 currency : HKD
-notes  : paid by fps
+notes    : paid by fps
 
 /owed/owed-000001/settlements/set-000001/
 
@@ -3814,13 +3814,13 @@ esc     : back
 
 /owed/owed-000001/settlements/set-000001/edit/
 
-> 1) date   : 2026-05-21
+> 1) date     : 2026-05-21
 
-  2) amount : HKD 200.00
+  2) amount   : HKD 200.00
 
   3) currency : HKD
 
-  4) notes  : paid by fps
+  4) notes    : paid by fps
 
   [confirm]
 
