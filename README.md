@@ -174,6 +174,16 @@ screen layout
     - main content, optional
     - options/actions, optional
 
+mockup styling
+- TUI mockups should read like fixed-width interfaces, not prose
+- context and dashboard blocks should use visual tab stops
+- align `:` across the whole visible context/content block when the rows belong to the same screen area
+- align money on decimal points within the same visual block or table column
+- keep currency labels, signs, and parentheses readable while making amounts scan vertically
+- tables should keep `|` columns aligned and preserve tree indentation / selection markers
+- keyboard shortcuts after `---` can be aligned locally within that shortcut section
+- avoid changing labels, values, routes, or wording during styling-only passes
+
 scoped shortcuts
 - global actions are canonical
 - scoped shortcuts should reuse canonical action ids/forms
