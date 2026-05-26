@@ -17,6 +17,7 @@ type Account struct {
 	Notes      string
 	CreatedAt  string
 	UpdatedAt  string
+	ParentID   sql.NullInt64
 }
 
 type AppMetum struct {

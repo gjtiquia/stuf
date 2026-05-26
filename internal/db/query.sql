@@ -73,14 +73,15 @@ ORDER BY c.code;
 -- Accounts
 
 -- name: CreateAccount :execresult
-INSERT INTO accounts (name, currency_id, on_budget, notes, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT INTO accounts (name, currency_id, on_budget, hidden, notes, parent_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetAccountByID :one
 SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -97,6 +98,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -113,6 +115,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -129,6 +132,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -143,7 +147,7 @@ ORDER BY a.name;
 
 -- name: UpdateAccount :exec
 UPDATE accounts
-SET name = ?, currency_id = ?, on_budget = ?, hidden = ?, notes = ?, updated_at = ?
+SET name = ?, currency_id = ?, on_budget = ?, hidden = ?, notes = ?, parent_id = ?, updated_at = ?
 WHERE id = ?;
 
 -- name: DeleteAccount :exec
@@ -151,6 +155,104 @@ DELETE FROM accounts WHERE id = ?;
 
 -- name: CountBalancesByAccountID :one
 SELECT count(*) FROM balances WHERE account_id = ?;
+
+-- name: CountChildrenByAccountID :one
+SELECT count(*) FROM accounts WHERE parent_id = ?;
+
+-- name: ListRootAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id IS NULL
+ORDER BY a.name;
+
+-- name: ListVisibleRootAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id IS NULL AND a.hidden = 0
+ORDER BY a.name;
+
+-- name: ListChildAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id = ?
+ORDER BY a.name;
+
+-- name: ListVisibleChildAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id = ? AND a.hidden = 0
+ORDER BY a.name;
+
+-- name: ListDescendantAccounts :many
+WITH RECURSIVE descendants(id) AS (
+  SELECT accounts.id FROM accounts WHERE accounts.parent_id = ?
+  UNION ALL
+  SELECT a.id FROM accounts a JOIN descendants d ON a.parent_id = d.id
+)
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN descendants d ON d.id = a.id
+JOIN currencies c ON c.id = a.currency_id
+ORDER BY a.name;
 
 -- Balances
 
@@ -186,6 +288,7 @@ SELECT
   a.id AS account_id,
   a.name AS account_name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,

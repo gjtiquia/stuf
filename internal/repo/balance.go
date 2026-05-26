@@ -88,7 +88,7 @@ func (r *BalanceRepo) ListAllVisible(ctx context.Context) ([]struct {
 			Account Account
 			Balance Balance
 		}{
-			Account: accountFromFields(row.AccountID, row.AccountName, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.AccountNotes, row.AccountCreatedAt, row.AccountUpdatedAt),
+			Account: accountFromFields(row.AccountID, row.AccountName, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.AccountNotes, row.AccountCreatedAt, row.AccountUpdatedAt),
 			Balance: Balance{
 				ID:        row.BalanceID,
 				AccountID: row.BalanceAccountID,

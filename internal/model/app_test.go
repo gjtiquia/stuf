@@ -258,6 +258,152 @@ func TestAccountsListSummaryTotals(t *testing.T) {
 	}
 }
 
+func TestAccountTreeHappyPathWithParentBalance(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	setCurrencyRate(t, store, "HKD", 1, 0)
+	setCurrencyRate(t, store, "USD", 10, 0)
+	parent, _, err := app.Svc.Accounts.Create(ctx, "investment", "HKD", false, "broker total")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-usd", "USD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hkd, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-hkd", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, parent.ID, "2026-05-24", "500000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, usd.ID, "2026-05-24", "32000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, hkd.ID, "2026-05-24", "100000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeAccountList
+	view := app.View()
+	assertViewContains(t, view,
+		"off-budget  : HKD 500,000.00",
+		"investment",
+		"investment-usd",
+		"investment-hkd",
+		"remaining",
+		"HKD  80,000.00",
+	)
+	if strings.Contains(view, "HKD 920,000.00") {
+		t.Fatalf("account list should not double count parent and children:\n%s", view)
+	}
+	app.Path = "/accounts/investment/"
+	view = app.View()
+	assertViewContains(t, view,
+		"balance   : HKD 500,000.00",
+		"children  : HKD 420,000.00",
+		"remaining : HKD  80,000.00",
+	)
+}
+
+func TestAccountTreeHappyPathWithoutParentBalance(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	setCurrencyRate(t, store, "HKD", 1, 0)
+	setCurrencyRate(t, store, "USD", 10, 0)
+	parent, _, err := app.Svc.Accounts.Create(ctx, "hsbc-one", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hkd, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "hsbc-hkd", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "hsbc-usd", "USD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, hkd.ID, "2026-05-21", "35000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, usd.ID, "2026-05-24", "1000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeAccountList
+	view := app.View()
+	assertViewContains(t, view,
+		"on-budget   : HKD 45,000.00",
+		"hsbc-one",
+		"hsbc-hkd",
+		"hsbc-usd",
+	)
+	if strings.Contains(view, "remaining") {
+		t.Fatalf("no-own-balance parent should not show remaining row in account list:\n%s", view)
+	}
+	app.Path = "/accounts/hsbc-one/"
+	view = app.View()
+	assertViewContains(t, view,
+		"balance   : HKD 45,000.00",
+		"children  : HKD 45,000.00",
+		"remaining : HKD",
+		"0.00",
+		"as of     : 2026-05-24",
+	)
+}
+
+func TestChildAccountCreateEditAndDeleteFlow(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	parent, _, err := app.Svc.Accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/investment/", Menu: 1})
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/investment/children/list/" {
+		t.Fatalf("child accounts action should open child list, got %s", app.Path)
+	}
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/accounts/investment/children/create/" {
+		t.Fatalf("ctrl+n on child list should open child create, got %s", app.Path)
+	}
+	app.Form["name"] = "investment-usd"
+	app.Form["currency"] = "USD"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/investment/children/list/" {
+		t.Fatalf("child create should return to child list, got %s", app.Path)
+	}
+	child, err := store.Acct.GetByName(ctx, "investment-usd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.ParentID == nil || *child.ParentID != parent.ID || child.OnBudget {
+		t.Fatalf("child account inheritance wrong: %+v", child)
+	}
+	view := app.View()
+	assertViewContains(t, view, "parent", "investment", "> investment-usd")
+	if strings.Contains(view, "\n  remaining") || strings.Contains(view, "\n> remaining") {
+		t.Fatalf("child list table should not show remaining row:\n%s", view)
+	}
+	app.Path = "/accounts/investment-usd/edit/"
+	view = app.View()
+	if strings.Contains(view, "on-budget") {
+		t.Fatalf("child edit should omit on-budget field:\n%s", view)
+	}
+	app.Path = "/accounts/investment-usd/"
+	view = app.View()
+	assertViewContains(t, view, "hide account", "delete account")
+	app.Menu = 5
+	app = press(app, tea.KeyEnter)
+	if _, err := store.Acct.GetByName(ctx, "investment-usd"); err == nil {
+		t.Fatal("empty child account should be deleted")
+	}
+	app = press(app, tea.KeyCtrlZ)
+	if _, err := store.Acct.GetByName(ctx, "investment-usd"); err != nil {
+		t.Fatalf("undo should restore deleted child: %v", err)
+	}
+}
+
 func TestAccountListReadmeShape(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -752,15 +898,19 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 	for _, want := range []string{
 		"account   : cash",
 		"balance   : HKD 0.00",
+		"children  : HKD 0.00",
+		"remaining : HKD 0.00",
 		"as of     : (no balance entered yet)",
 		"on-budget : true",
 		"notes     : wallet",
 		"net change to today",
 		"recent months",
 		"> 1) balances",
-		"  2) transactions (TODO)",
-		"  3) edit account",
-		"  4) hide account",
+		"  2) child accounts",
+		"  3) transactions (TODO)",
+		"  4) edit account",
+		"  5) hide account",
+		"  6) delete account",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("visible account detail missing %q:\n%s", want, view)
@@ -772,7 +922,7 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/"
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"hidden    : true", "> 1) balances", "  2) transactions (TODO)", "  3) edit account", "  4) show account"} {
+	for _, want := range []string{"hidden    : true", "> 1) balances", "  2) child accounts", "  3) transactions (TODO)", "  4) edit account", "  5) show account", "  6) delete account"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden account detail missing %q:\n%s", want, view)
 		}
@@ -1387,12 +1537,12 @@ func TestListAndDetailNavigationMarkersStayInSync(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 2) transactions (TODO)") || strings.Contains(view, "> 1) balances") {
+	if view := app.View(); !strings.Contains(view, "> 2) child accounts") || strings.Contains(view, "> 1) balances") {
 		t.Fatalf("account detail marker out of sync:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if app.Path != "/accounts/savings/transactions/" {
+	if app.Path != "/accounts/savings/children/list/" {
 		t.Fatalf("enter should run selected detail action, got %s", app.Path)
 	}
 }
@@ -2270,13 +2420,12 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 	if app.Path != "/accounts/cash/" {
 		t.Fatalf("detail path = %s", app.Path)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	app = m.(App)
 	if app.Path != "/accounts/cash/transactions/" {
 		t.Fatalf("transactions TODO path = %s", app.Path)
 	}
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	app = m.(App)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	if app.Path != "/accounts/cash/balances/list/" {
@@ -2343,6 +2492,8 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/cash/transactions/" {
@@ -2353,7 +2504,7 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 	if app.Path != "/accounts/cash/" {
 		t.Fatalf("expected account detail, got %s", app.Path)
 	}
-	if view := app.View(); !strings.Contains(view, "> 2) transactions (TODO)") || strings.Contains(view, "> 1) balances") {
+	if view := app.View(); !strings.Contains(view, "> 3) transactions (TODO)") || strings.Contains(view, "> 1) balances") {
 		t.Fatalf("expected transactions cursor restored on account detail:\n%s", view)
 	}
 }
@@ -2450,7 +2601,7 @@ func TestAccountDetailResetsCursorAfterLeaveAndReturn(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	for range 3 {
+	for range 1 {
 		m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
 		app = m.(App)
 	}
@@ -2462,14 +2613,13 @@ func TestAccountDetailResetsCursorAfterLeaveAndReturn(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	app = m.(App)
-	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
-	app = m.(App)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/cash/" {
 		t.Fatalf("expected account detail, got %s", app.Path)
 	}
-	if view := app.View(); !strings.Contains(view, "> 1) balances") || strings.Contains(view, "> 4) hide account") {
+	if view := app.View(); !strings.Contains(view, "> 1) balances") || strings.Contains(view, "> 2) child accounts") {
 		t.Fatalf("expected balances cursor after re-entering account detail:\n%s", view)
 	}
 	if _, err := store.Acct.GetByName(ctx, "cash"); err != nil {

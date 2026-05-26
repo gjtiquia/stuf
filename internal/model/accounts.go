@@ -6,6 +6,7 @@ import (
 
 	"stuf/internal/component"
 	"stuf/internal/money"
+	"stuf/internal/repo"
 )
 
 type accountListRow struct {
@@ -16,6 +17,8 @@ type accountListRow struct {
 	OnBudget bool
 	AsOf     string
 	Hidden   bool
+	Depth    int
+	Virtual  bool
 }
 
 type accountVisibilityMode int
@@ -90,6 +93,45 @@ func (a App) accountCreateKey(s string) App {
 	return next.navPush(routeAccountList, listIdx)
 }
 
+func (a App) accountChildCreateKey(s, parentName string) App {
+	parent, err := a.Svc.Accounts.GetByName(a.ctx, parentName)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	if a.Form["currency"] == "" {
+		a.Form["currency"] = a.Config.Config.Currency
+	}
+	next, submit := a.childAccountFormKey(s, nil)
+	if !submit {
+		return next
+	}
+	name := strings.TrimSpace(next.Form["name"])
+	currency := strings.TrimSpace(next.Form["currency"])
+	acct, entry, err := next.Svc.Accounts.CreateChild(next.ctx, parent.ID, name, currency, next.Form["notes"])
+	if err != nil {
+		next.Error = err.Error()
+		return next
+	}
+	next.History = append(next.History, entry)
+	next.SelectedAccount = acct.Name
+	next.Form = map[string]string{}
+	next.Field = 0
+	next.Error = ""
+	listIdx := 0
+	if rows, err := next.childAccountListRows(parent.ID); err == nil {
+		for i, row := range rows {
+			if row.Name == acct.Name {
+				listIdx = i
+				break
+			}
+		}
+	}
+	next.Nav.Pop()
+	next = next.syncFromNav()
+	return next.navReplace(accountChildrenListPath(parentName), listIdx)
+}
+
 func (a App) accountListKey(s string) App {
 	if isNewKey(s) {
 		a.Error = ""
@@ -106,7 +148,8 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
-		acct, err := a.Svc.Accounts.GetByName(a.ctx, rows[a.Menu].Name)
+		idx := a.accountSelectableIndex(rows, a.Menu)
+		acct, err := a.Svc.Accounts.GetByName(a.ctx, rows[idx].Name)
 		if err != nil {
 			a.Error = err.Error()
 			return a
@@ -136,7 +179,8 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
-		return a.navPush(accountPath(rows[a.Menu].Name), 0)
+		idx := a.accountSelectableIndex(rows, a.Menu)
+		return a.navPush(accountPath(rows[idx].Name), 0)
 	case "up", "shift+tab":
 		rows, err := a.accountListRows()
 		if err != nil {
@@ -144,7 +188,7 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		if len(rows) > 0 {
-			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
+			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, -1))
 		}
 		return a
 	case "down", "tab":
@@ -154,7 +198,7 @@ func (a App) accountListKey(s string) App {
 			return a
 		}
 		if len(rows) > 0 {
-			a = a.navSetMenu((a.Menu + 1) % len(rows))
+			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, 1))
 		}
 		return a
 	case "backspace":
@@ -172,8 +216,9 @@ func (a App) accountListKey(s string) App {
 		if len(rows) == 0 {
 			return a
 		}
-		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
-		return a.navPush(accountPath(rows[a.Menu].Name), 0)
+		idx := a.accountSelectableIndex(rows, a.Menu)
+		a = a.navSetMenu(idx)
+		return a.navPush(accountPath(rows[idx].Name), 0)
 	default:
 		input := newFilteredListInput(a.listFilter(), nil)
 		if updated, handled := input.handleKey(s); handled {
@@ -192,13 +237,57 @@ func (a App) accountListRowCount() int {
 	return len(rows)
 }
 
+func (a App) accountSelectableIndex(rows []accountListRow, preferred int) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	preferred = clampListCursor(preferred, len(rows))
+	if !rows[preferred].Virtual {
+		return preferred
+	}
+	for i := preferred + 1; i < len(rows); i++ {
+		if !rows[i].Virtual {
+			return i
+		}
+	}
+	for i := preferred - 1; i >= 0; i-- {
+		if !rows[i].Virtual {
+			return i
+		}
+	}
+	return preferred
+}
+
+func nextAccountSelectableIndex(rows []accountListRow, current, delta int) int {
+	if len(rows) == 0 {
+		return 0
+	}
+	idx := clampListCursor(current, len(rows))
+	for i := 0; i < len(rows); i++ {
+		idx = (idx + delta + len(rows)) % len(rows)
+		if !rows[idx].Virtual {
+			return idx
+		}
+	}
+	return clampListCursor(current, len(rows))
+}
+
 func (a App) accountDetailKey(s, name string) App {
 	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
 	if err != nil {
 		a.Error = err.Error()
 		return a
 	}
-	action := a.actionIndex(s, 4)
+	empty, err := a.Svc.Accounts.IsEmpty(a.ctx, acct.ID)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	count := 5
+	if empty {
+		count = 6
+	}
+	action := a.actionIndex(s, count)
 	if action < 0 {
 		return a
 	}
@@ -207,13 +296,15 @@ func (a App) accountDetailKey(s, name string) App {
 	case 0:
 		return a.navPush(accountBalanceListPath(name), 0)
 	case 1:
-		return a.navPush(accountTransactionsPath(name), 0)
+		return a.navPush(accountChildrenListPath(name), 0)
 	case 2:
+		return a.navPush(accountTransactionsPath(name), 0)
+	case 3:
 		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
 		a.Field = 0
 		a.ListReturn = listReturnState{}
 		return a.navPush(accountEditPathFor(name), 0)
-	case 3:
+	case 4:
 		updated, entry, err := a.Svc.Accounts.SetHidden(a.ctx, acct.ID, !acct.Hidden)
 		if err != nil {
 			a.Error = err.Error()
@@ -221,6 +312,71 @@ func (a App) accountDetailKey(s, name string) App {
 		}
 		a.History = append(a.History, entry)
 		return a.navReplace(accountPath(updated.Name), action)
+	case 5:
+		deleted, entry, err := a.Svc.Accounts.DeleteEmpty(a.ctx, acct.ID)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		a.History = append(a.History, entry)
+		if deleted.ParentID != nil {
+			parent, err := a.Svc.Accounts.GetByID(a.ctx, *deleted.ParentID)
+			if err != nil {
+				return a.navReset()
+			}
+			return a.navReplace(accountChildrenListPath(parent.Name), 0)
+		}
+		return a.navReplace(routeAccountList, 0)
+	}
+	return a
+}
+
+func (a App) accountChildrenListKey(s, parentName string) App {
+	parent, err := a.Svc.Accounts.GetByName(a.ctx, parentName)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	rows, err := a.childAccountListRows(parent.ID)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	if isNewKey(s) {
+		a.Error = ""
+		a.Field = 0
+		a.Form = map[string]string{}
+		return a.navPush(accountChildCreatePath(parentName), 0)
+	}
+	if isEditKey(s) && len(rows) > 0 {
+		idx := clampListCursor(a.Menu, len(rows))
+		acct, err := a.Svc.Accounts.GetByName(a.ctx, rows[idx].Name)
+		if err != nil {
+			a.Error = err.Error()
+			return a
+		}
+		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Field = 0
+		return a.navPush(accountEditPathFor(acct.Name), 0)
+	}
+	switch s {
+	case "left":
+		a.Error = ""
+		return a.goBack()
+	case "right", "enter":
+		if len(rows) == 0 {
+			return a
+		}
+		idx := clampListCursor(a.Menu, len(rows))
+		return a.navPush(accountPath(rows[idx].Name), 0)
+	case "up", "shift+tab":
+		if len(rows) > 0 {
+			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
+		}
+	case "down", "tab":
+		if len(rows) > 0 {
+			a = a.navSetMenu((a.Menu + 1) % len(rows))
+		}
 	}
 	return a
 }
@@ -235,11 +391,21 @@ func (a App) accountEditKey(s, name string) App {
 	if has, err := a.Svc.Accounts.HasBalances(a.ctx, acct.ID); err == nil && has {
 		locked["currency"] = true
 	}
-	next, submit := a.accountFormKey(s, locked)
+	var next App
+	var submit bool
+	if acct.ParentID != nil {
+		next, submit = a.childAccountFormKey(s, locked)
+	} else {
+		next, submit = a.accountFormKey(s, locked)
+	}
 	if !submit {
 		return next
 	}
-	updated, entry, err := next.Svc.Accounts.Update(next.ctx, acct.ID, strings.TrimSpace(next.Form["name"]), strings.TrimSpace(next.Form["currency"]), parseBoolDefault(next.Form["on-budget"], acct.OnBudget), acct.Hidden, next.Form["notes"])
+	onBudget := acct.OnBudget
+	if acct.ParentID == nil {
+		onBudget = parseBoolDefault(next.Form["on-budget"], acct.OnBudget)
+	}
+	updated, entry, err := next.Svc.Accounts.Update(next.ctx, acct.ID, strings.TrimSpace(next.Form["name"]), strings.TrimSpace(next.Form["currency"]), onBudget, acct.Hidden, next.Form["notes"])
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -280,14 +446,14 @@ func accountSummary(rows []accountListRow, appCurrency string) string {
 	if len(rows) > 0 {
 		total = money.Money{Scale: rows[0].Amount.Scale}
 	}
-	for _, row := range rows {
-		next, err := total.Add(row.Amount)
-		if err == nil {
-			total = next
-		}
-	}
 	onBudgetTotal, hasOnBudget := accountSectionTotal(rows, true)
 	offBudgetTotal, hasOffBudget := accountSectionTotal(rows, false)
+	if hasOnBudget {
+		total, _ = total.Add(onBudgetTotal)
+	}
+	if hasOffBudget {
+		total, _ = total.Add(offBudgetTotal)
+	}
 
 	totalCell := component.MoneyCell(total, appCurrency)
 	if len(rows) == 0 {
@@ -351,7 +517,7 @@ func (a App) accountListBody() string {
 				prefix = "> "
 			}
 			cells := []component.Cell{
-				component.TextCell(row.Name),
+				component.TextCell(accountRowDisplayName(row)),
 				row.Balance,
 				component.TextCell(row.Notes),
 			}
@@ -389,7 +555,7 @@ func accountListTableLayoutFor(rows []accountListRow, appCurrency string, includ
 	}
 	for _, row := range rows {
 		cells := []component.Cell{
-			component.TextCell(row.Name),
+			component.TextCell(accountRowDisplayName(row)),
 			row.Balance,
 			component.TextCell(row.Notes),
 		}
@@ -416,7 +582,7 @@ func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, boo
 	total := money.Money{Scale: rows[0].Amount.Scale}
 	found := false
 	for _, row := range rows {
-		if row.OnBudget != onBudget {
+		if row.OnBudget != onBudget || row.Depth != 0 || row.Virtual {
 			continue
 		}
 		found = true
@@ -433,44 +599,132 @@ func (a App) accountListRows() ([]accountListRow, error) {
 }
 
 func (a App) accountListRowsWithFilter(filter string) ([]accountListRow, error) {
-	accounts, err := a.Svc.Accounts.List(a.ctx, a.AccountVisible != accountVisibilityNonHidden)
+	accounts, err := a.Svc.Accounts.ListRoots(a.ctx, a.AccountVisible != accountVisibilityNonHidden)
 	if err != nil {
 		return nil, err
 	}
 	var visible []accountListRow
 	for _, acct := range accounts {
-		if a.AccountVisible == accountVisibilityNonHidden && acct.Hidden {
-			continue
-		}
-		if a.AccountVisible == accountVisibilityHiddenOnly && !acct.Hidden {
-			continue
-		}
-		if filter != "" && !strings.Contains(acct.Name, filter) && !strings.Contains(acct.Notes, filter) {
-			continue
-		}
-		native := money.Money{Scale: acct.Scale}
-		asOf := "(no balance entered yet)"
-		if bal, ok, err := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID); err != nil {
-			return nil, err
-		} else if ok {
-			native = bal.Amount
-			asOf = bal.Date
-		}
-		appAmount, balance, err := a.accountListBalance(acct.Code, native)
+		rows, err := a.accountTreeRows(acct, 0, filter)
 		if err != nil {
 			return nil, err
 		}
-		visible = append(visible, accountListRow{
-			Name:     acct.Name,
-			Balance:  balance,
-			Amount:   appAmount,
-			Notes:    acct.Notes,
-			OnBudget: acct.OnBudget,
-			AsOf:     asOf,
-			Hidden:   acct.Hidden,
-		})
+		visible = append(visible, rows...)
 	}
 	return visible, nil
+}
+
+func (a App) accountTreeRows(acct repo.Account, depth int, filter string) ([]accountListRow, error) {
+	if a.AccountVisible == accountVisibilityNonHidden && acct.Hidden {
+		return nil, nil
+	}
+	if a.AccountVisible == accountVisibilityHiddenOnly && !acct.Hidden {
+		return nil, nil
+	}
+	children, err := a.Svc.Accounts.ListChildren(a.ctx, acct.ID, a.AccountVisible != accountVisibilityNonHidden)
+	if err != nil {
+		return nil, err
+	}
+	var out []accountListRow
+	var childRows []accountListRow
+	for _, child := range children {
+		rows, err := a.accountTreeRows(child, depth+1, filter)
+		if err != nil {
+			return nil, err
+		}
+		childRows = append(childRows, rows...)
+	}
+	matches := filter == "" || strings.Contains(acct.Name, filter) || strings.Contains(acct.Notes, filter)
+	if matches || len(childRows) > 0 {
+		row, err := a.accountRow(acct, depth)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+		out = append(out, childRows...)
+		if row.Depth == depth && row.Name != "remaining" {
+			remaining, err := a.remainingRow(acct, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			if remaining != nil {
+				out = append(out, *remaining)
+			}
+		}
+	}
+	return out, nil
+}
+
+func (a App) accountRow(acct repo.Account, depth int) (accountListRow, error) {
+	summary, err := a.Svc.Accounts.TreeSummary(a.ctx, acct.ID, a.Config.Config.Currency)
+	if err != nil {
+		return accountListRow{}, err
+	}
+	appAmount := summary.Balance
+	balance := component.MoneyCell(appAmount, a.Config.Config.Currency)
+	if acct.Code != a.Config.Config.Currency && summary.HasOwnBalance {
+		if bal, ok, err := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID); err != nil {
+			return accountListRow{}, err
+		} else if ok {
+			balance = component.MoneyCellWithTrailing(appAmount, a.Config.Config.Currency, fmt.Sprintf("(%s)", bal.Amount.Format(acct.Code)))
+		}
+	}
+	asOf := "(no balance entered yet)"
+	if summary.AsOf != "" {
+		asOf = summary.AsOf
+	}
+	return accountListRow{
+		Name:     acct.Name,
+		Balance:  balance,
+		Amount:   appAmount,
+		Notes:    acct.Notes,
+		OnBudget: acct.OnBudget,
+		AsOf:     asOf,
+		Hidden:   acct.Hidden,
+		Depth:    depth,
+	}, nil
+}
+
+func (a App) remainingRow(acct repo.Account, depth int) (*accountListRow, error) {
+	summary, err := a.Svc.Accounts.TreeSummary(a.ctx, acct.ID, a.Config.Config.Currency)
+	if err != nil {
+		return nil, err
+	}
+	children, err := a.Svc.Accounts.ListChildren(a.ctx, acct.ID, false)
+	if err != nil {
+		return nil, err
+	}
+	if len(children) == 0 {
+		return nil, nil
+	}
+	if !summary.HasOwnBalance || summary.Remaining.Amount == 0 {
+		return nil, nil
+	}
+	return &accountListRow{
+		Name:     "remaining",
+		Balance:  component.MoneyCell(summary.Remaining, a.Config.Config.Currency),
+		Amount:   money.Money{Scale: summary.Remaining.Scale},
+		OnBudget: acct.OnBudget,
+		AsOf:     summary.AsOf,
+		Depth:    depth,
+		Virtual:  true,
+	}, nil
+}
+
+func (a App) childAccountListRows(parentID int64) ([]accountListRow, error) {
+	children, err := a.Svc.Accounts.ListChildren(a.ctx, parentID, false)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]accountListRow, 0, len(children))
+	for _, child := range children {
+		row, err := a.accountRow(child, 0)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, nil
 }
 
 func (a App) accountListBalance(code string, native money.Money) (money.Money, component.Cell, error) {
@@ -518,12 +772,19 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 			prefix = "> "
 		}
 		lines = append(lines, layout.RowCells(prefix, []component.Cell{
-			component.TextCell(row.Name),
+			component.TextCell(accountRowDisplayName(row)),
 			row.Balance,
 			component.TextCell(row.Notes),
 		}))
 	}
 	return lines
+}
+
+func accountRowDisplayName(row accountListRow) string {
+	if row.Depth <= 0 {
+		return row.Name
+	}
+	return strings.Repeat("  ", row.Depth) + row.Name
 }
 
 func (a App) accountDetailScreen(name string) screen {
@@ -535,15 +796,68 @@ func (a App) accountDetailScreen(name string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
-	actions := []string{"balances", "transactions (TODO)", "edit account", "hide account"}
+	actions := []string{"balances", "child accounts", "transactions (TODO)", "edit account", "hide account"}
 	if acct.Hidden {
-		actions = []string{"balances", "transactions (TODO)", "edit account", "show account"}
+		actions = []string{"balances", "child accounts", "transactions (TODO)", "edit account", "show account"}
+	}
+	if empty, err := a.Svc.Accounts.IsEmpty(a.ctx, acct.ID); err == nil && empty {
+		actions = append(actions, "delete account")
 	}
 	return screen{
 		Path:    accountPath(name),
 		Context: context,
 		Actions: actions,
 	}
+}
+
+func (a App) accountChildrenListScreen(name string) screen {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
+	context, err := a.accountDashboardContext(name)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
+	context = "parent    : " + acct.Name + "\n" + context
+	rows, err := a.childAccountListRows(acct.ID)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
+	var lines []string
+	if len(rows) == 0 {
+		lines = append(lines, "  name | balance | notes", "  (no child accounts yet)")
+	} else {
+		layout := accountListTableLayoutFor(rows, a.Config.Config.Currency, false)
+		lines = append(lines, layout.Header("  "))
+		for i, row := range rows {
+			prefix := "  "
+			if i == a.Menu {
+				prefix = "> "
+			}
+			lines = append(lines, layout.RowCells(prefix, []component.Cell{
+				component.TextCell(row.Name),
+				row.Balance,
+				component.TextCell(row.Notes),
+			}))
+		}
+	}
+	return screen{
+		Path:    accountChildrenListPath(name),
+		Context: context,
+		Body:    strings.Join(lines, "\n") + "\n",
+		Help:    tableListHelp(),
+		Actions: []string{"add child account"},
+	}
+}
+
+func (a App) accountChildCreateScreen(name string) screen {
+	acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+	if err != nil {
+		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
+	}
+	context := fmt.Sprintf("parent    : %s\non-budget : %t", acct.Name, acct.OnBudget)
+	return screen{Path: accountChildCreatePath(name), Context: context, Body: a.childAccountFormView(nil), Help: a.childAccountFormHelp()}
 }
 
 func (a App) accountEditScreen() screen {
@@ -556,6 +870,9 @@ func (a App) accountEditScreen() screen {
 	if has, err := a.Svc.Accounts.HasBalances(a.ctx, acct.ID); err == nil && has {
 		locked["currency"] = acct.Code + " (locked because balances exist)"
 	}
+	if acct.ParentID != nil {
+		return screen{Path: a.Path, Body: a.childAccountFormView(locked), Help: a.childAccountFormHelp()}
+	}
 	return screen{Path: a.Path, Body: a.accountFormView(locked), Help: a.accountFormHelp()}
 }
 
@@ -564,4 +881,14 @@ func (a App) accountFormView(locked map[string]string) string {
 		"currency":  a.currencyOptions(),
 		"on-budget": {"true", "false"},
 	}, nil)
+}
+
+func (a App) childAccountFormView(locked map[string]string) string {
+	return a.formViewWithOptions([]string{"name", "currency", "notes"}, locked, map[string][]string{
+		"currency": a.currencyOptions(),
+	}, nil)
+}
+
+func (a App) childAccountFormHelp() []string {
+	return []string{"type    : enter text", "tab     : navigate", "enter   : confirm", "esc     : back", "?       : help"}
 }

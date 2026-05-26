@@ -956,7 +956,9 @@ esc           : back
 - if account currency differs from app currency, show account currency in parentheses
 - pressing enter on an account opens the account detail page
 - ctrl+e edits the selected account directly from the list
-- ctrl+d is reserved for lists with delete flows; existing accounts should be hidden instead of deleted for v1
+- ctrl+d is reserved for lists with delete flows
+- empty accounts can be deleted undoably
+- non-empty accounts should be hidden instead of deleted
 
 ```
 history (ctrl-z to undo)
@@ -987,9 +989,13 @@ esc     : back
 ?       : help
 ```
 
-- account deletion is deferred for v1
+- hide/show is available for all accounts
+- delete account is shown only when the account is empty
+- empty account means no balances and no child accounts
+- future transaction support should also make accounts with transactions non-empty
+- empty account deletion is immediate and undoable
+- non-empty account delete is not shown and should return a friendly error if reached from stale state
 - accidental newly-created accounts can be undone with ctrl-z if still the latest history action
-- existing accounts should be edited instead of deleted for v1
 - pressing 1 (balances) opens the account balances menu
 - pressing 2 (child accounts) opens the account child list
 - pressing 3 (transactions) opens an automatically filtered account transactions list
@@ -1169,7 +1175,8 @@ esc     : back
 - duplicate account name is rejected
 - keeping the same name while editing is allowed
 - account parent is not editable for v1
-- child account on-budget status is inherited from the parent and is not shown as an editable field
+- root account edit shows on-budget
+- child account edit does not show on-budget because child account on-budget status is inherited from the parent
 - account currency can be edited only if the account has no balances
 - if balances exist, currency field is read-only/disabled
 - changing currency after balances exist should be modeled by creating a separate account
@@ -1189,7 +1196,9 @@ history (ctrl-z to undo)
 
   2) currency  : HKD
 
-  3) notes     :
+  3) on-budget : true
+
+  4) notes     :
 
   [confirm]
 
@@ -1216,7 +1225,9 @@ history (ctrl-z to undo)
 
   2) currency  : HKD (locked because balances exist)
 
-  3) notes     :
+  3) on-budget : true
+
+  4) notes     :
 
   [confirm]
 

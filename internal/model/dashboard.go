@@ -50,13 +50,18 @@ func (a App) accountDashboardContext(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	bal, ok, _ := a.Svc.Accounts.CurrentBalance(a.ctx, acct.ID)
+	summary, err := a.Svc.Accounts.TreeSummary(a.ctx, acct.ID, acct.Code)
+	if err != nil {
+		return "", err
+	}
 	asOf := "(no balance entered yet)"
-	if ok {
-		asOf = bal.Date
+	if summary.AsOf != "" {
+		asOf = summary.AsOf
 	}
 	values := alignedMoneyValues(
-		component.MoneyCell(d.Total, acct.Code),
+		component.MoneyCell(summary.Balance, acct.Code),
+		component.MoneyCell(summary.Children, acct.Code),
+		component.MoneyCell(summary.Remaining, acct.Code),
 		component.MoneyCell(d.NetChangeFromMonthStart, acct.Code),
 		component.MoneyCell(d.NetChangeFromMonthHigh, acct.Code),
 		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, acct.Code),
@@ -68,13 +73,15 @@ func (a App) accountDashboardContext(name string) (string, error) {
 	lines := []string{
 		fmt.Sprintf("account   : %s", acct.Name),
 		fmt.Sprintf("balance   : %s", values[0]),
+		fmt.Sprintf("children  : %s", values[1]),
+		fmt.Sprintf("remaining : %s", values[2]),
 		fmt.Sprintf("as of     : %s", asOf),
 		fmt.Sprintf("on-budget : %t", acct.OnBudget),
 	}
 	if acct.Hidden {
 		lines = append(lines, "hidden    : true")
 	}
-	lines = append(lines, fmt.Sprintf("notes     : %s", acct.Notes), "", dashboardSectionsWithValues(d, "", values[1:8]))
+	lines = append(lines, fmt.Sprintf("notes     : %s", acct.Notes), "", dashboardSectionsWithValues(d, "", values[3:10]))
 	if warnings := dashboardWarnings(d.Warnings); warnings != "" {
 		lines = append(lines, warnings)
 	}

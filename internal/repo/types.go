@@ -19,6 +19,7 @@ type Account struct {
 	ID         int64
 	Name       string
 	CurrencyID int64
+	ParentID   *int64
 	Code       string
 	Scale      int
 	OnBudget   bool

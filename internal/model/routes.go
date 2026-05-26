@@ -24,6 +24,8 @@ func accountBalanceEditPath(name, date string) string {
 	return "/accounts/" + name + "/balances/" + date + "/edit/"
 }
 func accountTransactionsPath(name string) string { return "/accounts/" + name + "/transactions/" }
+func accountChildrenListPath(name string) string { return "/accounts/" + name + "/children/list/" }
+func accountChildCreatePath(name string) string  { return "/accounts/" + name + "/children/create/" }
 
 func Today() string { return time.Now().Format("2006-01-02") }
 
@@ -52,6 +54,33 @@ func accountEditName(path string) (string, bool) {
 
 func accountEditPath(path string) bool {
 	_, ok := accountEditName(path)
+	return ok
+}
+
+func accountChildrenListName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/children/list/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/children/list/")
+	if strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, name != ""
+}
+
+func accountChildCreateName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/children/create/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/children/create/")
+	if strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, name != ""
+}
+
+func accountChildCreatePathMatch(path string) bool {
+	_, ok := accountChildCreateName(path)
 	return ok
 }
 

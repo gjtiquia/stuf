@@ -30,6 +30,27 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 	return a.submitFormKey(s, fields)
 }
 
+func (a App) childAccountFormKey(s string, locked map[string]bool) (App, bool) {
+	fields := []string{"name", "currency", "notes"}
+	if isSubmitKey(s) {
+		a.clearCurrentTextCursor(fields)
+		return a, true
+	}
+	if a.Field == 1 && locked != nil && locked["currency"] {
+		switch s {
+		case "enter", "tab", "down":
+			a.Field = 2
+		case "shift+tab", "up":
+			a.Field = 0
+		}
+		return a, false
+	}
+	if a.Field == 1 {
+		return a.currencyFieldKey(s, fields)
+	}
+	return a.submitFormKey(s, fields)
+}
+
 func (a App) currencyFieldKey(s string, fields []string) (App, bool) {
 	options := a.currencyOptions()
 	if a.Form["currency"] == "" {

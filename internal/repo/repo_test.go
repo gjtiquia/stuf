@@ -26,6 +26,8 @@ func testStore(t *testing.T) *Store {
 	return s
 }
 
+func ptrInt64(v int64) *int64 { return &v }
+
 func TestFreshDBMigrationsAndSeeding(t *testing.T) {
 	s := testStore(t)
 	usd, err := s.Cur.GetByCode(context.Background(), "USD")
@@ -144,6 +146,61 @@ func TestAccountListVisibleVsHidden(t *testing.T) {
 	}
 	if len(all) != 2 {
 		t.Fatalf("all list = %+v", all)
+	}
+}
+
+func TestAccountParentChildRepos(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	parent, err := s.Acct.Create(ctx, AccountCreate{Name: "investment", CurrencyID: hkd.ID, OnBudget: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.Acct.Create(ctx, AccountCreate{Name: "investment-hkd", CurrencyID: hkd.ID, OnBudget: false, ParentID: ptrInt64(parent.ID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.ParentID == nil || *child.ParentID != parent.ID {
+		t.Fatalf("child parent id = %v, want %d", child.ParentID, parent.ID)
+	}
+	roots, err := s.Acct.ListRoots(ctx, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != 1 || roots[0].ID != parent.ID {
+		t.Fatalf("roots = %+v", roots)
+	}
+	children, err := s.Acct.ListChildren(ctx, parent.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].ID != child.ID {
+		t.Fatalf("children = %+v", children)
+	}
+	empty, err := s.Acct.IsEmpty(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty {
+		t.Fatal("parent with child should not be empty")
+	}
+	empty, err = s.Acct.IsEmpty(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !empty {
+		t.Fatal("child with no balances or children should be empty")
+	}
+	if _, err := s.Bal.Create(ctx, BalanceCreate{AccountID: child.ID, Date: "2026-05-01", Amount: money.Money{Amount: 10000, Scale: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	empty, err = s.Acct.IsEmpty(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if empty {
+		t.Fatal("child with balance should not be empty")
 	}
 }
 

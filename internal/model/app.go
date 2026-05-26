@@ -65,7 +65,14 @@ func (a App) notesFocused() bool {
 	switch {
 	case a.Path == routeAccountCreate:
 		return a.Field == 3
+	case accountChildCreatePathMatch(a.Path):
+		return a.Field == 2
 	case accountEditPath(a.Path):
+		if name, ok := accountEditName(a.Path); ok {
+			if acct, err := a.Svc.Accounts.GetByName(a.ctx, name); err == nil && acct.ParentID != nil {
+				return a.Field == 2
+			}
+		}
 		return a.Field == 3
 	case balanceAddPath(a.Path), balanceEditPath(a.Path):
 		return a.Field == 2
@@ -125,6 +132,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
 			a = a.accountDetailKey(s, name)
+		} else if name, ok := accountChildCreateName(a.Path); ok {
+			a = a.accountChildCreateKey(s, name)
+		} else if name, ok := accountChildrenListName(a.Path); ok {
+			a = a.accountChildrenListKey(s, name)
 		} else if name, ok := balanceAddName(a.Path); ok {
 			a = a.balanceAddKey(s, name)
 		} else if name, date, ok := balanceEditName(a.Path); ok {
@@ -305,6 +316,12 @@ func (a App) screen() screen {
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
 			return a.accountDetailScreen(name)
+		}
+		if name, ok := accountChildrenListName(a.Path); ok {
+			return a.accountChildrenListScreen(name)
+		}
+		if name, ok := accountChildCreateName(a.Path); ok {
+			return a.accountChildCreateScreen(name)
 		}
 		if name, ok := balanceListName(a.Path); ok {
 			context, err := a.accountDashboardContext(name)

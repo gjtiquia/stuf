@@ -57,7 +57,7 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	if err != nil {
 		return Dashboard{}, err
 	}
-	accounts, err := s.Accounts.List(ctx, false)
+	accounts, err := s.Accounts.ListRoots(ctx, false)
 	if err != nil {
 		return Dashboard{}, err
 	}
@@ -72,7 +72,7 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 		if err != nil {
 			return Dashboard{}, err
 		}
-		history, accountWarnings, err := s.accountHistory(ctx, a.ID, cur, appCur, today)
+		accountHistories, accountWarnings, err := s.effectiveAccountHistories(ctx, a, cur, appCur, today)
 		if err != nil {
 			return Dashboard{}, err
 		}
@@ -82,9 +82,7 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 				warned[warning] = true
 			}
 		}
-		if len(history.Balances) > 0 {
-			histories = append(histories, history)
-		}
+		histories = append(histories, accountHistories...)
 	}
 	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
 	out.Warnings = warnings
@@ -101,13 +99,9 @@ func (s DashboardService) AccountSummary(ctx context.Context, accountID int64) (
 	if err != nil {
 		return Dashboard{}, err
 	}
-	history, warnings, err := s.accountHistory(ctx, accountID, cur, cur, today)
+	histories, warnings, err := s.effectiveAccountHistories(ctx, acct, cur, cur, today)
 	if err != nil {
 		return Dashboard{}, err
-	}
-	var histories []dashboardAccountHistory
-	if len(history.Balances) > 0 {
-		histories = append(histories, history)
 	}
 	out := dashboardFromHistories(today, money.Money{Scale: cur.Scale}, histories)
 	out.Warnings = warnings
@@ -151,6 +145,43 @@ func (s DashboardService) accountHistory(ctx context.Context, accountID int64, c
 		})
 	}
 	return history, warnings, nil
+}
+
+func (s DashboardService) effectiveAccountHistories(ctx context.Context, a repo.Account, cur repo.Currency, target repo.Currency, today time.Time) ([]dashboardAccountHistory, []string, error) {
+	history, warnings, err := s.accountHistory(ctx, a.ID, cur, target, today)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(history.Balances) > 0 {
+		return []dashboardAccountHistory{history}, warnings, nil
+	}
+	children, err := s.Accounts.ListChildren(ctx, a.ID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	var histories []dashboardAccountHistory
+	warned := map[string]bool{}
+	for _, warning := range warnings {
+		warned[warning] = true
+	}
+	for _, child := range children {
+		childCur, err := s.Currencies.GetByID(ctx, child.CurrencyID)
+		if err != nil {
+			return nil, nil, err
+		}
+		childHistories, childWarnings, err := s.effectiveAccountHistories(ctx, child, childCur, target, today)
+		if err != nil {
+			return nil, nil, err
+		}
+		histories = append(histories, childHistories...)
+		for _, warning := range childWarnings {
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+		}
+	}
+	return histories, warnings, nil
 }
 
 func dashboardFromHistories(today time.Time, zero money.Money, histories []dashboardAccountHistory) Dashboard {

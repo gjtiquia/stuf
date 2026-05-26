@@ -28,6 +28,13 @@ func serviceStack(t *testing.T) (*repo.Store, AccountService, BalanceService, Da
 	return s, a, b, d, h
 }
 
+func setServiceRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
+	t.Helper()
+	if err := store.SetCurrencyRate(context.Background(), code, amount, scale); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAccountMutationRecordsHistoryAndUndo(t *testing.T) {
 	ctx := context.Background()
 	s, accounts, _, _, history := serviceStack(t)
@@ -111,6 +118,174 @@ func TestAccountInvalidCurrencyReturnsFriendlyError(t *testing.T) {
 		t.Fatal("expected invalid currency update error")
 	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
 		t.Fatalf("invalid currency update error = %q", got)
+	}
+}
+
+func TestChildAccountInheritsOnBudgetAndCannotDiverge(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, _, _, _ := serviceStack(t)
+	parent, _, err := accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "investment-hkd", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.OnBudget {
+		t.Fatalf("child should inherit off-budget parent: %+v", child)
+	}
+	if _, _, err := accounts.Update(ctx, child.ID, child.Name, child.Code, true, child.Hidden, child.Notes); err == nil {
+		t.Fatal("expected child on-budget divergence to be rejected")
+	}
+	updated, _, err := accounts.Update(ctx, parent.ID, parent.Name, parent.Code, true, parent.Hidden, parent.Notes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated.OnBudget {
+		t.Fatal("parent should update to on-budget")
+	}
+	child, err = accounts.GetByName(ctx, "investment-hkd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !child.OnBudget {
+		t.Fatal("child should cascade to parent on-budget value")
+	}
+}
+
+func TestAccountTreeBalancesAvoidDoubleCounting(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	setServiceRate(t, accounts.Store, "HKD", 1, 0)
+	setServiceRate(t, accounts.Store, "USD", 10, 0)
+	parent, _, err := accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, _, err := accounts.CreateChild(ctx, parent.ID, "investment-usd", "USD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hkd, _, err := accounts.CreateChild(ctx, parent.ID, "investment-hkd", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, parent.ID, "2026-05-24", "500000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, usd.ID, "2026-05-24", "32000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, hkd.ID, "2026-05-24", "100000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := accounts.TreeSummary(ctx, parent.ID, "HKD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "parent display", summary.Balance, 50000000)
+	assertMoneyAmount(t, "children", summary.Children, 42000000)
+	assertMoneyAmount(t, "remaining", summary.Remaining, 8000000)
+
+	d, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "dashboard excludes off-budget parent", d.Total, 0)
+
+	if _, _, err := accounts.Update(ctx, parent.ID, parent.Name, parent.Code, true, parent.Hidden, parent.Notes); err != nil {
+		t.Fatal(err)
+	}
+	d, err = dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "dashboard counts parent once", d.Total, 50000000)
+}
+
+func TestAccountTreeWithoutOwnBalanceDerivesFromChildren(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	setServiceRate(t, accounts.Store, "HKD", 1, 0)
+	setServiceRate(t, accounts.Store, "USD", 10, 0)
+	parent, _, err := accounts.Create(ctx, "hsbc-one", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hkd, _, err := accounts.CreateChild(ctx, parent.ID, "hsbc-hkd", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	usd, _, err := accounts.CreateChild(ctx, parent.ID, "hsbc-usd", "USD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, hkd.ID, "2026-05-21", "35000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, usd.ID, "2026-05-24", "1000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := accounts.TreeSummary(ctx, parent.ID, "HKD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "derived display", summary.Balance, 4500000)
+	assertMoneyAmount(t, "children", summary.Children, 4500000)
+	assertMoneyAmount(t, "remaining", summary.Remaining, 0)
+	if summary.AsOf != "2026-05-24" {
+		t.Fatalf("as of = %s", summary.AsOf)
+	}
+	d, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "dashboard derived parent", d.Total, 4500000)
+}
+
+func TestDeleteEmptyAccountUndo(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, balances, _, history := serviceStack(t)
+	parent, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "cash-child", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.DeleteEmpty(ctx, parent.ID); err == nil {
+		t.Fatal("expected parent with child delete to fail")
+	}
+	if _, _, err := balances.Add(ctx, child.ID, "2026-05-24", "1.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.DeleteEmpty(ctx, child.ID); err == nil {
+		t.Fatal("expected child with balance delete to fail")
+	}
+	bal, err := balances.GetByAccountDate(ctx, child.ID, "2026-05-24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := balances.Delete(ctx, bal.ID); err != nil {
+		t.Fatal(err)
+	}
+	deleted, entry, err := accounts.DeleteEmpty(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted.ID != child.ID {
+		t.Fatalf("deleted = %+v", deleted)
+	}
+	if _, err := s.Acct.GetByID(ctx, child.ID); err == nil {
+		t.Fatal("child still exists after delete")
+	}
+	if err := history.Undo(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Acct.GetByID(ctx, child.ID); err != nil {
+		t.Fatalf("undo should restore child: %v", err)
 	}
 }
 

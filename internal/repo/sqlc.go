@@ -8,11 +8,12 @@ import (
 	"stuf/internal/money"
 )
 
-func accountFromFields(id int64, name string, currencyID int64, code string, scale int64, onBudget, hidden int64, notes, createdAt, updatedAt string) Account {
+func accountFromFields(id int64, name string, currencyID int64, parentID sql.NullInt64, code string, scale int64, onBudget, hidden int64, notes, createdAt, updatedAt string) Account {
 	return Account{
 		ID:         id,
 		Name:       name,
 		CurrencyID: currencyID,
+		ParentID:   ptrFromNullInt64(parentID),
 		Code:       code,
 		Scale:      int(scale),
 		OnBudget:   onBudget == 1,
@@ -24,19 +25,39 @@ func accountFromFields(id int64, name string, currencyID int64, code string, sca
 }
 
 func accountFromGetRow(row db.GetAccountByIDRow) Account {
-	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
 }
 
 func accountFromNameRow(row db.GetAccountByNameRow) Account {
-	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
 }
 
 func accountFromListRow(row db.ListAccountsRow) Account {
-	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
 }
 
 func accountFromVisibleRow(row db.ListVisibleAccountsRow) Account {
-	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func accountFromRootRow(row db.ListRootAccountsRow) Account {
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func accountFromVisibleRootRow(row db.ListVisibleRootAccountsRow) Account {
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func accountFromChildRow(row db.ListChildAccountsRow) Account {
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func accountFromVisibleChildRow(row db.ListVisibleChildAccountsRow) Account {
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func accountFromDescendantRow(row db.ListDescendantAccountsRow) Account {
+	return accountFromFields(row.ID, row.Name, row.CurrencyID, row.ParentID, row.Code, row.Scale, row.OnBudget, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
 }
 
 func mapAccountErr(err error) error {
@@ -128,4 +149,19 @@ func nullString(s *string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: *s, Valid: true}
+}
+
+func nullInt64(v *int64) sql.NullInt64 {
+	if v == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: *v, Valid: true}
+}
+
+func ptrFromNullInt64(v sql.NullInt64) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	out := v.Int64
+	return &out
 }

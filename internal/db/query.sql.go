@@ -21,17 +21,30 @@ func (q *Queries) CountBalancesByAccountID(ctx context.Context, accountID int64)
 	return count, err
 }
 
+const countChildrenByAccountID = `-- name: CountChildrenByAccountID :one
+SELECT count(*) FROM accounts WHERE parent_id = ?
+`
+
+func (q *Queries) CountChildrenByAccountID(ctx context.Context, parentID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countChildrenByAccountID, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAccount = `-- name: CreateAccount :execresult
 
-INSERT INTO accounts (name, currency_id, on_budget, notes, created_at, updated_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO accounts (name, currency_id, on_budget, hidden, notes, parent_id, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateAccountParams struct {
 	Name       string
 	CurrencyID int64
 	OnBudget   int64
+	Hidden     int64
 	Notes      string
+	ParentID   sql.NullInt64
 	CreatedAt  string
 	UpdatedAt  string
 }
@@ -42,7 +55,9 @@ func (q *Queries) CreateAccount(ctx context.Context, arg CreateAccountParams) (s
 		arg.Name,
 		arg.CurrencyID,
 		arg.OnBudget,
+		arg.Hidden,
 		arg.Notes,
+		arg.ParentID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -134,6 +149,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -150,6 +166,7 @@ type GetAccountByIDRow struct {
 	ID         int64
 	Name       string
 	CurrencyID int64
+	ParentID   sql.NullInt64
 	Code       string
 	Scale      int64
 	OnBudget   int64
@@ -166,6 +183,7 @@ func (q *Queries) GetAccountByID(ctx context.Context, id int64) (GetAccountByIDR
 		&i.ID,
 		&i.Name,
 		&i.CurrencyID,
+		&i.ParentID,
 		&i.Code,
 		&i.Scale,
 		&i.OnBudget,
@@ -182,6 +200,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -198,6 +217,7 @@ type GetAccountByNameRow struct {
 	ID         int64
 	Name       string
 	CurrencyID int64
+	ParentID   sql.NullInt64
 	Code       string
 	Scale      int64
 	OnBudget   int64
@@ -214,6 +234,7 @@ func (q *Queries) GetAccountByName(ctx context.Context, name string) (GetAccount
 		&i.ID,
 		&i.Name,
 		&i.CurrencyID,
+		&i.ParentID,
 		&i.Code,
 		&i.Scale,
 		&i.OnBudget,
@@ -407,6 +428,7 @@ SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -423,6 +445,7 @@ type ListAccountsRow struct {
 	ID         int64
 	Name       string
 	CurrencyID int64
+	ParentID   sql.NullInt64
 	Code       string
 	Scale      int64
 	OnBudget   int64
@@ -445,6 +468,7 @@ func (q *Queries) ListAccounts(ctx context.Context) ([]ListAccountsRow, error) {
 			&i.ID,
 			&i.Name,
 			&i.CurrencyID,
+			&i.ParentID,
 			&i.Code,
 			&i.Scale,
 			&i.OnBudget,
@@ -471,6 +495,7 @@ SELECT
   a.id AS account_id,
   a.name AS account_name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -497,6 +522,7 @@ type ListAllVisibleBalancesRow struct {
 	AccountID        int64
 	AccountName      string
 	CurrencyID       int64
+	ParentID         sql.NullInt64
 	Code             string
 	Scale            int64
 	OnBudget         int64
@@ -527,6 +553,7 @@ func (q *Queries) ListAllVisibleBalances(ctx context.Context) ([]ListAllVisibleB
 			&i.AccountID,
 			&i.AccountName,
 			&i.CurrencyID,
+			&i.ParentID,
 			&i.Code,
 			&i.Scale,
 			&i.OnBudget,
@@ -578,6 +605,74 @@ func (q *Queries) ListBalancesByAccount(ctx context.Context, accountID int64) ([
 			&i.Date,
 			&i.Amount,
 			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChildAccounts = `-- name: ListChildAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id = ?
+ORDER BY a.name
+`
+
+type ListChildAccountsRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	ParentID   sql.NullInt64
+	Code       string
+	Scale      int64
+	OnBudget   int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListChildAccounts(ctx context.Context, parentID sql.NullInt64) ([]ListChildAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChildAccounts, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChildAccountsRow
+	for rows.Next() {
+		var i ListChildAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.ParentID,
+			&i.Code,
+			&i.Scale,
+			&i.OnBudget,
+			&i.Hidden,
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -650,6 +745,79 @@ func (q *Queries) ListCurrencies(ctx context.Context) ([]ListCurrenciesRow, erro
 	return items, nil
 }
 
+const listDescendantAccounts = `-- name: ListDescendantAccounts :many
+WITH RECURSIVE descendants(id) AS (
+  SELECT accounts.id FROM accounts WHERE accounts.parent_id = ?
+  UNION ALL
+  SELECT a.id FROM accounts a JOIN descendants d ON a.parent_id = d.id
+)
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN descendants d ON d.id = a.id
+JOIN currencies c ON c.id = a.currency_id
+ORDER BY a.name
+`
+
+type ListDescendantAccountsRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	ParentID   sql.NullInt64
+	Code       string
+	Scale      int64
+	OnBudget   int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListDescendantAccounts(ctx context.Context, parentID sql.NullInt64) ([]ListDescendantAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listDescendantAccounts, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDescendantAccountsRow
+	for rows.Next() {
+		var i ListDescendantAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.ParentID,
+			&i.Code,
+			&i.Scale,
+			&i.OnBudget,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHistory = `-- name: ListHistory :many
 SELECT id, timestamp, action, path, old_data, new_data
 FROM history
@@ -686,11 +854,80 @@ func (q *Queries) ListHistory(ctx context.Context) ([]History, error) {
 	return items, nil
 }
 
+const listRootAccounts = `-- name: ListRootAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id IS NULL
+ORDER BY a.name
+`
+
+type ListRootAccountsRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	ParentID   sql.NullInt64
+	Code       string
+	Scale      int64
+	OnBudget   int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListRootAccounts(ctx context.Context) ([]ListRootAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRootAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRootAccountsRow
+	for rows.Next() {
+		var i ListRootAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.ParentID,
+			&i.Code,
+			&i.Scale,
+			&i.OnBudget,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleAccounts = `-- name: ListVisibleAccounts :many
 SELECT
   a.id,
   a.name,
   a.currency_id,
+  a.parent_id,
   c.code,
   c.scale,
   a.on_budget,
@@ -708,6 +945,7 @@ type ListVisibleAccountsRow struct {
 	ID         int64
 	Name       string
 	CurrencyID int64
+	ParentID   sql.NullInt64
 	Code       string
 	Scale      int64
 	OnBudget   int64
@@ -730,6 +968,143 @@ func (q *Queries) ListVisibleAccounts(ctx context.Context) ([]ListVisibleAccount
 			&i.ID,
 			&i.Name,
 			&i.CurrencyID,
+			&i.ParentID,
+			&i.Code,
+			&i.Scale,
+			&i.OnBudget,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVisibleChildAccounts = `-- name: ListVisibleChildAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id = ? AND a.hidden = 0
+ORDER BY a.name
+`
+
+type ListVisibleChildAccountsRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	ParentID   sql.NullInt64
+	Code       string
+	Scale      int64
+	OnBudget   int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListVisibleChildAccounts(ctx context.Context, parentID sql.NullInt64) ([]ListVisibleChildAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleChildAccounts, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVisibleChildAccountsRow
+	for rows.Next() {
+		var i ListVisibleChildAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.ParentID,
+			&i.Code,
+			&i.Scale,
+			&i.OnBudget,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listVisibleRootAccounts = `-- name: ListVisibleRootAccounts :many
+SELECT
+  a.id,
+  a.name,
+  a.currency_id,
+  a.parent_id,
+  c.code,
+  c.scale,
+  a.on_budget,
+  a.hidden,
+  a.notes,
+  a.created_at,
+  a.updated_at
+FROM accounts a
+JOIN currencies c ON c.id = a.currency_id
+WHERE a.parent_id IS NULL AND a.hidden = 0
+ORDER BY a.name
+`
+
+type ListVisibleRootAccountsRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	ParentID   sql.NullInt64
+	Code       string
+	Scale      int64
+	OnBudget   int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListVisibleRootAccounts(ctx context.Context) ([]ListVisibleRootAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleRootAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVisibleRootAccountsRow
+	for rows.Next() {
+		var i ListVisibleRootAccountsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.ParentID,
 			&i.Code,
 			&i.Scale,
 			&i.OnBudget,
@@ -753,7 +1128,7 @@ func (q *Queries) ListVisibleAccounts(ctx context.Context) ([]ListVisibleAccount
 
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
-SET name = ?, currency_id = ?, on_budget = ?, hidden = ?, notes = ?, updated_at = ?
+SET name = ?, currency_id = ?, on_budget = ?, hidden = ?, notes = ?, parent_id = ?, updated_at = ?
 WHERE id = ?
 `
 
@@ -763,6 +1138,7 @@ type UpdateAccountParams struct {
 	OnBudget   int64
 	Hidden     int64
 	Notes      string
+	ParentID   sql.NullInt64
 	UpdatedAt  string
 	ID         int64
 }
@@ -774,6 +1150,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.OnBudget,
 		arg.Hidden,
 		arg.Notes,
+		arg.ParentID,
 		arg.UpdatedAt,
 		arg.ID,
 	)

@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"time"
@@ -16,7 +17,9 @@ type AccountRepo struct{ store *Store }
 type AccountCreate struct {
 	Name       string
 	CurrencyID int64
+	ParentID   *int64
 	OnBudget   bool
+	Hidden     bool
 	Notes      string
 }
 
@@ -26,7 +29,9 @@ func (r *AccountRepo) Create(ctx context.Context, in AccountCreate) (Account, er
 		Name:       in.Name,
 		CurrencyID: in.CurrencyID,
 		OnBudget:   boolInt(in.OnBudget),
+		Hidden:     boolInt(in.Hidden),
 		Notes:      in.Notes,
+		ParentID:   nullInt64(in.ParentID),
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	})
@@ -84,6 +89,7 @@ func (r *AccountRepo) Update(ctx context.Context, a Account) (Account, error) {
 		OnBudget:   boolInt(a.OnBudget),
 		Hidden:     boolInt(a.Hidden),
 		Notes:      a.Notes,
+		ParentID:   nullInt64(a.ParentID),
 		UpdatedAt:  now,
 		ID:         a.ID,
 	}); err != nil {
@@ -104,12 +110,95 @@ func (r *AccountRepo) HasBalances(ctx context.Context, id int64) (bool, error) {
 	return n > 0, nil
 }
 
+func (r *AccountRepo) HasChildren(ctx context.Context, id int64) (bool, error) {
+	n, err := r.store.Q.CountChildrenByAccountID(ctx, accountIDParam(id))
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+func (r *AccountRepo) IsEmpty(ctx context.Context, id int64) (bool, error) {
+	hasBalances, err := r.HasBalances(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	if hasBalances {
+		return false, nil
+	}
+	hasChildren, err := r.HasChildren(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	return !hasChildren, nil
+}
+
+func (r *AccountRepo) ListRoots(ctx context.Context, includeHidden bool) ([]Account, error) {
+	if includeHidden {
+		rows, err := r.store.Q.ListRootAccounts(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Account, len(rows))
+		for i, row := range rows {
+			out[i] = accountFromRootRow(row)
+		}
+		return out, nil
+	}
+	rows, err := r.store.Q.ListVisibleRootAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Account, len(rows))
+	for i, row := range rows {
+		out[i] = accountFromVisibleRootRow(row)
+	}
+	return out, nil
+}
+
+func (r *AccountRepo) ListChildren(ctx context.Context, id int64, includeHidden bool) ([]Account, error) {
+	if includeHidden {
+		rows, err := r.store.Q.ListChildAccounts(ctx, accountIDParam(id))
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Account, len(rows))
+		for i, row := range rows {
+			out[i] = accountFromChildRow(row)
+		}
+		return out, nil
+	}
+	rows, err := r.store.Q.ListVisibleChildAccounts(ctx, accountIDParam(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Account, len(rows))
+	for i, row := range rows {
+		out[i] = accountFromVisibleChildRow(row)
+	}
+	return out, nil
+}
+
+func (r *AccountRepo) ListDescendants(ctx context.Context, id int64) ([]Account, error) {
+	rows, err := r.store.Q.ListDescendantAccounts(ctx, accountIDParam(id))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Account, len(rows))
+	for i, row := range rows {
+		out[i] = accountFromDescendantRow(row)
+	}
+	return out, nil
+}
+
 func boolInt(v bool) int64 {
 	if v {
 		return 1
 	}
 	return 0
 }
+
+func accountIDParam(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: true} }
 
 func mapAccountWriteErr(err error, name string) error {
 	if isAccountDuplicateNameErr(err) {
