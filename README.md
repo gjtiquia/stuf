@@ -264,8 +264,9 @@ journey
 
 account flow decisions
 - fresh dashboard shows real empty values, not demo data
-- account balance means the latest balance entry
-- if no balance has been added, balance is shown as 0
+- account balance usually means the latest balance entry
+- parent account display balance can be derived from child account balances when the parent has no own balance
+- if no balance has been added and no child balance can derive it, balance is shown as 0
 - creating an account does not ask for an opening balance
 - after creating an account, redirect to /accounts/list/
 - mutation history is enough success feedback
@@ -289,14 +290,28 @@ account flow decisions
 - account names are strict slugs
 - fresh app does not seed tags
 - accounts have exactly one currency for v1
-- multi-currency institutions should be modeled as multiple accounts for v1
-- grouping related accounts can come later
+- multi-currency institutions can be modeled as parent accounts with child accounts
 - balance entries inherit account currency
 - account name is a user-facing slug and can change
 - internal account id should be immutable
 - currencies are system/reference data, not user-created tags
 - seed common default currencies for v1
 - custom currency creation is not supported yet
+
+account trees
+- account trees are similar in spirit to transaction trees: children explain part or all of a parent without double counting the parent and children together
+- accounts can optionally have a parent account
+- child accounts are normal accounts with their own currency, balances, transactions, and notes
+- child accounts inherit the parent account's on-budget status
+- parent and child on-budget status must match
+- parent accounts may have their own balance entries, but do not need them
+- child balances explain part or all of the parent balance
+- parent remaining = parent balance - converted child balances
+- if a parent account has no own balance, display the converted child total as the parent balance and show remaining as 0
+- account totals and reports count child accounts plus parent remaining
+- account totals and reports never count parent balance plus child balances together
+- remaining rows are virtual/read-only rows
+- moving child accounts between parents is deferred for v1
 
 language
 - create = make a new object/container
@@ -575,35 +590,47 @@ ctrl-c  : quit
 ```
 # stuf
 
-total       : HKD 50,000.00
+total       : HKD 550,000.00
 budgeted    : HKD  3,000.00
 
 period      : 2026-05
 
 growth
 on-budget  : HKD  5,200.00
-total      : HKD  6,200.00
+total      : HKD 36,200.00
 
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
 /accounts/list/
 
-total       : HKD  50,000.00
-on-budget   : HKD  230,000.00
-off-budget  : HKD (180,000.00)
+total       : HKD 550,000.00
+on-budget   : HKD  50,000.00
+off-budget  : HKD 500,000.00
 
 showing : non-hidden
 
 > filter : (type anything...)
 
     on-budget accounts
-    name           | balance                         | notes
-    TOTAL          | HKD   50,000.00                 |
+    name             | balance                         | notes
+    TOTAL            | HKD  50,000.00                  |
 
-  > hsbc-one       | HKD   35,000.00                 | main chequing ac
-    hsbc-usd       | HKD    7,800.00 (USD 1,000.00) |
-    hsbc-cad       | HKD    4,600.00 (CAD   800.00) |
+  > hsbc-one         | HKD  47,400.00                  |
+      hsbc-hkd       | HKD  35,000.00                  | daily cash
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)  |
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)  |
+
+    wallet           | HKD   2,600.00                  |
+
+    off-budget accounts
+    name             | balance                         | notes
+    TOTAL            | HKD 500,000.00                  |
+
+    investment       | HKD 500,000.00                  | broker total
+      investment-usd | HKD 320,000.00 (USD 41,025.64) |
+      investment-hkd | HKD 100,000.00                  |
+      remaining      | HKD  80,000.00                  |
 
 ---
 type          : filter
@@ -858,42 +885,47 @@ history (ctrl-z to undo)
 
 # stuf
 
-total       : HKD 50,000.00
+total       : HKD 550,000.00
 budgeted    : HKD  3,000.00
 
 period      : 2026-05
 
 growth
 on-budget  : HKD  5,200.00
-total      : HKD  6,200.00
+total      : HKD 36,200.00
 
 you owe ppl : HKD     23.00
 ppl owe you : HKD    456.00
 
 /accounts/list/
 
-total       : HKD  50,000.00
-on-budget   : HKD  230,000.00
-off-budget  : HKD (180,000.00)
+total       : HKD 550,000.00
+on-budget   : HKD  50,000.00
+off-budget  : HKD 500,000.00
 
 showing : non-hidden
 
 > filter : (type anything...)
 
     on-budget accounts
-    name           | balance                         | notes
-    TOTAL          | HKD   50,000.00                 |
+    name             | balance                         | notes
+    TOTAL            | HKD  50,000.00                  |
 
-  > hsbc-one       | HKD   35,000.00                 | main chequing ac
-    hsbc-usd       | HKD    7,800.00 (USD 1,000.00) |
-    hsbc-cad       | HKD    4,600.00 (CAD   800.00) |
+  > hsbc-one         | HKD  47,400.00                  |
+      hsbc-hkd       | HKD  35,000.00                  | daily cash
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)  |
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)  |
+
+    wallet           | HKD   2,600.00                  |
 
     off-budget accounts
-    name           | balance                         | notes
-    TOTAL          | HKD  (20,000.00)                |
+    name             | balance                         | notes
+    TOTAL            | HKD 500,000.00                  |
 
-    investment-hkd | HKD  182,000.00                 |
-    student-loan   | HKD (200,000.00)                | negative until fully paid
+    investment       | HKD 500,000.00                  | broker total
+      investment-usd | HKD 320,000.00 (USD 41,025.64) |
+      investment-hkd | HKD 100,000.00                  |
+      remaining      | HKD  80,000.00                  |
 
 ---
 type          : filter
@@ -907,8 +939,9 @@ esc           : back
 ?             : help
 ```
 
-- account balance is the latest added balance
-- if the account has no balances yet, the balance is shown as 0
+- account balance usually shows the latest added balance
+- parent account balance can be derived from child account balances when the parent has no own balance
+- if the account has no balances and no child balance can derive it, the balance is shown as 0
 - accounts list shows app currency first for comparison
 - if account currency differs from app currency, show account currency in parentheses
 - pressing enter on an account opens the account detail page
@@ -922,17 +955,20 @@ history (ctrl-z to undo)
 # stuf
 
 name        : hsbc-one
-balance     : HKD 0.00
-as of       : (no balance entered yet)
+balance     : HKD 47,400.00
+children    : HKD 47,400.00
+remaining   : HKD 0.00
+as of       : 2026-05-21
 on-budget   : true
 notes       :
 
 /accounts/hsbc-one/
 
 > 1) balances
-  2) transactions
-  3) edit account
-  4) hide account
+  2) child accounts
+  3) transactions
+  4) edit account
+  5) hide account
 
 ---
 up/down : navigate
@@ -945,8 +981,9 @@ esc     : back
 - accidental newly-created accounts can be undone with ctrl-z if still the latest history action
 - existing accounts should be edited instead of deleted for v1
 - pressing 1 (balances) opens the account balances menu
-- pressing 2 (transactions) opens an automatically filtered account transactions list
-- pressing 3 (edit account) opens the edit account flow
+- pressing 2 (child accounts) opens the account child list
+- pressing 3 (transactions) opens an automatically filtered account transactions list
+- pressing 4 (edit account) opens the edit account flow
 - account transactions is an automatically filtered shortcut to global transactions
 - account-scoped transaction list is the global transaction list filtered by account
 - account-scoped transaction creation reuses global transaction forms
@@ -958,6 +995,99 @@ esc     : back
 - hidden accounts can be shown/unhidden from hidden account detail
 - user-facing language should say balance, not snapshot
 - internally, these may still be implemented as balance snapshots
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:30 create /accounts/investment
+
+# stuf
+
+name        : investment
+balance     : HKD 500,000.00
+children    : HKD 420,000.00
+remaining   : HKD  80,000.00
+as of       : 2026-05-21
+on-budget   : false
+notes       : broker total
+
+/accounts/investment/
+
+> 1) balances
+  2) child accounts
+  3) transactions
+  4) edit account
+  5) hide account
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- parent account detail always uses the same fields and math
+- if the parent account has no own balance, balance comes from converted child balances and remaining is 0
+- if the parent account has its own balance, remaining is parent balance minus converted child balances
+- as of uses the latest relevant balance date
+- for a parent account with no own balance, as of uses the latest child balance date
+
+```
+# stuf
+
+parent      : investment
+balance     : HKD 500,000.00
+children    : HKD 420,000.00
+remaining   : HKD  80,000.00
+as of       : 2026-05-21
+
+/accounts/investment/children/list/
+
+  name             | balance                         | notes
+> investment-usd   | HKD 320,000.00 (USD 41,025.64) |
+  investment-hkd   | HKD 100,000.00                  |
+
+---
+up/down : navigate
+enter   : confirm
+ctrl+n  : new
+ctrl+e  : edit
+esc     : back
+?       : help
+```
+
+- child account lists show parent summary above the URL
+- child account lists show child accounts only
+- remaining is already shown in the parent summary and does not appear in the child table
+- ctrl+n from a child account list opens the child account create form
+
+```
+# stuf
+
+parent      : investment
+on-budget   : false
+
+/accounts/investment/children/create/
+
+> 1) name      : investment-usd
+
+  2) currency  : USD
+
+  3) notes     :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- child account creation uses the normal account creation behavior with parent context
+- child account on-budget status is inherited from the parent account
+- inherited on-budget status is shown in context, not as an editable form field
+- after child account create success, goes to /accounts/{parent}/children/list/ automatically
 
 ```
 # stuf
@@ -1028,6 +1158,8 @@ esc     : back
 - account name must remain unique
 - duplicate account name is rejected
 - keeping the same name while editing is allowed
+- account parent is not editable for v1
+- child account on-budget status is inherited from the parent and is not shown as an editable field
 - account currency can be edited only if the account has no balances
 - if balances exist, currency field is read-only/disabled
 - changing currency after balances exist should be modeled by creating a separate account
@@ -1047,9 +1179,7 @@ history (ctrl-z to undo)
 
   2) currency  : HKD
 
-  3) on-budget : true
-
-  4) notes     :
+  3) notes     :
 
   [confirm]
 
@@ -1076,9 +1206,7 @@ history (ctrl-z to undo)
 
   2) currency  : HKD (locked because balances exist)
 
-  3) on-budget : true
-
-  4) notes     :
+  3) notes     :
 
   [confirm]
 
@@ -2835,15 +2963,15 @@ coverage : 2026-04-30 -> 2026-05-31
 
 growth
 on-budget  : HKD  5,200.00
-off-budget : HKD  1,000.00
-total      : HKD  6,200.00
+off-budget : HKD 30,000.00
+total      : HKD 35,200.00
 
 /reports/monthly/
 
 > filter : (type anything...)
 
   month   | on-budget     | off-budget    | total
-> 2026-05 | HKD  5,200.00 | HKD  1,000.00 | HKD  6,200.00
+> 2026-05 | HKD  5,200.00 | HKD 30,000.00 | HKD 35,200.00
   2026-04 | HKD  1,200.00 | HKD      0.00 | HKD  1,200.00
 
 ---
@@ -2869,8 +2997,8 @@ coverage : 2026-04-30 -> 2026-05-31
 
 growth
 on-budget  : HKD  5,200.00
-off-budget : HKD  1,000.00
-total      : HKD  6,200.00
+off-budget : HKD 30,000.00
+total      : HKD 35,200.00
 
 income     : HKD  5,200.00 (assumed)
 expenses   : HKD      0.00
@@ -2880,12 +3008,20 @@ expenses   : HKD      0.00
 > filter : (type anything...)
 
   on-budget accounts
-  account  | start         | end           | growth
-> hsbc-one | HKD 44,800.00 | HKD 50,000.00 | HKD 5,200.00
+  account           | start          | end            | change
+> hsbc-one          | HKD  42,200.00 | HKD  47,400.00 | HKD  5,200.00
+    hsbc-hkd        | HKD  30,000.00 | HKD  35,000.00 | HKD  5,000.00
+    hsbc-usd        | HKD   7,600.00 | HKD   7,800.00 | HKD    200.00
+    hsbc-cad        | HKD   4,600.00 | HKD   4,600.00 | HKD      0.00
+
+  wallet            | HKD   2,600.00 | HKD   2,600.00 | HKD      0.00
 
   off-budget accounts
-  account        | start          | end            | growth
-  investment-hkd | HKD 10,000.00  | HKD 11,000.00  | HKD 1,000.00
+  account           | start          | end            | change
+  investment        | HKD 470,000.00 | HKD 500,000.00 | HKD 30,000.00
+    investment-usd  | HKD 300,000.00 | HKD 320,000.00 | HKD 20,000.00
+    investment-hkd  | HKD 100,000.00 | HKD 100,000.00 | HKD      0.00
+    remaining       | HKD  70,000.00 | HKD  80,000.00 | HKD 10,000.00
 
 ---
 up/down       : navigate
@@ -2897,6 +3033,8 @@ esc           : back
 ```
 
 - monthly report detail shows balance-derived growth first
+- monthly report account tables render account trees like the account list
+- monthly report account tables count child accounts plus parent remaining, not parent plus children
 - transaction explanation comes after account growth so the report still starts from balance truth
 - expense explanation uses derived, explained, unexplained order
 
