@@ -348,16 +348,24 @@ func (a App) accountChildrenListKey(s, parentName string) App {
 		a.Form = map[string]string{}
 		return a.navPush(accountChildCreatePath(parentName), 0)
 	}
-	if isEditKey(s) && len(rows) > 0 {
-		idx := clampListCursor(a.Menu, len(rows))
+	if isEditKey(s) {
+		if len(rows) == 0 {
+			return a
+		}
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		idx := a.accountSelectableIndex(rows, a.Menu)
 		acct, err := a.Svc.Accounts.GetByName(a.ctx, rows[idx].Name)
 		if err != nil {
 			a.Error = err.Error()
 			return a
 		}
+		a = a.captureChildAccountListReturn(parentName, acct.Name)
 		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
 		a.Field = 0
 		return a.navPush(accountEditPathFor(acct.Name), 0)
+	}
+	if isDeleteKey(s) {
+		return a
 	}
 	switch s {
 	case "left":
@@ -367,15 +375,28 @@ func (a App) accountChildrenListKey(s, parentName string) App {
 		if len(rows) == 0 {
 			return a
 		}
-		idx := clampListCursor(a.Menu, len(rows))
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		idx := a.accountSelectableIndex(rows, a.Menu)
 		return a.navPush(accountPath(rows[idx].Name), 0)
-	case "up", "shift+tab":
+	case "up", "k", "shift+tab":
 		if len(rows) > 0 {
-			a = a.navSetMenu((a.Menu - 1 + len(rows)) % len(rows))
+			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, -1))
 		}
-	case "down", "tab":
+	case "down", "j", "tab":
 		if len(rows) > 0 {
-			a = a.navSetMenu((a.Menu + 1) % len(rows))
+			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, 1))
+		}
+	case "backspace":
+		input := newFilteredListInput(a.listFilter(), nil)
+		updated, _ := input.handleKey("backspace")
+		a.setListFilter(updated.value())
+		a = a.navSetMenu(clampListCursor(a.Menu, a.childAccountListRowCount(parent.ID)))
+		return a
+	default:
+		input := newFilteredListInput(a.listFilter(), nil)
+		if updated, handled := input.handleKey(s); handled {
+			a.setListFilter(updated.value())
+			a = a.navSetMenu(0)
 		}
 	}
 	return a
@@ -439,6 +460,31 @@ func (a App) selectAccountInCurrentList(name string) App {
 		}
 	}
 	return a.navReplace(routeAccountList, idx)
+}
+
+func (a App) selectChildAccountInList(path, name string) App {
+	parentName, ok := accountChildrenListName(path)
+	if !ok {
+		return a.navReplace(path, 0)
+	}
+	parent, err := a.Svc.Accounts.GetByName(a.ctx, parentName)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	rows, err := a.childAccountListRows(parent.ID)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	idx := clampListCursor(a.Menu, len(rows))
+	for i, row := range rows {
+		if row.Name == name {
+			idx = i
+			break
+		}
+	}
+	return a.navReplace(path, idx)
 }
 
 func accountSummary(rows []accountListRow, appCurrency string) string {
@@ -712,12 +758,19 @@ func (a App) remainingRow(acct repo.Account, depth int) (*accountListRow, error)
 }
 
 func (a App) childAccountListRows(parentID int64) ([]accountListRow, error) {
+	return a.childAccountListRowsWithFilter(parentID, a.listFilter())
+}
+
+func (a App) childAccountListRowsWithFilter(parentID int64, filter string) ([]accountListRow, error) {
 	children, err := a.Svc.Accounts.ListChildren(a.ctx, parentID, false)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]accountListRow, 0, len(children))
 	for _, child := range children {
+		if filter != "" && !strings.Contains(child.Name, filter) && !strings.Contains(child.Notes, filter) {
+			continue
+		}
 		row, err := a.accountRow(child, 0)
 		if err != nil {
 			return nil, err
@@ -725,6 +778,14 @@ func (a App) childAccountListRows(parentID int64) ([]accountListRow, error) {
 		out = append(out, row)
 	}
 	return out, nil
+}
+
+func (a App) childAccountListRowCount(parentID int64) int {
+	rows, err := a.childAccountListRows(parentID)
+	if err != nil {
+		return 0
+	}
+	return len(rows)
 }
 
 func (a App) accountListBalance(code string, native money.Money) (money.Money, component.Cell, error) {
@@ -825,8 +886,14 @@ func (a App) accountChildrenListScreen(name string) screen {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
 	var lines []string
+	lines = append(lines, "> filter : "+placeholder(a.listFilter(), "(type anything...)"), "")
 	if len(rows) == 0 {
-		lines = append(lines, "  name | balance | notes", "  (no child accounts yet)")
+		lines = append(lines, "  name | balance | notes")
+		if a.listFilter() == "" {
+			lines = append(lines, "  (no child accounts yet)")
+		} else {
+			lines = append(lines, "  (no results)")
+		}
 	} else {
 		layout := accountListTableLayoutFor(rows, a.Config.Config.Currency, false)
 		lines = append(lines, layout.Header("  "))
@@ -846,8 +913,7 @@ func (a App) accountChildrenListScreen(name string) screen {
 		Path:    accountChildrenListPath(name),
 		Context: context,
 		Body:    strings.Join(lines, "\n") + "\n",
-		Help:    tableListHelp(),
-		Actions: []string{"add child account"},
+		Help:    childAccountListHelp(),
 	}
 }
 

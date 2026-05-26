@@ -404,6 +404,157 @@ func TestChildAccountCreateEditAndDeleteFlow(t *testing.T) {
 	}
 }
 
+func TestEmptyChildAccountListIsFilterableListNotActionMenu(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "investment", "HKD", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+	)
+	view := app.View()
+	assertViewContains(t, view, "parent", "investment", "> filter : (type anything...)", "  name | balance | notes", "  (no child accounts yet)", "ctrl+n        : new")
+	if strings.Contains(view, "1) add child account") || strings.Contains(view, "ctrl+d") {
+		t.Fatalf("child list should not render an add/delete action menu:\n%s", view)
+	}
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/investment/children/list/" || app.Form["filter"] != "" {
+		t.Fatalf("enter on empty child list should stay put without filtering, path=%s filter=%q", app.Path, app.Form["filter"])
+	}
+	app = press(app, tea.KeyRight)
+	if app.Path != "/accounts/investment/children/list/" || app.Form["filter"] != "" {
+		t.Fatalf("right on empty child list should stay put without filtering, path=%s filter=%q", app.Path, app.Form["filter"])
+	}
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/investment/children/list/" || app.Form["filter"] != "" {
+		t.Fatalf("ctrl+e on empty child list should stay put without filtering, path=%s filter=%q", app.Path, app.Form["filter"])
+	}
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/accounts/investment/children/create/" {
+		t.Fatalf("ctrl+n on empty child list should open child create, got %s", app.Path)
+	}
+}
+
+func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	parent, _, err := app.Svc.Accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-hkd", "HKD", "local cash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-usd", "USD", "dollars"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+	)
+	view := app.View()
+	assertViewContains(t, view, "> investment-hkd", "  investment-usd")
+	if strings.Contains(view, "\n  remaining") || strings.Contains(view, "\n> remaining") || strings.Contains(view, "1) add child account") {
+		t.Fatalf("child list should show only child rows and no action menu:\n%s", view)
+	}
+
+	for _, key := range []tea.KeyType{tea.KeyDown, tea.KeyUp, tea.KeyTab, tea.KeyShiftTab} {
+		app = appWithNav(app,
+			navFrame{Path: "/", Menu: 0},
+			navFrame{Path: "/accounts/investment/", Menu: 1},
+			navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+		)
+		app = press(app, key)
+		want := "> investment-usd"
+		if key == tea.KeyUp || key == tea.KeyShiftTab {
+			want = "> investment-usd"
+		}
+		assertViewContains(t, app.View(), want)
+	}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+	)
+	app.Form = map[string]string{}
+	app = pressRunes(app, "j")
+	assertViewContains(t, app.View(), "> investment-usd")
+	app = pressRunes(app, "k")
+	assertViewContains(t, app.View(), "> investment-hkd")
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+	)
+	app.Form = map[string]string{}
+	app = pressRunes(app, "usd")
+	view = app.View()
+	assertViewContains(t, view, "> filter : usd", "> investment-usd")
+	if strings.Contains(view, "investment-hkd") {
+		t.Fatalf("name filter should hide non-matching child:\n%s", view)
+	}
+	app = press(app, tea.KeyBackspace)
+	assertViewContains(t, app.View(), "> filter : us", "> investment-usd")
+	app = pressRunes(app, "zz")
+	view = app.View()
+	assertViewContains(t, view, "> filter : uszz", "  (no results)")
+	if strings.Contains(view, "> investment") {
+		t.Fatalf("no-match filter should not leave a stale selected child:\n%s", view)
+	}
+
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
+	)
+	app.Form = map[string]string{}
+	app = pressRunes(app, "dollars")
+	view = app.View()
+	assertViewContains(t, view, "> filter : dollars", "> investment-usd")
+	if strings.Contains(view, "investment-hkd") {
+		t.Fatalf("notes filter should hide non-matching child:\n%s", view)
+	}
+	app = pressRunes(app, "hl")
+	if app.Path != "/accounts/investment/children/list/" || app.Form["filter"] != "dollarshl" {
+		t.Fatalf("h/l should type into child list filter, path=%s filter=%q", app.Path, app.Form["filter"])
+	}
+
+	app.Form = map[string]string{}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 1},
+	)
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/accounts/investment-usd/" {
+		t.Fatalf("enter should open selected child detail, got %s", app.Path)
+	}
+
+	app.Form = map[string]string{}
+	app = appWithNav(app,
+		navFrame{Path: "/", Menu: 0},
+		navFrame{Path: "/accounts/investment/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 1},
+	)
+	app.Form["filter"] = "usd"
+	app = press(app, tea.KeyCtrlE)
+	if app.Path != "/accounts/investment-usd/edit/" {
+		t.Fatalf("ctrl+e should edit selected child, got %s", app.Path)
+	}
+	app.Form["name"] = "investment-usd-main"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/accounts/investment/children/list/" {
+		t.Fatalf("child edit should return to child list, got %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "> filter : usd", "> investment-usd-main")
+}
+
 func TestAccountListReadmeShape(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()

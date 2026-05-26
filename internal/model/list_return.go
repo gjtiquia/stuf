@@ -18,6 +18,15 @@ func (a App) captureBalanceListReturn(name, item string) App {
 	return a
 }
 
+func (a App) captureChildAccountListReturn(parentName, item string) App {
+	a.ListReturn = listReturnState{
+		Path:   accountChildrenListPath(parentName),
+		Item:   item,
+		Filter: a.listFilter(),
+	}
+	return a
+}
+
 func (a App) returnToListOrigin(item string) (App, bool) {
 	origin := a.ListReturn
 	if origin.Path == "" {
@@ -31,6 +40,10 @@ func (a App) returnToListOrigin(item string) (App, bool) {
 	}
 	if _, ok := balanceListName(origin.Path); ok {
 		return a.selectBalanceInList(origin.Path, item), true
+	}
+	if _, ok := accountChildrenListName(origin.Path); ok {
+		a.Form[formKeyFilter] = origin.Filter
+		return a.selectChildAccountInList(origin.Path, item), true
 	}
 	return a.navReplace(origin.Path, 0), true
 }

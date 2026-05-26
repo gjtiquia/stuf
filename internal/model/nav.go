@@ -65,6 +65,17 @@ func (a App) menuCountFor(path string) int {
 			}
 			return len(rows)
 		}
+		if name, ok := accountChildrenListName(path); ok {
+			parent, err := a.Svc.Accounts.GetByName(a.ctx, name)
+			if err != nil {
+				return 0
+			}
+			rows, err := a.childAccountListRows(parent.ID)
+			if err != nil {
+				return 0
+			}
+			return len(rows)
+		}
 		if _, _, ok := balanceDetailName(path); ok {
 			return 2
 		}

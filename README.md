@@ -1058,21 +1058,29 @@ as of       : 2026-05-21
 
 /accounts/investment/children/list/
 
+> filter : (type anything...)
+
   name             | balance                         | notes
 > investment-usd   | HKD 320,000.00 (USD 41,025.64)  |
   investment-hkd   | HKD 100,000.00                  |
 
 ---
-up/down : navigate
-enter   : confirm
-ctrl+n  : new
-ctrl+e  : edit
-esc     : back
-?       : help
+type          : filter
+h/l           : type in filter
+up/down/j/k   : navigate
+tab/shift-tab : navigate
+left/right    : back/open
+backspace     : edit filter
+enter         : confirm
+ctrl+n        : new
+ctrl+e        : edit
+esc           : back
+?             : help
 ```
 
 - child account lists show parent summary above the URL
 - child account lists show child accounts only
+- child account lists are filterable by name and notes
 - remaining is already shown in the parent summary and does not appear in the child table
 - ctrl+n from a child account list opens the child account create form
 

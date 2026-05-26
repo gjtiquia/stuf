@@ -6,7 +6,7 @@
     - wip
 
 - parent-child account
-    - bug fix: child list broken navigation
+    - bug fix: child list broken navigation (j/k should not be in filterable list! its a solved problem!)
 
 
 ---
