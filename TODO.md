@@ -3,13 +3,11 @@
 - design the help popup UI
 
 - accounts list
-    - should hv a per account dashboard view, when viewing the account
-    - should continue to show it as we are in balance view
-    - rationale is that, we can immediately see the affect of entering balances, even without the report feature yet, making it already useful
+    - wip
 
 - parent-child account
-    - use case 1: hsbc-one have multi currency child accounts
-    - use case 2: off budget investment account, is a total of all multi currency stock portfolio, and each one can have a balance snapshot
+    - bug fix: child list broken navigation
+
 
 ---
 
