@@ -101,6 +101,9 @@ dashboard net change
 - then should add snapshots that are significant, like, balance on receive income, balance on paying rent (big expense), big transfers
 - daily balance snapshots would be great too, cuz more info = more insight, but following the app philosophy, its optional
 - but even just those key snapshots basically works, because the app is designed around useful anchors instead of perfect bookkeeping
+- if an account has a first known balance, missing history before that should be treated as flat from that first known balance, not as zero
+- same idea after the latest known balance: carry it forward until another snapshot says otherwise
+- only accounts with no balance snapshots at all should behave like zero
 - this keeps the dashboard aligned with the app promise: balance snapshots anchor the truth, imperfect details are okay, and the app stays guilt-free
 
 lazy reconciliation
@@ -3210,6 +3213,8 @@ monthly report boundary rules
 - each boundary resolves to the balance snapshot nearest to that boundary date
 - a snapshot after the boundary can be used if it is nearer than any snapshot before the boundary
 - if two snapshots are equally near, prefer the earlier snapshot
+- if the boundary is before the first snapshot, use the first snapshot as a flat carried value
+- if the boundary is after the latest snapshot, use the latest snapshot as a flat carried value
 - if an account has no balances at all, boundary value is 0
 - monthly growth = resolved end boundary value - resolved start boundary value
 - this avoids gaps: April end and May start both use the same resolved value for the May 1 boundary

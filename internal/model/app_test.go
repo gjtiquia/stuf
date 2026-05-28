@@ -78,7 +78,7 @@ func TestDashboardRendersNetChangeFromBalanceSnapshots(t *testing.T) {
 		"on-budget net change to today",
 		"from may start : HKD   30.00",
 		"from may high  : HKD ( 20.00)",
-		"from apr high  : HKD  130.00",
+		"from apr high  : HKD   30.00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dashboard net change missing %q:\n%s", want, view)

@@ -152,12 +152,15 @@ func (s DashboardService) effectiveAccountHistories(ctx context.Context, a repo.
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(history.Balances) > 0 {
-		return []dashboardAccountHistory{history}, warnings, nil
-	}
 	children, err := s.Accounts.ListChildren(ctx, a.ID, false)
 	if err != nil {
 		return nil, nil, err
+	}
+	if len(children) == 0 {
+		if len(history.Balances) > 0 {
+			return []dashboardAccountHistory{history}, warnings, nil
+		}
+		return nil, warnings, nil
 	}
 	var histories []dashboardAccountHistory
 	warned := map[string]bool{}
@@ -181,7 +184,20 @@ func (s DashboardService) effectiveAccountHistories(ctx context.Context, a repo.
 			}
 		}
 	}
+	if len(history.Balances) > 0 {
+		histories = append(histories, remainingAccountHistory(history, histories, money.Money{Scale: target.Scale}))
+	}
 	return histories, warnings, nil
+}
+
+func remainingAccountHistory(parent dashboardAccountHistory, children []dashboardAccountHistory, zero money.Money) dashboardAccountHistory {
+	remaining := dashboardAccountHistory{}
+	for _, balance := range parent.Balances {
+		childTotal := totalNearestValue(children, balance.Date, zero)
+		amount, _ := balance.Amount.Sub(childTotal)
+		remaining.Balances = append(remaining.Balances, dashboardBalance{Date: balance.Date, Amount: amount})
+	}
+	return remaining
 }
 
 func dashboardFromHistories(today time.Time, zero money.Money, histories []dashboardAccountHistory) Dashboard {
@@ -224,7 +240,7 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero money.Money) money.Money {
 	total := zero
 	for _, history := range histories {
-		value, ok := latestAccountValue(history, today)
+		value, ok := accountValueAt(history, today)
 		if ok {
 			total, _ = total.Add(value)
 		}
@@ -235,7 +251,7 @@ func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero
 func totalNearestValue(histories []dashboardAccountHistory, target time.Time, zero money.Money) money.Money {
 	total := zero
 	for _, history := range histories {
-		value, ok := nearestAccountValue(history, target)
+		value, ok := accountValueAt(history, target)
 		if ok {
 			total, _ = total.Add(value)
 		}
@@ -278,23 +294,25 @@ func accountMonthHighLow(history dashboardAccountHistory, month, today time.Time
 		ok = true
 	}
 	if !ok {
-		return money.Money{}, money.Money{}, false
+		carried, carriedOK := accountValueAt(history, monthBoundary(month))
+		if !carriedOK {
+			return money.Money{}, money.Money{}, false
+		}
+		return carried, carried, true
 	}
 	return high, low, true
 }
 
-func latestAccountValue(history dashboardAccountHistory, today time.Time) (money.Money, bool) {
-	for i := len(history.Balances) - 1; i >= 0; i-- {
-		if !history.Balances[i].Date.After(today) {
-			return history.Balances[i].Amount, true
-		}
-	}
-	return money.Money{}, false
-}
-
-func nearestAccountValue(history dashboardAccountHistory, target time.Time) (money.Money, bool) {
+func accountValueAt(history dashboardAccountHistory, target time.Time) (money.Money, bool) {
 	if len(history.Balances) == 0 {
 		return money.Money{}, false
+	}
+	if !target.After(history.Balances[0].Date) {
+		return history.Balances[0].Amount, true
+	}
+	last := history.Balances[len(history.Balances)-1]
+	if !target.Before(last.Date) {
+		return last.Amount, true
 	}
 	best := history.Balances[0]
 	bestDist := absDuration(best.Date.Sub(target))

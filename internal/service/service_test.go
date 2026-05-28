@@ -424,6 +424,353 @@ func TestDashboardAccountSummaryUsesNativeAccountCurrency(t *testing.T) {
 	assertMoneyAmount(t, "account month high", summary.NetChangeFromMonthHigh, 0)
 }
 
+func TestDashboardSingleSnapshotCarriesFlatBeforeFirstBalance(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	acct, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, acct.ID, "2026-05-25", "500.00", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 50000)
+	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, 0)
+	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, 0)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, 0)
+	assertMoneyAmount(t, "mar drop", summary.RecentMonths[1].Drop, 0)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 0)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 0)
+}
+
+func TestDashboardAccountSummaryParentUsesChildrenPlusRemaining(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-04-10", "1000.00"},
+		{parent.ID, "2026-05-25", "900.00"},
+		{child.ID, "2026-04-05", "400.00"},
+		{child.ID, "2026-04-20", "300.00"},
+		{child.ID, "2026-05-10", "350.00"},
+		{child.ID, "2026-05-25", "600.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 90000)
+	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, -5000)
+	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, -10000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -10000)
+}
+
+func TestDashboardAccountSummaryParentNewChildrenDoNotCreateFakeMonthStartDrop(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := accounts.CreateChild(ctx, parent.ID, "checking-savings", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-05-09", "7600.00"},
+		{parent.ID, "2026-05-25", "7300.00"},
+		{first.ID, "2026-05-25", "5000.00"},
+		{second.ID, "2026-05-25", "2000.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 730000)
+	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, -30000)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, -30000)
+}
+
+func TestDashboardAccountSummarySparseParentKeepsChildHistory(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-05-25", "1000.00"},
+		{child.ID, "2026-03-05", "300.00"},
+		{child.ID, "2026-03-20", "250.00"},
+		{child.ID, "2026-04-05", "400.00"},
+		{child.ID, "2026-04-20", "350.00"},
+		{child.ID, "2026-05-25", "600.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 100000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -5000)
+	assertMoneyAmount(t, "mar drop", summary.RecentMonths[1].Drop, -5000)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 10000)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 10000)
+}
+
+func TestDashboardAccountSummaryNewChildCarriesFlatWhileExistingChildKeepsHistory(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newChild, _, err := accounts.CreateChild(ctx, parent.ID, "checking-savings", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-05-09", "1000.00"},
+		{parent.ID, "2026-05-25", "900.00"},
+		{existing.ID, "2026-04-05", "400.00"},
+		{existing.ID, "2026-04-20", "350.00"},
+		{existing.ID, "2026-05-25", "500.00"},
+		{newChild.ID, "2026-05-25", "200.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 90000)
+	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, 5000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -5000)
+}
+
+func TestDashboardAccountSummaryParentWithoutOwnBalanceUsesChildrenOnly(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := accounts.CreateChild(ctx, parent.ID, "checking-savings", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{first.ID, "2026-04-05", "100.00"},
+		{first.ID, "2026-04-20", "80.00"},
+		{first.ID, "2026-05-25", "120.00"},
+		{second.ID, "2026-04-10", "50.00"},
+		{second.ID, "2026-04-25", "30.00"},
+		{second.ID, "2026-05-25", "40.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 16000)
+	assertMoneyAmount(t, "from previous month high", summary.NetChangeFromPreviousMonthHigh, 1000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -4000)
+}
+
+func TestDashboardAccountSummaryIncludesChangingRemainingHistory(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "checking-card", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-03-05", "800.00"},
+		{parent.ID, "2026-03-20", "700.00"},
+		{parent.ID, "2026-04-05", "1000.00"},
+		{parent.ID, "2026-04-20", "900.00"},
+		{parent.ID, "2026-05-05", "1200.00"},
+		{parent.ID, "2026-05-25", "1000.00"},
+		{child.ID, "2026-03-05", "300.00"},
+		{child.ID, "2026-03-20", "300.00"},
+		{child.ID, "2026-04-05", "400.00"},
+		{child.ID, "2026-04-20", "500.00"},
+		{child.ID, "2026-05-05", "600.00"},
+		{child.ID, "2026-05-25", "700.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 100000)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, -30000)
+	assertMoneyAmount(t, "apr drop", summary.RecentMonths[0].Drop, -30000)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 30000)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 10000)
+}
+
+func TestDashboardAccountSummaryNestedChildrenFutureAndHiddenRollup(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	parent, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, _, err := accounts.CreateChild(ctx, parent.ID, "checking-group", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	grandchild, _, err := accounts.CreateChild(ctx, group.ID, "checking-grandchild", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, _, err := accounts.CreateChild(ctx, parent.ID, "checking-leaf", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden, _, err := accounts.CreateChild(ctx, parent.ID, "checking-hidden", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.SetHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-05-25", "1000.00"},
+		{parent.ID, "2026-06-01", "5000.00"},
+		{grandchild.ID, "2026-05-25", "400.00"},
+		{grandchild.ID, "2026-06-01", "999.00"},
+		{leaf.ID, "2026-05-24", "300.00"},
+		{hidden.ID, "2026-05-25", "900.00"},
+	} {
+		if _, _, err := balances.Add(ctx, row.accountID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.AccountSummary(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 100000)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, 0)
+}
+
+func TestDashboardFutureOnlyHistoryDoesNotCarryIntoToday(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	acct, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, acct.ID, "2026-06-01", "500.00", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertMoneyAmount(t, "total", summary.Total, 0)
+	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, 0)
+	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, 0)
+}
+
 func TestDashboardSingleAccountSameDateSnapshotIsNotFutureInLocalTimezone(t *testing.T) {
 	ctx := context.Background()
 	_, accounts, balances, dashboard, _ := serviceStack(t)
@@ -530,8 +877,8 @@ func TestDashboardNetChangeUsesOnBudgetSnapshotTotals(t *testing.T) {
 	if summary.Trend.FromPeriod != "2026-03" || summary.Trend.ToPeriod != "2026-04" {
 		t.Fatalf("trend periods = %+v", summary.Trend)
 	}
-	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 2500)
-	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1500)
+	assertMoneyAmount(t, "high trend", summary.Trend.HighToHigh, 2000)
+	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1000)
 }
 
 func TestDashboardTotalSumsLatestPerAccountWithDifferentSnapshotDates(t *testing.T) {
@@ -679,7 +1026,7 @@ func TestDashboardHighLowMetricsUsePerAccountValuesThenSum(t *testing.T) {
 	assertMoneyAmount(t, "low trend", summary.Trend.LowToLow, 1000)
 }
 
-func TestDashboardMissingHistoryUsesZeroValues(t *testing.T) {
+func TestDashboardNoBalanceHistoryUsesZeroValues(t *testing.T) {
 	ctx := context.Background()
 	_, _, _, dashboard, _ := serviceStack(t)
 	summary, err := dashboard.Summary(ctx)
