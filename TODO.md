@@ -6,6 +6,7 @@
 
 - rename to steph
 - design the help popup UI
+- tags should allow "/" in it, for some sort of hierarchy / category of tags, for future query
 
 ---
 
