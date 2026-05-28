@@ -35,6 +35,8 @@ mar to apr      : HKD
 feb to mar      : HKD
 ```
 
+- reports should include these trends but for longer duration too, for a more holistic view, probably in lists form
+
 ---
 
 ## bug fix TODOs
