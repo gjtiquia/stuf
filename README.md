@@ -44,6 +44,57 @@ answers that `stuf` should be able to answer:
 - what is my current strategy / action plan for my finances?
 - how much money did i bleed for the past few months? can my income offset it? what about... future yearly / tax / big expenses into account?
 
+questions behind the numbers
+
+balance truth questions
+- did i end the month with more or less money?
+- how much did my on-budget money actually change?
+- are my assets growing over time, even if this month felt expensive?
+- is my day-to-day money stable, or slowly draining?
+- is my current drop normal compared to previous months?
+
+income / expense questions
+- how much money came in this month?
+- if my balances changed by x and income was y, how much must have gone out?
+- how much did i really bleed this month?
+- is my income enough to cover my actual burn?
+- am i spending more than i earn, or just feeling broke because of timing?
+- how much of the inferred expense have i explained with transactions?
+- what expenses are still unexplained?
+
+liquidity stress questions
+- how far did my money fall from its monthly high?
+- what was the worst balance dip i had to survive?
+- did this month require more buffer than usual?
+- was this month expensive, or did income just arrive at an awkward time?
+- what was the bigger load: total expenses, or the worst intra-month drawdown?
+- how much money did i need available to not feel squeezed?
+
+trend questions
+- are my monthly highs going up or down?
+- is my peak capacity growing?
+- are my monthly lows going up or down?
+- is my safety floor improving?
+- even if i spend a lot each month, am i recovering to higher highs?
+- are my bad moments getting better or worse?
+- is the normal low point of my finances becoming safer?
+
+planning questions
+- based on my recent burn, how much buffer do i need?
+- based on my recent liquidity stress, how much should stay on-budget?
+- how much can i move to investments without making day-to-day money unstable?
+- how much can i save per month after accounting for real expenses?
+- can i afford a yearly / tax / travel expense without breaking my safety floor?
+- what monthly allocation would make future big expenses boring instead of scary?
+
+metric meanings
+- net growth / change = did i end with more or less money?
+- income = how much came in?
+- derived expenses = how much must have gone out?
+- high-to-low = how far did balances fall inside the month?
+- high-to-high = are my best moments getting better?
+- low-to-low = are my worst moments getting safer?
+
 things that `stuf` should be able to support
 - accounts (on-budget and off-budget)
 - multi-currency
@@ -472,13 +523,21 @@ v1 edge rules before schema
 - invalid config stops app startup with a clear error
 - config recovery path is to fix or delete the config file, then relaunch
 
+dashboard questions
+- the dashboard is the quick pulse check
+- how am i doing so far?
+- is this drop normal?
+- how bad was the drawdown?
+- are highs and lows trending safer?
+- for now, high-to-low is balance rhythm context, not exact expenses
+- later, once income / transactions exist, inferred expenses should sit near high-to-low because one shows what went out and the other shows how far balances fell
+
 ```
 # stuf
 
 total           : HKD       0.00
 budgeted        : HKD       0.00
-
-period          : 2026-03
+as of           : 2026-03-25
 
 on-budget net change to today
 from mar start  : HKD  (2,100.00)
@@ -486,12 +545,19 @@ from mar high   : HKD  (8,000.00)
 from feb high   : HKD  (4,500.00)
 
 on-budget recent months
+mar high to low : HKD (17,500.00)
 feb high to low : HKD (19,000.00)
 jan high to low : HKD (22,000.00)
 
-on-budget jan to feb trends
-high to high    : HKD   5,000.00
-low to low      : HKD   8,000.00
+on-budget high to high trends
+feb to mar      : HKD   4,000.00
+jan to feb      : HKD   5,000.00
+dec to jan      : HKD   3,000.00
+
+on-budget low to low trends
+feb to mar      : HKD   6,000.00
+jan to feb      : HKD   8,000.00
+dec to jan      : HKD   2,000.00
 
 you owe ppl     : HKD       0.00
 ppl owe you     : HKD       0.00
@@ -2884,14 +2950,14 @@ deferred transactions
 
 - use reports, not reviews
 - use net growth, not net income
-- dashboard shows growth group with on-budget and total
+- dashboard shows net change / balance rhythm for on-budget money
 - reports show growth group with on-budget, off-budget, and total
 - reports are calendar-period based where applicable
 - reports are the bird's eye view of the app
 - for now, reports are derived from accounts, balances, and transactions only
 - as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
 - expect report screens to evolve as those data flows become clearer
-- dashboard/report growth uses shared as-of boundary balance rules
+- dashboard net change and report growth use shared as-of boundary balance rules
 - values derived from accounts and balances should be real; only unimplemented domains render as placeholders
 - reports are read-only for v1
 - reports consume input data but do not mutate it
@@ -2906,6 +2972,18 @@ deferred transactions
 - before income is entered, income equals growth and is marked `(assumed)`
 - before income is entered, expenses are 0
 - after income is entered, expenses = income - growth and can be marked `(derived)`
+
+report questions
+- growth answers: did the month end better or worse?
+- income answers: how much came in?
+- derived expenses answer: how much must have gone out?
+- high-to-low answers: how far did balances fall inside the month?
+- high-to-high answers: is peak capacity improving?
+- low-to-low answers: is the safety floor improving?
+- explained / unexplained expenses answer: what do i already understand, and what still needs explanation?
+- planning answers: what should i change next month?
+- high-to-low is not the same as expenses; it is balance rhythm context
+- later, reports can show high-to-low beside derived expenses because they explain different kinds of monthly load
 
 effective transaction rows
 - input screens show original transactions
@@ -3091,6 +3169,11 @@ expenses
 derived     : HKD 14,800.00
 explained   : HKD  8,000.00
 unexplained : HKD  6,800.00
+
+balance rhythm
+high to low : HKD (28,000.00)
+high trend  : HKD   3,000.00
+low trend   : HKD   6,000.00
 
 /reports/monthly/2026-05/expenses/
 
