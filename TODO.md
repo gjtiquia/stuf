@@ -55,8 +55,11 @@ feb to mar      : HKD
     - especially after wedding and trips, going back and forth, hectic lifestyle
 
 - onboarding
-    - first input first 3 months, start and end -> highs and lows -> notable changes
+    - first input first 3 months (or months from beginning of the year), start and end -> highs and lows -> notable changes
     - can backfill later anytime, can be as simple as beginning of each month
+    - do prioritize having the parent account finish before the child
+        - as the parent is the anchor, tho can still be inferrred from child
+        - however, it is probably more tedious to do a pass over all children, than a pass over the parent (if available) which includes all differences from child
     - then check out dashboard, reports
 
 - usecase:
