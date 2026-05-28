@@ -42,6 +42,7 @@ answers that `stuf` should be able to answer:
 - net growth or loss last month / last few months / last year? why?
 - how much money do i need to allocate monthly for x? (yearly expense, saving goals, investments, emergency fund)
 - what is my current strategy / action plan for my finances?
+- how much money did i bleed for the past few months? can my income offset it? what about... future yearly / tax / big expenses into account?
 
 things that `stuf` should be able to support
 - accounts (on-budget and off-budget)
@@ -104,6 +105,8 @@ dashboard net change
 - if an account has a first known balance, missing history before that should be treated as flat from that first known balance, not as zero
 - same idea after the latest known balance: carry it forward until another snapshot says otherwise
 - only accounts with no balance snapshots at all should behave like zero
+- boundary values should be as-of values: use the latest snapshot on or before the boundary, unless there is no earlier snapshot
+- month highs and lows should include the carried month-start value plus snapshots inside that month
 - this keeps the dashboard aligned with the app promise: balance snapshots anchor the truth, imperfect details are okay, and the app stays guilt-free
 
 lazy reconciliation
@@ -2888,7 +2891,7 @@ deferred transactions
 - for now, reports are derived from accounts, balances, and transactions only
 - as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
 - expect report screens to evolve as those data flows become clearer
-- dashboard/report growth uses shared nearest-boundary balance rules
+- dashboard/report growth uses shared as-of boundary balance rules
 - values derived from accounts and balances should be real; only unimplemented domains render as placeholders
 - reports are read-only for v1
 - reports consume input data but do not mutate it
@@ -3210,15 +3213,15 @@ monthly report boundary rules
 - a month start boundary is the first day of that month
 - a month end boundary is the first day of the next month
 - the end boundary of one month is the same boundary as the start boundary of the next month
-- each boundary resolves to the balance snapshot nearest to that boundary date
-- a snapshot after the boundary can be used if it is nearer than any snapshot before the boundary
-- if two snapshots are equally near, prefer the earlier snapshot
-- if the boundary is before the first snapshot, use the first snapshot as a flat carried value
+- each boundary resolves to the latest balance snapshot on or before that boundary date
+- if there is no snapshot on or before the boundary, use the first future snapshot as a flat carried value
 - if the boundary is after the latest snapshot, use the latest snapshot as a flat carried value
 - if an account has no balances at all, boundary value is 0
 - monthly growth = resolved end boundary value - resolved start boundary value
 - this avoids gaps: April end and May start both use the same resolved value for the May 1 boundary
-- example: if the nearest snapshot to 2026-05-01 is 2026-05-02, that snapshot is used for both April end and May start
+- example: if snapshots exist on 2026-04-01 and 2026-05-13, the 2026-05-01 boundary uses 2026-04-01
+- example: if the first-ever snapshot is 2026-05-02, the 2026-05-01 boundary uses 2026-05-02 as flat history
+- monthly high/low candidates are the carried month-start value plus snapshots inside that month
 
 deferred reports
 - opening original transactions from report expense detail

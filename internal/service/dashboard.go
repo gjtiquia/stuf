@@ -193,7 +193,7 @@ func (s DashboardService) effectiveAccountHistories(ctx context.Context, a repo.
 func remainingAccountHistory(parent dashboardAccountHistory, children []dashboardAccountHistory, zero money.Money) dashboardAccountHistory {
 	remaining := dashboardAccountHistory{}
 	for _, balance := range parent.Balances {
-		childTotal := totalNearestValue(children, balance.Date, zero)
+		childTotal := totalAsOfValue(children, balance.Date, zero)
 		amount, _ := balance.Amount.Sub(childTotal)
 		remaining.Balances = append(remaining.Balances, dashboardBalance{Date: balance.Date, Amount: amount})
 	}
@@ -221,7 +221,7 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 		},
 	}
 	out.Total = totalLatestValue(histories, today, zero)
-	monthStart := totalNearestValue(histories, monthBoundary(today), zero)
+	monthStart := totalAsOfValue(histories, monthBoundary(today), zero)
 	monthHigh, _ := totalMonthHighLow(histories, today, today, zero)
 	prevMonth := today.AddDate(0, -1, 0)
 	prevPrevMonth := today.AddDate(0, -2, 0)
@@ -240,7 +240,7 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero money.Money) money.Money {
 	total := zero
 	for _, history := range histories {
-		value, ok := accountValueAt(history, today)
+		value, ok := accountAsOfValue(history, today)
 		if ok {
 			total, _ = total.Add(value)
 		}
@@ -248,10 +248,10 @@ func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero
 	return total
 }
 
-func totalNearestValue(histories []dashboardAccountHistory, target time.Time, zero money.Money) money.Money {
+func totalAsOfValue(histories []dashboardAccountHistory, target time.Time, zero money.Money) money.Money {
 	total := zero
 	for _, history := range histories {
-		value, ok := accountValueAt(history, target)
+		value, ok := accountAsOfValue(history, target)
 		if ok {
 			total, _ = total.Add(value)
 		}
@@ -280,7 +280,12 @@ func totalMonthHighLow(histories []dashboardAccountHistory, month, today time.Ti
 
 func accountMonthHighLow(history dashboardAccountHistory, month, today time.Time) (money.Money, money.Money, bool) {
 	var high, low money.Money
-	ok := false
+	monthStart := monthBoundary(month)
+	carried, ok := accountAsOfValue(history, monthStart)
+	if ok {
+		high = carried
+		low = carried
+	}
 	for _, balance := range history.Balances {
 		if balance.Date.After(today) || !sameMonth(balance.Date, month) {
 			continue
@@ -294,36 +299,24 @@ func accountMonthHighLow(history dashboardAccountHistory, month, today time.Time
 		ok = true
 	}
 	if !ok {
-		carried, carriedOK := accountValueAt(history, monthBoundary(month))
-		if !carriedOK {
-			return money.Money{}, money.Money{}, false
-		}
-		return carried, carried, true
+		return money.Money{}, money.Money{}, false
 	}
 	return high, low, true
 }
 
-func accountValueAt(history dashboardAccountHistory, target time.Time) (money.Money, bool) {
+func accountAsOfValue(history dashboardAccountHistory, target time.Time) (money.Money, bool) {
 	if len(history.Balances) == 0 {
 		return money.Money{}, false
 	}
 	if !target.After(history.Balances[0].Date) {
 		return history.Balances[0].Amount, true
 	}
-	last := history.Balances[len(history.Balances)-1]
-	if !target.Before(last.Date) {
-		return last.Amount, true
-	}
-	best := history.Balances[0]
-	bestDist := absDuration(best.Date.Sub(target))
-	for _, balance := range history.Balances[1:] {
-		dist := absDuration(balance.Date.Sub(target))
-		if dist < bestDist || (dist == bestDist && balance.Date.Before(best.Date)) {
-			best = balance
-			bestDist = dist
+	for i := len(history.Balances) - 1; i >= 0; i-- {
+		if !history.Balances[i].Date.After(target) {
+			return history.Balances[i].Amount, true
 		}
 	}
-	return best.Amount, true
+	return money.Money{}, false
 }
 
 func sameMonth(date, month time.Time) bool {
@@ -342,11 +335,4 @@ func parseDashboardDate(date string, loc *time.Location) (time.Time, error) {
 func dateOnly(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
-}
-
-func absDuration(d time.Duration) time.Duration {
-	if d < 0 {
-		return -d
-	}
-	return d
 }
