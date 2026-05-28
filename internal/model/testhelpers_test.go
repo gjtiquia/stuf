@@ -40,6 +40,13 @@ func assertViewContains(t *testing.T, view string, wants ...string) {
 	}
 }
 
+func assertNotContains(t *testing.T, view string, unwanted string) {
+	t.Helper()
+	if strings.Contains(view, unwanted) {
+		t.Fatalf("view should not contain %q:\n%s", unwanted, view)
+	}
+}
+
 func setCurrencyRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
 	t.Helper()
 	if err := store.SetCurrencyRate(context.Background(), code, amount, scale); err != nil {

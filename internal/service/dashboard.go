@@ -12,6 +12,7 @@ import (
 
 type Dashboard struct {
 	AsOf                           string
+	AsOfStale                      bool
 	Period                         string
 	Total                          money.Money
 	NetChangeFromMonthStart        money.Money
@@ -20,6 +21,9 @@ type Dashboard struct {
 	RecentMonths                   []DashboardMonthDrop
 	HighTrends                     []DashboardMonthTrendPoint
 	LowTrends                      []DashboardMonthTrendPoint
+	NetChanges                     []DashboardMonthNetChange
+	HighToLows                     []DashboardMonthDrawdown
+	Lows                           []DashboardMonthLow
 	Warnings                       []string
 }
 
@@ -32,6 +36,21 @@ type DashboardMonthTrendPoint struct {
 	FromPeriod string
 	ToPeriod   string
 	Change     money.Money
+}
+
+type DashboardMonthNetChange struct {
+	Period string
+	Change money.Money
+}
+
+type DashboardMonthDrawdown struct {
+	Period string
+	Drop   money.Money
+}
+
+type DashboardMonthLow struct {
+	Period string
+	Low    money.Money
 }
 
 type dashboardAccountHistory struct {
@@ -202,15 +221,25 @@ func remainingAccountHistory(parent dashboardAccountHistory, children []dashboar
 
 func dashboardFromHistories(today time.Time, zero money.Money, histories []dashboardAccountHistory) Dashboard {
 	period := today.Format("2006-01")
+	asOfDate, hasAsOf := latestHistoryDate(histories)
+	calcDate := today
+	asOf := "none"
+	asOfStale := true
+	if hasAsOf {
+		calcDate = asOfDate
+		asOf = asOfDate.Format("2006-01-02")
+		asOfStale = asOfDate.Before(today)
+	}
 	out := Dashboard{
-		AsOf:                           today.Format("2006-01-02"),
+		AsOf:                           asOf,
+		AsOfStale:                      asOfStale,
 		Period:                         period,
 		Total:                          zero,
 		NetChangeFromMonthStart:        zero,
 		NetChangeFromMonthHigh:         zero,
 		NetChangeFromPreviousMonthHigh: zero,
 	}
-	out.Total = totalLatestValue(histories, today, zero)
+	out.Total = totalAsOfValue(histories, calcDate, zero)
 	monthStart := totalAsOfValue(histories, monthBoundary(today), zero)
 	months := []time.Time{
 		today,
@@ -221,15 +250,31 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 	highs := make([]money.Money, len(months))
 	lows := make([]money.Money, len(months))
 	for i, month := range months {
-		highs[i], lows[i] = totalMonthHighLow(histories, month, today, zero)
+		highs[i], lows[i] = totalMonthHighLow(histories, month, calcDate, zero)
 	}
 	out.NetChangeFromMonthStart, _ = out.Total.Sub(monthStart)
 	out.NetChangeFromMonthHigh, _ = out.Total.Sub(highs[0])
 	out.NetChangeFromPreviousMonthHigh, _ = out.Total.Sub(highs[1])
 	for i := 0; i < 3; i++ {
 		drop, _ := lows[i].Sub(highs[i])
+		startValue := totalAsOfValue(histories, monthBoundary(months[i]), zero)
+		endValue := totalAsOfValue(histories, dashboardMonthEnd(months[i], today, calcDate), zero)
+		change, _ := endValue.Sub(startValue)
+		period := months[i].Format("2006-01")
+		out.NetChanges = append(out.NetChanges, DashboardMonthNetChange{
+			Period: period,
+			Change: change,
+		})
+		out.HighToLows = append(out.HighToLows, DashboardMonthDrawdown{
+			Period: period,
+			Drop:   drop,
+		})
+		out.Lows = append(out.Lows, DashboardMonthLow{
+			Period: period,
+			Low:    lows[i],
+		})
 		out.RecentMonths = append(out.RecentMonths, DashboardMonthDrop{
-			Period: months[i].Format("2006-01"),
+			Period: period,
 			Drop:   drop,
 		})
 		highChange, _ := highs[i].Sub(highs[i+1])
@@ -248,17 +293,6 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 	return out
 }
 
-func totalLatestValue(histories []dashboardAccountHistory, today time.Time, zero money.Money) money.Money {
-	total := zero
-	for _, history := range histories {
-		value, ok := accountAsOfValue(history, today)
-		if ok {
-			total, _ = total.Add(value)
-		}
-	}
-	return total
-}
-
 func totalAsOfValue(histories []dashboardAccountHistory, target time.Time, zero money.Money) money.Money {
 	total := zero
 	for _, history := range histories {
@@ -268,6 +302,31 @@ func totalAsOfValue(histories []dashboardAccountHistory, target time.Time, zero 
 		}
 	}
 	return total
+}
+
+func latestHistoryDate(histories []dashboardAccountHistory) (time.Time, bool) {
+	var latest time.Time
+	ok := false
+	for _, history := range histories {
+		for _, balance := range history.Balances {
+			if !ok || balance.Date.After(latest) {
+				latest = balance.Date
+				ok = true
+			}
+		}
+	}
+	return latest, ok
+}
+
+func dashboardMonthEnd(month, today, asOf time.Time) time.Time {
+	start := monthBoundary(month)
+	if sameMonth(month, today) {
+		if asOf.Before(start) {
+			return start
+		}
+		return asOf
+	}
+	return start.AddDate(0, 1, -1)
 }
 
 func totalMonthHighLow(histories []dashboardAccountHistory, month, today time.Time, zero money.Money) (money.Money, money.Money) {

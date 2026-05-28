@@ -421,14 +421,24 @@ func TestDashboardAsOfBoundaryDoesNotUseNearerFutureSnapshot(t *testing.T) {
 
 func TestDashboardSummaryExposesAsOfDate(t *testing.T) {
 	ctx := context.Background()
-	_, _, _, dashboard, _ := serviceStack(t)
+	_, accounts, balances, dashboard, _ := serviceStack(t)
 	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	acct, _, err := accounts.Create(ctx, "checking", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, acct.ID, "2026-05-24", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
 	summary, err := dashboard.Summary(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if summary.AsOf != "2026-05-25" {
+	if summary.AsOf != "2026-05-24" {
 		t.Fatalf("as of = %s", summary.AsOf)
+	}
+	if !summary.AsOfStale {
+		t.Fatal("as of should be stale when latest snapshot is before today")
 	}
 }
 
@@ -1149,6 +1159,56 @@ func TestDashboardExpandedThreeMonthContextUsesDistinctMonthRows(t *testing.T) {
 	assertTrend(t, "low trend 2", summary.LowTrends[2], "2026-02", "2026-03", 0)
 }
 
+func TestDashboardCompactRowsUseAsOfAndMonthBoundaries(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC) }
+	acct, _, err := accounts.Create(ctx, "checking", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		date   string
+		amount string
+	}{
+		{"2026-03-01", "90.00"},
+		{"2026-03-10", "120.00"},
+		{"2026-03-31", "100.00"},
+		{"2026-04-01", "150.00"},
+		{"2026-04-15", "180.00"},
+		{"2026-04-30", "130.00"},
+		{"2026-05-01", "200.00"},
+		{"2026-05-12", "260.00"},
+		{"2026-05-20", "210.00"},
+		{"2026-05-26", "999.00"},
+	} {
+		if _, _, err := balances.Add(ctx, acct.ID, row.date, row.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.AsOf != "2026-05-20" {
+		t.Fatalf("as of = %s", summary.AsOf)
+	}
+	if !summary.AsOfStale {
+		t.Fatal("as of should be stale")
+	}
+	assertMoneyAmount(t, "total", summary.Total, 21000)
+	assertMonthValue(t, "may net change", summary.NetChanges[0].Period, summary.NetChanges[0].Change, "2026-05", 1000)
+	assertMonthValue(t, "apr net change", summary.NetChanges[1].Period, summary.NetChanges[1].Change, "2026-04", -2000)
+	assertMonthValue(t, "mar net change", summary.NetChanges[2].Period, summary.NetChanges[2].Change, "2026-03", 1000)
+	assertMonthValue(t, "may high to low", summary.HighToLows[0].Period, summary.HighToLows[0].Drop, "2026-05", -6000)
+	assertMonthValue(t, "apr high to low", summary.HighToLows[1].Period, summary.HighToLows[1].Drop, "2026-04", -5000)
+	assertMonthValue(t, "mar high to low", summary.HighToLows[2].Period, summary.HighToLows[2].Drop, "2026-03", -3000)
+	assertMonthValue(t, "may low", summary.Lows[0].Period, summary.Lows[0].Low, "2026-05", 20000)
+	assertMonthValue(t, "apr low", summary.Lows[1].Period, summary.Lows[1].Low, "2026-04", 13000)
+	assertMonthValue(t, "mar low", summary.Lows[2].Period, summary.Lows[2].Low, "2026-03", 9000)
+}
+
 func TestDashboardExpandedParentContextUsesChildrenPlusRemaining(t *testing.T) {
 	ctx := context.Background()
 	_, accounts, balances, dashboard, _ := serviceStack(t)
@@ -1196,6 +1256,12 @@ func TestDashboardNoBalanceHistoryUsesZeroValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if summary.AsOf != "none" {
+		t.Fatalf("as of = %s", summary.AsOf)
+	}
+	if !summary.AsOfStale {
+		t.Fatal("as of should be stale when no snapshots exist")
+	}
 	assertMoneyAmount(t, "total", summary.Total, 0)
 	assertMoneyAmount(t, "from month start", summary.NetChangeFromMonthStart, 0)
 	assertMoneyAmount(t, "from month high", summary.NetChangeFromMonthHigh, 0)
@@ -1205,6 +1271,9 @@ func TestDashboardNoBalanceHistoryUsesZeroValues(t *testing.T) {
 	assertMoneyAmount(t, "recent month 3", summary.RecentMonths[2].Drop, 0)
 	assertMoneyAmount(t, "high trend", summary.HighTrends[1].Change, 0)
 	assertMoneyAmount(t, "low trend", summary.LowTrends[1].Change, 0)
+	assertMonthValue(t, "net change 1", summary.NetChanges[0].Period, summary.NetChanges[0].Change, "2026-05", 0)
+	assertMonthValue(t, "high to low 1", summary.HighToLows[0].Period, summary.HighToLows[0].Drop, "2026-05", 0)
+	assertMonthValue(t, "low 1", summary.Lows[0].Period, summary.Lows[0].Low, "2026-05", 0)
 }
 
 func assertPeriod(t *testing.T, name, got, want string) {
@@ -1220,6 +1289,12 @@ func assertTrend(t *testing.T, name string, got DashboardMonthTrendPoint, from, 
 		t.Fatalf("%s periods = %+v, want %s -> %s", name, got, from, to)
 	}
 	assertMoneyAmount(t, name, got.Change, want)
+}
+
+func assertMonthValue(t *testing.T, name, gotPeriod string, got money.Money, wantPeriod string, want int64) {
+	t.Helper()
+	assertPeriod(t, name+" period", gotPeriod, wantPeriod)
+	assertMoneyAmount(t, name, got, want)
 }
 
 func assertMoneyAmount(t *testing.T, name string, got money.Money, want int64) {

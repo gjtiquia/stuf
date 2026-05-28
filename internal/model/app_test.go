@@ -46,9 +46,14 @@ func appWithNav(app App, frames ...navFrame) App {
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
-	for _, want := range []string{"# stuf", "total       : HKD 0.00", "as of       : 2026-05-24", "on-budget net change to today", "on-budget high to high trends", "on-budget low to low trends", "transactions (TODO)"} {
+	for _, want := range []string{"# stuf", "as-of       : none [!]", "total       : HKD 0.00", "on-budget net changes", "on-budget high to lows", "on-budget lows", "transactions (TODO)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
+		}
+	}
+	for _, old := range []string{"net change to today", "recent months", "high to high trends", "low to low trends"} {
+		if strings.Contains(view, old) {
+			t.Fatalf("view should not contain old dashboard label %q:\n%s", old, view)
 		}
 	}
 }
@@ -74,21 +79,14 @@ func TestDashboardRendersNetChangeFromBalanceSnapshots(t *testing.T) {
 	}
 	view := app.View()
 	for _, want := range []string{
+		"as-of       : 2026-05-24",
 		"total       : HKD  130.00",
-		"on-budget net change to today",
-		"from may start : HKD   30.00",
-		"from may high  : HKD ( 20.00)",
-		"from apr high  : HKD   30.00",
-		"on-budget recent months",
-		"may high to low : HKD ( 50.00)",
-		"apr high to low : HKD    0.00",
-		"mar high to low : HKD    0.00",
-		"on-budget high to high trends",
-		"apr to may      : HKD   50.00",
-		"mar to apr      : HKD    0.00",
-		"feb to mar      : HKD    0.00",
-		"on-budget low to low trends",
-		"apr to may      : HKD    0.00",
+		"on-budget net changes",
+		"2026-05     : HKD   30.00",
+		"on-budget high to lows",
+		"2026-05     : HKD ( 50.00)",
+		"on-budget lows",
+		"2026-05     : HKD  100.00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dashboard net change missing %q:\n%s", want, view)
@@ -111,19 +109,14 @@ func TestDashboardMoneyDecimalsAlignWithNegativeNetChange(t *testing.T) {
 	}
 	view := app.View()
 	lines := linesContainingAny(view, []string{
+		"as-of       :",
 		"total       : HKD",
 		"budgeted    : HKD",
-		"from may start : HKD",
-		"from may high  : HKD",
-		"from apr high  : HKD",
-		"high to high trends",
-		"low to low trends",
-		"you owe ppl : HKD",
-		"ppl owe you : HKD",
+		"2026-05     : HKD",
 	})
 	lines = moneyParts(lines)
 	assertSamePrimaryPunctuationIndex(t, lines, ".")
-	if !strings.Contains(view, "from may start : HKD (23,943.48)") {
+	if !strings.Contains(view, "2026-05     : HKD (23,943.48)") {
 		t.Fatalf("negative net change should use aligned accounting format:\n%s", view)
 	}
 }
@@ -135,7 +128,7 @@ func TestURLRendersImmediatelyAboveActions(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	app = m.(App)
 	view = app.View()
-	assertOrdered(t, view, "ppl owe you : HKD 0.00", "\n/accounts/list/\n\n")
+	assertOrdered(t, view, "on-budget lows", "\n/accounts/list/\n\n")
 }
 
 func TestAccountListRenderOrder(t *testing.T) {
@@ -144,15 +137,14 @@ func TestAccountListRenderOrder(t *testing.T) {
 	view := app.View()
 	assertRenderOrder(t, view,
 		"# stuf",
+		"as-of       : none [!]",
 		"total       : HKD 0.00",
-		"on-budget net change to today",
-		"from may start : HKD 0.00",
-		"on-budget recent months",
-		"may high to low : HKD 0.00",
-		"on-budget high to high trends",
-		"apr to may      : HKD 0.00",
-		"on-budget low to low trends",
-		"apr to may      : HKD 0.00",
+		"on-budget net changes",
+		"2026-05     : HKD 0.00",
+		"on-budget high to lows",
+		"2026-05     : HKD 0.00",
+		"on-budget lows",
+		"2026-05     : HKD 0.00",
 		"/accounts/list/",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
@@ -160,6 +152,8 @@ func TestAccountListRenderOrder(t *testing.T) {
 		"> filter : (type anything...)",
 		"---",
 	)
+	assertNotContains(t, view, "you owe ppl")
+	assertNotContains(t, view, "ppl owe you")
 }
 
 func TestBalanceListRenderOrder(t *testing.T) {
@@ -179,7 +173,7 @@ func TestBalanceListRenderOrder(t *testing.T) {
 		"account   : cash",
 		"balance   : HKD 50,000.00",
 		"as of     : 2026-05-21",
-		"net change to today",
+		"net changes",
 		"/accounts/cash/balances/list/",
 		"  date       | balance       | notes",
 		"> 2026-05-21 | HKD 50,000.00",
@@ -1076,13 +1070,12 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 		"balance   : HKD 0.00",
 		"children  : HKD 0.00",
 		"remaining : HKD 0.00",
-		"as of     : (no balance entered yet)",
+		"as of     : none [!]",
 		"on-budget : true",
 		"notes     : wallet",
-		"net change to today",
-		"recent months",
-		"high to high trends",
-		"low to low trends",
+		"net changes",
+		"high to lows",
+		"lows",
 		"> 1) balances",
 		"  2) child accounts",
 		"  3) transactions (TODO)",
@@ -1094,6 +1087,8 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 			t.Fatalf("visible account detail missing %q:\n%s", want, view)
 		}
 	}
+	assertNotContains(t, view, "you owe ppl")
+	assertNotContains(t, view, "ppl owe you")
 	if _, _, err := app.Svc.Accounts.SetHidden(ctx, acct.ID, true); err != nil {
 		t.Fatal(err)
 	}
@@ -1656,11 +1651,13 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/list/"
 	view := app.View()
-	for _, want := range []string{"account   : cash", "balance   : HKD 0.00", "net change to today", "/accounts/cash/balances/list/", "(no balances yet)"} {
+	for _, want := range []string{"account   : cash", "balance   : HKD 0.00", "as of     : none [!]", "net changes", "/accounts/cash/balances/list/", "(no balances yet)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("empty balances list missing %q:\n%s", want, view)
 		}
 	}
+	assertNotContains(t, view, "you owe ppl")
+	assertNotContains(t, view, "ppl owe you")
 	if _, _, err := app.Svc.Balances.Add(ctx, acct.ID, "2026-05-21", "50000.00", "initial balance"); err != nil {
 		t.Fatal(err)
 	}
@@ -1673,11 +1670,13 @@ func TestBalancesScreensReadmeShape(t *testing.T) {
 	}
 	app.Path = "/accounts/cash/balances/2026-05-21/"
 	view = app.View()
-	for _, want := range []string{"account   : cash", "net change to today", "date    : 2026-05-21", "balance : HKD 50,000.00", "> 1) edit balance", "2) delete balance"} {
+	for _, want := range []string{"account   : cash", "net changes", "date    : 2026-05-21", "balance : HKD 50,000.00", "> 1) edit balance", "2) delete balance"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("balance detail missing %q:\n%s", want, view)
 		}
 	}
+	assertNotContains(t, view, "you owe ppl")
+	assertNotContains(t, view, "ppl owe you")
 	app.Path = "/accounts/cash/balances/2026-05-21/edit/"
 	app.Form = map[string]string{"date": "2026-05-21", "balance": "50000.00", "notes": "initial balance"}
 	view = app.View()

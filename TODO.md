@@ -15,35 +15,6 @@
 - reports should add month start/end, so can calculate the cashflow for that month
 - reports should include these trends but for longer duration too, for a more holistic view, probably in lists form
 
-- dashboard
-
-```
-# stuf
-
-as-of       : 2026-05-28 [!]
-
-total       : HKD  20,288.28
-budgeted    : HKD       0.00
-
-on-budget net changes
-2026-05     : HKD (43,835.96)
-2026-04     : HKD (82,334.60)
-2026-03     : HKD (64,843.42)
-
-on-budget high to lows
-2026-05     : HKD (46,559.95)
-2026-04     : HKD (82,334.60)
-2026-03     : HKD (64,843.42)
-
-on-budget lows
-2026-05     : HKD   4,378.55
-2026-04     : HKD   4,378.55
-2026-03     : HKD   4,378.55
-
-you owe ppl : HKD       0.00
-ppl owe you : HKD       0.00
-```
-
 ---
 
 ## bug fix TODOs
@@ -51,6 +22,7 @@ ppl owe you : HKD       0.00
 - negative amount parenthesis should clamp over the numbers
 - edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
 - edit balance amount cannot move cursor to insert
+- edit negative balance amount, type "-" should not immediately add 0 at the end
 
 ---
 
@@ -64,6 +36,7 @@ ppl owe you : HKD       0.00
     - especially after wedding and trips, going back and forth, hectic lifestyle
 
 - onboarding
+    - start with accounts
     - first input first 3 months (or months from beginning of the year)
         - start and end
             - at the very least can know the cashflow status, monthly net growth/loss
@@ -75,6 +48,9 @@ ppl owe you : HKD       0.00
     - do prioritize having the parent account finish before the child
         - as the parent is the anchor, tho can still be inferrred from child
         - however, it is probably more tedious to do a pass over all children, than a pass over the parent (if available) which includes all differences from child
+    - credit cards are accounts too
+        - but can more or less ignore the trends... not that helpful
+        - purpose is more to make sure you know that you have money oweing, deducts from the total and available
     - then check out dashboard, reports from just the accounts
     - then input income via transactions
 
