@@ -18,7 +18,8 @@ type Dashboard struct {
 	NetChangeFromMonthHigh         money.Money
 	NetChangeFromPreviousMonthHigh money.Money
 	RecentMonths                   []DashboardMonthDrop
-	Trend                          DashboardMonthTrend
+	HighTrends                     []DashboardMonthTrendPoint
+	LowTrends                      []DashboardMonthTrendPoint
 	Warnings                       []string
 }
 
@@ -27,11 +28,10 @@ type DashboardMonthDrop struct {
 	Drop   money.Money
 }
 
-type DashboardMonthTrend struct {
+type DashboardMonthTrendPoint struct {
 	FromPeriod string
 	ToPeriod   string
-	HighToHigh money.Money
-	LowToLow   money.Money
+	Change     money.Money
 }
 
 type dashboardAccountHistory struct {
@@ -209,31 +209,42 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 		NetChangeFromMonthStart:        zero,
 		NetChangeFromMonthHigh:         zero,
 		NetChangeFromPreviousMonthHigh: zero,
-		RecentMonths: []DashboardMonthDrop{
-			{Period: today.AddDate(0, -1, 0).Format("2006-01"), Drop: zero},
-			{Period: today.AddDate(0, -2, 0).Format("2006-01"), Drop: zero},
-		},
-		Trend: DashboardMonthTrend{
-			FromPeriod: today.AddDate(0, -2, 0).Format("2006-01"),
-			ToPeriod:   today.AddDate(0, -1, 0).Format("2006-01"),
-			HighToHigh: zero,
-			LowToLow:   zero,
-		},
 	}
 	out.Total = totalLatestValue(histories, today, zero)
 	monthStart := totalAsOfValue(histories, monthBoundary(today), zero)
-	monthHigh, _ := totalMonthHighLow(histories, today, today, zero)
-	prevMonth := today.AddDate(0, -1, 0)
-	prevPrevMonth := today.AddDate(0, -2, 0)
-	prevHigh, prevLow := totalMonthHighLow(histories, prevMonth, today, zero)
-	prevPrevHigh, prevPrevLow := totalMonthHighLow(histories, prevPrevMonth, today, zero)
+	months := []time.Time{
+		today,
+		today.AddDate(0, -1, 0),
+		today.AddDate(0, -2, 0),
+		today.AddDate(0, -3, 0),
+	}
+	highs := make([]money.Money, len(months))
+	lows := make([]money.Money, len(months))
+	for i, month := range months {
+		highs[i], lows[i] = totalMonthHighLow(histories, month, today, zero)
+	}
 	out.NetChangeFromMonthStart, _ = out.Total.Sub(monthStart)
-	out.NetChangeFromMonthHigh, _ = out.Total.Sub(monthHigh)
-	out.NetChangeFromPreviousMonthHigh, _ = out.Total.Sub(prevHigh)
-	out.RecentMonths[0].Drop, _ = prevLow.Sub(prevHigh)
-	out.RecentMonths[1].Drop, _ = prevPrevLow.Sub(prevPrevHigh)
-	out.Trend.HighToHigh, _ = prevHigh.Sub(prevPrevHigh)
-	out.Trend.LowToLow, _ = prevLow.Sub(prevPrevLow)
+	out.NetChangeFromMonthHigh, _ = out.Total.Sub(highs[0])
+	out.NetChangeFromPreviousMonthHigh, _ = out.Total.Sub(highs[1])
+	for i := 0; i < 3; i++ {
+		drop, _ := lows[i].Sub(highs[i])
+		out.RecentMonths = append(out.RecentMonths, DashboardMonthDrop{
+			Period: months[i].Format("2006-01"),
+			Drop:   drop,
+		})
+		highChange, _ := highs[i].Sub(highs[i+1])
+		lowChange, _ := lows[i].Sub(lows[i+1])
+		out.HighTrends = append(out.HighTrends, DashboardMonthTrendPoint{
+			FromPeriod: months[i+1].Format("2006-01"),
+			ToPeriod:   months[i].Format("2006-01"),
+			Change:     highChange,
+		})
+		out.LowTrends = append(out.LowTrends, DashboardMonthTrendPoint{
+			FromPeriod: months[i+1].Format("2006-01"),
+			ToPeriod:   months[i].Format("2006-01"),
+			Change:     lowChange,
+		})
+	}
 	return out
 }
 

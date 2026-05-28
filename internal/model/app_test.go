@@ -46,7 +46,7 @@ func appWithNav(app App, frames ...navFrame) App {
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
-	for _, want := range []string{"# stuf", "total       : HKD 0.00", "as of       : 2026-05-24", "on-budget net change to today", "on-budget mar to apr trends", "transactions (TODO)"} {
+	for _, want := range []string{"# stuf", "total       : HKD 0.00", "as of       : 2026-05-24", "on-budget net change to today", "on-budget high to high trends", "on-budget low to low trends", "transactions (TODO)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -79,6 +79,16 @@ func TestDashboardRendersNetChangeFromBalanceSnapshots(t *testing.T) {
 		"from may start : HKD   30.00",
 		"from may high  : HKD ( 20.00)",
 		"from apr high  : HKD   30.00",
+		"on-budget recent months",
+		"may high to low : HKD ( 50.00)",
+		"apr high to low : HKD    0.00",
+		"mar high to low : HKD    0.00",
+		"on-budget high to high trends",
+		"apr to may      : HKD   50.00",
+		"mar to apr      : HKD    0.00",
+		"feb to mar      : HKD    0.00",
+		"on-budget low to low trends",
+		"apr to may      : HKD    0.00",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("dashboard net change missing %q:\n%s", want, view)
@@ -106,7 +116,8 @@ func TestDashboardMoneyDecimalsAlignWithNegativeNetChange(t *testing.T) {
 		"from may start : HKD",
 		"from may high  : HKD",
 		"from apr high  : HKD",
-		"high to high    : HKD",
+		"high to high trends",
+		"low to low trends",
 		"you owe ppl : HKD",
 		"ppl owe you : HKD",
 	})
@@ -137,7 +148,11 @@ func TestAccountListRenderOrder(t *testing.T) {
 		"on-budget net change to today",
 		"from may start : HKD 0.00",
 		"on-budget recent months",
-		"on-budget mar to apr trends",
+		"may high to low : HKD 0.00",
+		"on-budget high to high trends",
+		"apr to may      : HKD 0.00",
+		"on-budget low to low trends",
+		"apr to may      : HKD 0.00",
 		"/accounts/list/",
 		"on-budget   : HKD 0.00",
 		"off-budget  : HKD 0.00",
@@ -1066,6 +1081,8 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 		"notes     : wallet",
 		"net change to today",
 		"recent months",
+		"high to high trends",
+		"low to low trends",
 		"> 1) balances",
 		"  2) child accounts",
 		"  3) transactions (TODO)",

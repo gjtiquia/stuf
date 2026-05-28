@@ -24,8 +24,13 @@ func (a App) dashboardContext() (string, error) {
 		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, cur),
 		component.MoneyCell(d.RecentMonths[0].Drop, cur),
 		component.MoneyCell(d.RecentMonths[1].Drop, cur),
-		component.MoneyCell(d.Trend.HighToHigh, cur),
-		component.MoneyCell(d.Trend.LowToLow, cur),
+		component.MoneyCell(d.RecentMonths[2].Drop, cur),
+		component.MoneyCell(d.HighTrends[0].Change, cur),
+		component.MoneyCell(d.HighTrends[1].Change, cur),
+		component.MoneyCell(d.HighTrends[2].Change, cur),
+		component.MoneyCell(d.LowTrends[0].Change, cur),
+		component.MoneyCell(d.LowTrends[1].Change, cur),
+		component.MoneyCell(d.LowTrends[2].Change, cur),
 		component.MoneyCell(money.Money{Scale: 2}, cur),
 		component.MoneyCell(money.Money{Scale: 2}, cur),
 	)
@@ -37,7 +42,7 @@ as of       : %s
 %s
 you owe ppl : %s
 ppl owe you : %s
-%s`, values[0], values[1], d.AsOf, dashboardSectionsWithValues(d, "on-budget ", values[2:9]), values[9], values[10], warnings)
+%s`, values[0], values[1], d.AsOf, dashboardSectionsWithValues(d, "on-budget ", values[2:14]), values[14], values[15], warnings)
 	return strings.TrimRight(body, "\n"), nil
 }
 
@@ -67,8 +72,13 @@ func (a App) accountDashboardContext(name string) (string, error) {
 		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, acct.Code),
 		component.MoneyCell(d.RecentMonths[0].Drop, acct.Code),
 		component.MoneyCell(d.RecentMonths[1].Drop, acct.Code),
-		component.MoneyCell(d.Trend.HighToHigh, acct.Code),
-		component.MoneyCell(d.Trend.LowToLow, acct.Code),
+		component.MoneyCell(d.RecentMonths[2].Drop, acct.Code),
+		component.MoneyCell(d.HighTrends[0].Change, acct.Code),
+		component.MoneyCell(d.HighTrends[1].Change, acct.Code),
+		component.MoneyCell(d.HighTrends[2].Change, acct.Code),
+		component.MoneyCell(d.LowTrends[0].Change, acct.Code),
+		component.MoneyCell(d.LowTrends[1].Change, acct.Code),
+		component.MoneyCell(d.LowTrends[2].Change, acct.Code),
 	)
 	lines := []string{
 		fmt.Sprintf("account   : %s", acct.Name),
@@ -81,7 +91,7 @@ func (a App) accountDashboardContext(name string) (string, error) {
 	if acct.Hidden {
 		lines = append(lines, "hidden    : true")
 	}
-	lines = append(lines, fmt.Sprintf("notes     : %s", acct.Notes), "", dashboardSectionsWithValues(d, "", values[3:10]))
+	lines = append(lines, fmt.Sprintf("notes     : %s", acct.Notes), "", dashboardSectionsWithValues(d, "", values[3:15]))
 	if warnings := dashboardWarnings(d.Warnings); warnings != "" {
 		lines = append(lines, warnings)
 	}
@@ -95,16 +105,31 @@ func dashboardSections(d service.Dashboard, cur, headingPrefix string) string {
 		component.MoneyCell(d.NetChangeFromPreviousMonthHigh, cur),
 		component.MoneyCell(d.RecentMonths[0].Drop, cur),
 		component.MoneyCell(d.RecentMonths[1].Drop, cur),
-		component.MoneyCell(d.Trend.HighToHigh, cur),
-		component.MoneyCell(d.Trend.LowToLow, cur),
+		component.MoneyCell(d.RecentMonths[2].Drop, cur),
+		component.MoneyCell(d.HighTrends[0].Change, cur),
+		component.MoneyCell(d.HighTrends[1].Change, cur),
+		component.MoneyCell(d.HighTrends[2].Change, cur),
+		component.MoneyCell(d.LowTrends[0].Change, cur),
+		component.MoneyCell(d.LowTrends[1].Change, cur),
+		component.MoneyCell(d.LowTrends[2].Change, cur),
 	)
 	return dashboardSectionsWithValues(d, headingPrefix, values)
 }
 
 func dashboardSectionsWithValues(d service.Dashboard, headingPrefix string, values []string) string {
 	currentLabel := monthLabel(d.Period)
-	prevLabel := monthLabel(d.RecentMonths[0].Period)
-	prevPrevLabel := monthLabel(d.RecentMonths[1].Period)
+	recentLabels := make([]string, len(d.RecentMonths))
+	for i, month := range d.RecentMonths {
+		recentLabels[i] = monthLabel(month.Period)
+	}
+	highTrendLabels := make([][2]string, len(d.HighTrends))
+	for i, trend := range d.HighTrends {
+		highTrendLabels[i] = [2]string{monthLabel(trend.FromPeriod), monthLabel(trend.ToPeriod)}
+	}
+	lowTrendLabels := make([][2]string, len(d.LowTrends))
+	for i, trend := range d.LowTrends {
+		lowTrendLabels[i] = [2]string{monthLabel(trend.FromPeriod), monthLabel(trend.ToPeriod)}
+	}
 	return fmt.Sprintf(`%snet change to today
 from %s start : %s
 from %s high  : %s
@@ -113,18 +138,33 @@ from %s high  : %s
 %srecent months
 %s high to low : %s
 %s high to low : %s
+%s high to low : %s
 
-%s%s to %s trends
-high to high    : %s
-low to low      : %s`,
+%shigh to high trends
+%s to %s      : %s
+%s to %s      : %s
+%s to %s      : %s
+
+%slow to low trends
+%s to %s      : %s
+%s to %s      : %s
+%s to %s      : %s`,
 		headingPrefix,
 		currentLabel, values[0],
 		currentLabel, values[1],
-		prevLabel, values[2],
+		recentLabels[1], values[2],
 		headingPrefix,
-		prevLabel, values[3],
-		prevPrevLabel, values[4],
-		headingPrefix, prevPrevLabel, prevLabel, values[5], values[6])
+		recentLabels[0], values[3],
+		recentLabels[1], values[4],
+		recentLabels[2], values[5],
+		headingPrefix,
+		highTrendLabels[0][0], highTrendLabels[0][1], values[6],
+		highTrendLabels[1][0], highTrendLabels[1][1], values[7],
+		highTrendLabels[2][0], highTrendLabels[2][1], values[8],
+		headingPrefix,
+		lowTrendLabels[0][0], lowTrendLabels[0][1], values[9],
+		lowTrendLabels[1][0], lowTrendLabels[1][1], values[10],
+		lowTrendLabels[2][0], lowTrendLabels[2][1], values[11])
 }
 
 func dashboardWarnings(warnings []string) string {
