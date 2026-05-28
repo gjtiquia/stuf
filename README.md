@@ -145,6 +145,11 @@ dashboard net change
 - longer month-to-month trends show whether assets are still growing despite the spending inside each month
 - the dashboard net change should focus on on-budget accounts by default
 - this makes it about on-budget balance rhythm, not the full asset picture
+- the dashboard should be compact enough to answer quick glance questions:
+  how fresh is my data? what is my current total? what changed recently? how bad were the drawdowns? where is my floor?
+- dashboard `as-of` means the latest relevant balance snapshot date, not today's date
+- show `[!]` beside dashboard `as-of` when that date is older than the app's current date
+- this makes stale balance truth visible before the dashboard shows any totals
 - healthy on-budget movement can mean growing or staying roughly flat
 - flat can be good if surplus is intentionally moved to investments / off-budget accounts
 - the dashboard mostly answers whether day-to-day money is stable, growing, or dropping within the usual range
@@ -528,39 +533,40 @@ dashboard questions
 - how am i doing so far?
 - is this drop normal?
 - how bad was the drawdown?
-- are highs and lows trending safer?
+- where is my floor?
 - for now, high-to-low is balance rhythm context, not exact expenses
 - later, once income / transactions exist, inferred expenses should sit near high-to-low because one shows what went out and the other shows how far balances fell
+- `net changes` means month start to month end for completed months, and month start to dashboard `as-of` for the current month
+- `high to lows` means each month's high-to-low drawdown
+- `lows` means each month's lowest known / carried on-budget balance floor
+- high-to-high is useful, but it is more of a report question about peak capacity
+- the dashboard shows lows directly instead of low-to-low trend because the floor is more useful at a glance
 
 ```
 # stuf
 
-total           : HKD       0.00
-budgeted        : HKD       0.00
-as of           : 2026-03-25
+as-of       : 2026-05-28 [!]
 
-on-budget net change to today
-from mar start  : HKD  (2,100.00)
-from mar high   : HKD  (8,000.00)
-from feb high   : HKD  (4,500.00)
+total       : HKD  20,288.28
+budgeted    : HKD       0.00
 
-on-budget recent months
-mar high to low : HKD (17,500.00)
-feb high to low : HKD (19,000.00)
-jan high to low : HKD (22,000.00)
+on-budget net changes
+2026-05     : HKD (43,835.96)
+2026-04     : HKD (82,334.60)
+2026-03     : HKD (64,843.42)
 
-on-budget high to high trends
-feb to mar      : HKD   4,000.00
-jan to feb      : HKD   5,000.00
-dec to jan      : HKD   3,000.00
+on-budget high to lows
+2026-05     : HKD (46,559.95)
+2026-04     : HKD (82,334.60)
+2026-03     : HKD (64,843.42)
 
-on-budget low to low trends
-feb to mar      : HKD   6,000.00
-jan to feb      : HKD   8,000.00
-dec to jan      : HKD   2,000.00
+on-budget lows
+2026-05     : HKD   4,378.55
+2026-04     : HKD   4,378.55
+2026-03     : HKD   4,378.55
 
-you owe ppl     : HKD       0.00
-ppl owe you     : HKD       0.00
+you owe ppl : HKD       0.00
+ppl owe you : HKD       0.00
 
 /
 
@@ -2983,6 +2989,7 @@ report questions
 - explained / unexplained expenses answer: what do i already understand, and what still needs explanation?
 - planning answers: what should i change next month?
 - high-to-low is not the same as expenses; it is balance rhythm context
+- high-to-high stays useful in reports even if the compact dashboard does not show it by default
 - later, reports can show high-to-low beside derived expenses because they explain different kinds of monthly load
 
 effective transaction rows
