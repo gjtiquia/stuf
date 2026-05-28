@@ -12,8 +12,37 @@
 
 ## enhancement TODOs
 
-- dashboard should add month start/end, so can calculate the cashflow for that month
+- reports should add month start/end, so can calculate the cashflow for that month
 - reports should include these trends but for longer duration too, for a more holistic view, probably in lists form
+
+- dashboard
+
+```
+# stuf
+
+as-of       : 2026-05-28 [!]
+
+total       : HKD  20,288.28
+budgeted    : HKD       0.00
+
+on-budget net changes
+2026-05     : HKD (43,835.96)
+2026-04     : HKD (82,334.60)
+2026-03     : HKD (64,843.42)
+
+on-budget high to lows
+2026-05     : HKD (46,559.95)
+2026-04     : HKD (82,334.60)
+2026-03     : HKD (64,843.42)
+
+on-budget lows
+2026-05     : HKD   4,378.55
+2026-04     : HKD   4,378.55
+2026-03     : HKD   4,378.55
+
+you owe ppl : HKD       0.00
+ppl owe you : HKD       0.00
+```
 
 ---
 
