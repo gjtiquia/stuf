@@ -10,6 +10,17 @@
 
 ---
 
+## feature TODOs
+
+- accounts should have tags
+    - husband accounts, wife accounts, shared accounts, credit cards, debit cards
+- then "global" filter
+    - sometimes i just want to see my own accounts performances
+    - sometimes i want to see just my wife's
+    - sometimes i want to see the shared account performance
+
+---
+
 ## enhancement TODOs
 
 - reports should add month start/end, so can calculate the cashflow for that month
