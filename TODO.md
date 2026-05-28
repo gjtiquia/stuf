@@ -9,10 +9,39 @@
 
 ---
 
+## enhancement TODOs
+
+- dashboard
+
+```
+net change to today
+from may start  : HKD 
+from may high   : HKD 
+from apr high   : HKD 
+
+recent months
+may high to low : HKD
+apr high to low : HKD
+mar high to low : HKD
+
+high to high trends
+apr to may      : HKD
+mar to apr      : HKD
+feb to mar      : HKD
+
+low to low trends
+apr to may      : HKD
+mar to apr      : HKD
+feb to mar      : HKD
+```
+
+---
+
 ## bug fix TODOs
 
 - negative amount parenthesis should clamp over the numbers
 - edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
+- edit balance amount cannot move cursor to insert
 
 ---
 
