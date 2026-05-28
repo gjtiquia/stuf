@@ -1,17 +1,22 @@
+# TODOs
+
+---
+
+## design TODOs
 
 - rename to steph
 - design the help popup UI
 
-- accounts list
-    - wip
+---
 
-- parent-child account
-    - bug fix: child list broken navigation (j/k should not be in filterable list! its a solved problem!)
+## bug fix TODOs
 
+- negative amount parenthesis should clamp over the numbers
+- edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
 
 ---
 
-docs
+## docs TODOs
 
 - personal story:
     - stopped tracking for a few days
