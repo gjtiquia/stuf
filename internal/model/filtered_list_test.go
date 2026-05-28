@@ -36,10 +36,42 @@ func TestFilterStringsUsesSanitizer(t *testing.T) {
 
 func TestFilteredListInputIgnoresNavigationKeys(t *testing.T) {
 	input := newFilteredListInput("cash", nil)
-	for _, key := range []string{"up", "down", "tab", "enter", "esc"} {
+	for _, key := range []string{"up", "down", "tab", "shift+tab", "left", "right", "enter", "esc"} {
 		updated, handled := input.handleKey(key)
 		if handled || updated.value() != "cash" {
 			t.Fatalf("key %q should not change filter, got %q handled=%t", key, updated.value(), handled)
 		}
+	}
+}
+
+func TestFilterableListKeyPolicyTypesJKHL(t *testing.T) {
+	filter := ""
+	menu := 3
+	for _, key := range []string{"j", "k", "h", "l"} {
+		result, handled := handleFilterableListKey(key, filter, menu, 5)
+		if !handled {
+			t.Fatalf("key %q should be filter text", key)
+		}
+		filter = result.filter
+		menu = result.menu
+	}
+	if filter != "jkhl" || menu != 0 {
+		t.Fatalf("filterable text policy = filter %q menu %d", filter, menu)
+	}
+}
+
+func TestFilterableListKeyPolicyIgnoresNavigationKeys(t *testing.T) {
+	for _, key := range []string{"up", "down", "tab", "shift+tab", "left", "right", "enter", "esc", "ctrl+n", "ctrl+e", "ctrl+d"} {
+		result, handled := handleFilterableListKey(key, "cash", 2, 4)
+		if handled || result.filter != "cash" || result.menu != 2 {
+			t.Fatalf("key %q should not be handled, got %#v handled=%t", key, result, handled)
+		}
+	}
+}
+
+func TestFilterableListKeyPolicyBackspaceClampsMenu(t *testing.T) {
+	result, handled := handleFilterableListKey("backspace", "cash", 4, 2)
+	if !handled || result.filter != "cas" || result.menu != 1 {
+		t.Fatalf("backspace policy = %#v handled=%t", result, handled)
 	}
 }

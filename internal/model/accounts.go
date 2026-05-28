@@ -220,10 +220,9 @@ func (a App) accountListKey(s string) App {
 		a = a.navSetMenu(idx)
 		return a.navPush(accountPath(rows[idx].Name), 0)
 	default:
-		input := newFilteredListInput(a.listFilter(), nil)
-		if updated, handled := input.handleKey(s); handled {
-			a.setListFilter(updated.value())
-			a = a.navSetMenu(0)
+		if result, handled := handleFilterableListKey(s, a.listFilter(), a.Menu, a.accountListRowCount()); handled {
+			a.setListFilter(result.filter)
+			a = a.navSetMenu(result.menu)
 		}
 		return a
 	}
@@ -378,25 +377,18 @@ func (a App) accountChildrenListKey(s, parentName string) App {
 		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
 		idx := a.accountSelectableIndex(rows, a.Menu)
 		return a.navPush(accountPath(rows[idx].Name), 0)
-	case "up", "k", "shift+tab":
+	case "up", "shift+tab":
 		if len(rows) > 0 {
 			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, -1))
 		}
-	case "down", "j", "tab":
+	case "down", "tab":
 		if len(rows) > 0 {
 			a = a.navSetMenu(nextAccountSelectableIndex(rows, a.Menu, 1))
 		}
-	case "backspace":
-		input := newFilteredListInput(a.listFilter(), nil)
-		updated, _ := input.handleKey("backspace")
-		a.setListFilter(updated.value())
-		a = a.navSetMenu(clampListCursor(a.Menu, a.childAccountListRowCount(parent.ID)))
-		return a
 	default:
-		input := newFilteredListInput(a.listFilter(), nil)
-		if updated, handled := input.handleKey(s); handled {
-			a.setListFilter(updated.value())
-			a = a.navSetMenu(0)
+		if result, handled := handleFilterableListKey(s, a.listFilter(), a.Menu, a.childAccountListRowCount(parent.ID)); handled {
+			a.setListFilter(result.filter)
+			a = a.navSetMenu(result.menu)
 		}
 	}
 	return a

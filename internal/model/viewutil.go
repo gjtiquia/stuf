@@ -67,6 +67,9 @@ func normalizeFieldValue(field, value string) string {
 }
 
 func isTextInputKey(input string) bool {
+	if strings.HasPrefix(input, "ctrl+") {
+		return false
+	}
 	switch input {
 	case "", "left", "right", "up", "down", "enter", "esc", "tab", "shift+tab", "backspace", "ctrl+c", "ctrl+z", "?":
 		return false

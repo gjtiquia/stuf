@@ -452,6 +452,9 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	if _, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-usd", "USD", "dollars"); err != nil {
 		t.Fatal(err)
 	}
+	if _, _, err := app.Svc.Accounts.CreateChild(ctx, parent.ID, "investment-jk", "HKD", "vim letters"); err != nil {
+		t.Fatal(err)
+	}
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/investment/", Menu: 1},
@@ -470,11 +473,10 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 			navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
 		)
 		app = press(app, key)
-		want := "> investment-usd"
-		if key == tea.KeyUp || key == tea.KeyShiftTab {
-			want = "> investment-usd"
+		view = app.View()
+		if !strings.Contains(view, "> investment-jk") && !strings.Contains(view, "> investment-usd") {
+			t.Fatalf("key %v should move away from the first child:\n%s", key, view)
 		}
-		assertViewContains(t, app.View(), want)
 	}
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
@@ -483,9 +485,17 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	)
 	app.Form = map[string]string{}
 	app = pressRunes(app, "j")
-	assertViewContains(t, app.View(), "> investment-usd")
+	view = app.View()
+	assertViewContains(t, view, "> filter : j", "> investment-jk")
+	if strings.Contains(view, "> investment-usd") {
+		t.Fatalf("j should type into filter, not navigate to usd:\n%s", view)
+	}
 	app = pressRunes(app, "k")
-	assertViewContains(t, app.View(), "> investment-hkd")
+	view = app.View()
+	assertViewContains(t, view, "> filter : jk", "> investment-jk")
+	if strings.Contains(view, "> investment-hkd") || strings.Contains(view, "> investment-usd") {
+		t.Fatalf("k should continue filtering, not navigate:\n%s", view)
+	}
 
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
@@ -496,7 +506,7 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	app = pressRunes(app, "usd")
 	view = app.View()
 	assertViewContains(t, view, "> filter : usd", "> investment-usd")
-	if strings.Contains(view, "investment-hkd") {
+	if strings.Contains(view, "investment-hkd") || strings.Contains(view, "investment-jk") {
 		t.Fatalf("name filter should hide non-matching child:\n%s", view)
 	}
 	app = press(app, tea.KeyBackspace)
@@ -517,7 +527,7 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	app = pressRunes(app, "dollars")
 	view = app.View()
 	assertViewContains(t, view, "> filter : dollars", "> investment-usd")
-	if strings.Contains(view, "investment-hkd") {
+	if strings.Contains(view, "investment-hkd") || strings.Contains(view, "investment-jk") {
 		t.Fatalf("notes filter should hide non-matching child:\n%s", view)
 	}
 	app = pressRunes(app, "hl")
@@ -529,7 +539,7 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/investment/", Menu: 1},
-		navFrame{Path: "/accounts/investment/children/list/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 2},
 	)
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/investment-usd/" {
@@ -540,7 +550,7 @@ func TestChildAccountListNavigationFilteringAndReturn(t *testing.T) {
 	app = appWithNav(app,
 		navFrame{Path: "/", Menu: 0},
 		navFrame{Path: "/accounts/investment/", Menu: 1},
-		navFrame{Path: "/accounts/investment/children/list/", Menu: 1},
+		navFrame{Path: "/accounts/investment/children/list/", Menu: 2},
 	)
 	app.Form["filter"] = "usd"
 	app = press(app, tea.KeyCtrlE)

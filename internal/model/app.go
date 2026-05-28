@@ -433,7 +433,7 @@ func tableListHelp() []string {
 }
 
 func childAccountListHelp() []string {
-	return []string{"type          : filter", "h/l           : type in filter", "up/down/j/k   : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "ctrl+e        : edit", "esc           : back", "?             : help", "ctrl-z        : undo"}
+	return []string{"type          : filter", "h/l           : type in filter", "up/down       : navigate", "tab/shift-tab : navigate", "left/right    : back/open", "backspace     : edit filter", "enter         : confirm", "ctrl+n        : new", "ctrl+e        : edit", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }
 
 func (a App) accountFormHelp() []string {

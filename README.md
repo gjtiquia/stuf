@@ -1067,7 +1067,7 @@ as of       : 2026-05-21
 ---
 type          : filter
 h/l           : type in filter
-up/down/j/k   : navigate
+up/down       : navigate
 tab/shift-tab : navigate
 left/right    : back/open
 backspace     : edit filter

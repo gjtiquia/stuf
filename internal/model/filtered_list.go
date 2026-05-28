@@ -8,6 +8,11 @@ type filteredListInput struct {
 	sanitize func(string) string
 }
 
+type filterableListKeyResult struct {
+	filter string
+	menu   int
+}
+
 func newFilteredListInput(filter string, sanitize func(string) string) filteredListInput {
 	if sanitize == nil {
 		sanitize = func(s string) string { return s }
@@ -29,6 +34,26 @@ func (f filteredListInput) handleKey(key string) (filteredListInput, bool) {
 		}
 	}
 	return f, false
+}
+
+func handleFilterableListKey(key, filter string, menu, rowCount int) (filterableListKeyResult, bool) {
+	input := newFilteredListInput(filter, nil)
+	switch key {
+	case "backspace":
+		updated, _ := input.handleKey(key)
+		return filterableListKeyResult{
+			filter: updated.value(),
+			menu:   clampListCursor(menu, rowCount),
+		}, true
+	default:
+		if updated, handled := input.handleKey(key); handled {
+			return filterableListKeyResult{
+				filter: updated.value(),
+				menu:   0,
+			}, true
+		}
+	}
+	return filterableListKeyResult{filter: filter, menu: menu}, false
 }
 
 func filterStrings(options []string, filter string, sanitize func(string) string) []string {
