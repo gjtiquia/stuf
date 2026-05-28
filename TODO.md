@@ -49,8 +49,15 @@
         - as the parent is the anchor, tho can still be inferrred from child
         - however, it is probably more tedious to do a pass over all children, than a pass over the parent (if available) which includes all differences from child
     - credit cards are accounts too
-        - but can more or less ignore the trends... not that helpful
-        - purpose is more to make sure you know that you have money oweing, deducts from the total and available
+        - typically enter balance from each month statement as a negative balance
+        - main purpose is more to make sure you know that you have money oweing, deducts from the total and available
+        - trends may seem weird at first, but it makes sense
+            - typically if entering balance, its like, constantly negative
+            - if net change is positive, its good because it means the money you are borrowing is decreasing each month
+            - it its still a transfer between accounts, from debit to credit, so it tells the whole story, the "hidden" trends
+            - it could show something thats worse than it seems, or could show that its better than it seems
+            - eg. it may look like you have a lot available, or the monthly lows are ok, but after adding credit card you may realize you are in debt for months
+            - eg. it may look like a HUGE net loss, cuz paying credit card, but inputting credit card balance means its simply a large amount transfer and wont count to net change of all accounts
     - then check out dashboard, reports from just the accounts
     - then input income via transactions
 
