@@ -1698,6 +1698,25 @@ func TestReportMonthlyCoverageUsesSharedPeriodBoundaries(t *testing.T) {
 	}
 }
 
+func TestReportMonthlyRowsDoNotDuplicateMonthsAfterLongMonths(t *testing.T) {
+	ctx := context.Background()
+	store, _, _, _, _ := serviceStack(t)
+	store.Clock = func() time.Time { return time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC) }
+	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
+	rows, _, err := reports.MonthlyRows(ctx, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var periods []string
+	for _, row := range rows {
+		periods = append(periods, row.Period)
+	}
+	want := []string{"2026-05", "2026-04", "2026-03", "2026-02", "2026-01"}
+	if strings.Join(periods, ",") != strings.Join(want, ",") {
+		t.Fatalf("periods = %+v, want %+v", periods, want)
+	}
+}
+
 func assertPeriod(t *testing.T, name, got, want string) {
 	t.Helper()
 	if got != want {

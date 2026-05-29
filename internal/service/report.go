@@ -71,8 +71,9 @@ func (s ReportService) MonthlyRows(ctx context.Context, count int) ([]ReportMont
 	calcDate := reportCalcDate(histories, today)
 	zero := money.Money{Scale: appCur.Scale}
 	rows := make([]ReportMonthlyRow, 0, count)
+	baseMonth := monthBoundary(today)
 	for i := 0; i < count; i++ {
-		month := today.AddDate(0, -i, 0)
+		month := baseMonth.AddDate(0, -i, 0)
 		rows = append(rows, ReportMonthlyRow{
 			Period:   month.Format("2006-01"),
 			Coverage: reportPeriodCoverage(histories, month, calcDate),
