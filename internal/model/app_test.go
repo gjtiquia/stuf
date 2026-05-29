@@ -3478,6 +3478,20 @@ func TestAccountCreateTagFieldInlineCreateAndFilter(t *testing.T) {
 	}
 }
 
+func TestSelectedExistingTagDoesNotShowCreateOption(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Tags.Create(ctx, "wallet", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Form = map[string]string{"tags": "wallet"}
+	app.setTagFilter("wallet")
+	options := app.currentTagOptions()
+	if len(options) != 0 {
+		t.Fatalf("selected existing tag should not appear as selectable or creatable, got %#v", options)
+	}
+}
+
 func TestPlainNStillTypesIntoAccountListFilter(t *testing.T) {
 	app, _ := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})

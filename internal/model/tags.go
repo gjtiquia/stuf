@@ -130,14 +130,14 @@ func (a App) currentTagOptions() []tagOption {
 	var opts []tagOption
 	exact := false
 	for _, name := range a.tagOptions() {
+		if name == filter {
+			exact = true
+		}
 		if selected[name] {
 			continue
 		}
 		if filter != "" && !strings.Contains(name, filter) {
 			continue
-		}
-		if name == filter {
-			exact = true
 		}
 		opts = append(opts, tagOption{Name: name})
 	}

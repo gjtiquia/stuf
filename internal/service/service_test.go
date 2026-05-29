@@ -193,6 +193,51 @@ func TestAccountTagsCreateEditInheritanceAndUndo(t *testing.T) {
 	}
 }
 
+func TestAccountCreateWithTagsRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, _, _, _ := serviceStack(t)
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.CreateWithTags(ctx, "cash", "HKD", true, "", []string{"owner/me"}); err == nil {
+		t.Fatal("expected history failure")
+	}
+	if _, err := s.Acct.GetByName(ctx, "cash"); err == nil {
+		t.Fatal("account should be rolled back when history recording fails")
+	}
+	if _, err := s.Tag.GetByName(ctx, "owner/me"); err == nil {
+		t.Fatal("inline-created tag should be rolled back when account create fails")
+	}
+}
+
+func TestAccountUpdateWithTagsRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, _, _, _ := serviceStack(t)
+	acct, _, err := accounts.CreateWithTags(ctx, "cash", "HKD", true, "old notes", []string{"old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := accounts.UpdateWithTags(ctx, acct.ID, "cash", "HKD", true, false, "new notes", []string{"new"}); err == nil {
+		t.Fatal("expected history failure")
+	}
+	unchanged, err := s.Acct.GetByID(ctx, acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Notes != "old notes" {
+		t.Fatalf("account notes should be rolled back, got %q", unchanged.Notes)
+	}
+	if got := strings.Join(accountTagNames(t, accounts, acct.ID, false), ","); got != "old" {
+		t.Fatalf("direct tags should be rolled back, got %q", got)
+	}
+	if _, err := s.Tag.GetByName(ctx, "new"); err == nil {
+		t.Fatal("inline-created tag should be rolled back when account update fails")
+	}
+}
+
 func TestTagValidationRenameAndUndo(t *testing.T) {
 	ctx := context.Background()
 	s, accounts, _, _, history := serviceStack(t)

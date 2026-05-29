@@ -96,6 +96,28 @@ func (s *Store) WithWriteLock(fn func() error) error {
 	return fn()
 }
 
+func (s *Store) WithWriteTx(ctx context.Context, fn func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	oldQueries := s.Q
+	s.Q = s.Q.WithTx(tx)
+	defer func() {
+		s.Q = oldQueries
+	}()
+	if err := fn(); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *Store) Backup(ctx context.Context, now time.Time) (string, error) {
 	var out string
 	err := s.WithWriteLock(func() error {

@@ -81,7 +81,7 @@ func (s AccountService) create(ctx context.Context, name, currencyCode string, p
 	}
 	var out repo.Account
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		a, err := s.Accounts.Create(ctx, repo.AccountCreate{Name: name, CurrencyID: cur.ID, ParentID: parentID, OnBudget: onBudget, Hidden: hidden, Notes: notes})
 		if err != nil {
 			return err
@@ -165,7 +165,7 @@ func (s AccountService) UpdateWithTags(ctx context.Context, id int64, name, curr
 	next.Name, next.CurrencyID, next.OnBudget, next.Hidden, next.Notes = name, currencyID, onBudget, hidden, notes
 	var out repo.Account
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		updated, err := s.Accounts.Update(ctx, next)
 		if err != nil {
 			return err
@@ -290,7 +290,7 @@ func (s AccountService) DeleteEmpty(ctx context.Context, id int64) (repo.Account
 		return repo.Account{}, SessionEntry{}, errors.New("account is not empty; hide it instead")
 	}
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		if err := s.Tags.SetAccountTags(ctx, old.ID, nil); err != nil {
 			return err
 		}
