@@ -23,6 +23,25 @@ func (a App) dashboardContextWithOwed(includeOwed bool) (string, error) {
 		return "", err
 	}
 	cur := a.Config.Config.Currency
+	return formatDashboardContext(d, cur, includeOwed), nil
+}
+
+func (a App) accountListDashboardContext() (string, error) {
+	if strings.TrimSpace(a.listFilter()) == "" {
+		return a.dashboardContextWithoutOwed()
+	}
+	rows, err := a.accountListRowsWithFilter(a.listFilter())
+	if err != nil {
+		return "", err
+	}
+	d, err := a.Svc.Dashboard.SummaryForAccounts(a.ctx, dashboardAccountIDsForRows(rows))
+	if err != nil {
+		return "", err
+	}
+	return formatDashboardContext(d, a.Config.Config.Currency, false), nil
+}
+
+func formatDashboardContext(d service.Dashboard, cur string, includeOwed bool) string {
 	values := alignedMoneyValues(
 		component.MoneyCell(d.Total, cur),
 		component.MoneyCell(money.Money{Scale: 2}, cur),
@@ -54,7 +73,7 @@ you owe ppl : %s
 ppl owe you : %s`, owed[0], owed[1])
 	}
 	body += "\n" + warnings
-	return strings.TrimRight(body, "\n"), nil
+	return strings.TrimRight(body, "\n")
 }
 
 func (a App) accountDashboardContext(name string) (string, error) {

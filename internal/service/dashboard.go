@@ -108,6 +108,49 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 	return out, nil
 }
 
+func (s DashboardService) SummaryForAccounts(ctx context.Context, accountIDs []int64) (Dashboard, error) {
+	today := s.today()
+	appCur, err := s.Currencies.GetByCode(ctx, s.AppCurrency)
+	if err != nil {
+		return Dashboard{}, err
+	}
+	histories := []dashboardAccountHistory{}
+	warnings := []string{}
+	warned := map[string]bool{}
+	seen := map[int64]bool{}
+	for _, accountID := range accountIDs {
+		if seen[accountID] {
+			continue
+		}
+		seen[accountID] = true
+		a, err := s.Accounts.GetByID(ctx, accountID)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		if !a.OnBudget {
+			continue
+		}
+		cur, err := s.Currencies.GetByID(ctx, a.CurrencyID)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		accountHistories, accountWarnings, err := s.effectiveAccountHistories(ctx, a, cur, appCur, today)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		for _, warning := range accountWarnings {
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+		}
+		histories = append(histories, accountHistories...)
+	}
+	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
+	out.Warnings = warnings
+	return out, nil
+}
+
 func (s DashboardService) AccountSummary(ctx context.Context, accountID int64) (Dashboard, error) {
 	today := s.today()
 	acct, err := s.Accounts.GetByID(ctx, accountID)

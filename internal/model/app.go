@@ -302,7 +302,7 @@ func (a App) screen() screen {
 		}
 		return s
 	case a.Path == routeAccountList:
-		context, err := a.dashboardContextWithoutOwed()
+		context, err := a.accountListDashboardContext()
 		if err != nil {
 			return screen{Path: routeAccountList, Body: "error: " + err.Error() + "\n"}
 		}

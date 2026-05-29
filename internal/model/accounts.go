@@ -10,6 +10,7 @@ import (
 )
 
 type accountListRow struct {
+	ID           int64
 	Name         string
 	Balance      component.Cell
 	Amount       money.Money
@@ -655,6 +656,25 @@ func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, boo
 	return total, found
 }
 
+func dashboardAccountIDsForRows(rows []accountListRow) []int64 {
+	var ids []int64
+	skipDescendantsOfDepth := -1
+	for _, row := range rows {
+		if skipDescendantsOfDepth >= 0 && row.Depth > skipDescendantsOfDepth {
+			continue
+		}
+		if skipDescendantsOfDepth >= 0 && row.Depth <= skipDescendantsOfDepth {
+			skipDescendantsOfDepth = -1
+		}
+		if !row.Match || row.Virtual {
+			continue
+		}
+		ids = append(ids, row.ID)
+		skipDescendantsOfDepth = row.Depth
+	}
+	return ids
+}
+
 func (a App) accountListRows() ([]accountListRow, error) {
 	return a.accountListRowsWithFilter(a.listFilter())
 }
@@ -742,6 +762,7 @@ func (a App) accountRow(acct repo.Account, depth int) (accountListRow, error) {
 		currencyName = cur.Name
 	}
 	return accountListRow{
+		ID:           acct.ID,
 		Name:         acct.Name,
 		Balance:      balance,
 		Amount:       appAmount,

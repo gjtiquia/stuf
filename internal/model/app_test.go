@@ -290,6 +290,7 @@ func TestAccountListFilteredSummaryCountsOnlyMatchedMoney(t *testing.T) {
 	app.Form[formKeyFilter] = "tag:wallet"
 	view := app.View()
 	assertViewContains(t, view, "filtered total", "> household", "household-cash", "wallet")
+	assertRenderOrder(t, view, "total       : HKD 100.00", "/accounts/list/", "filtered total")
 	if !strings.Contains(view, "filtered total: HKD 100.00") && !strings.Contains(view, "filtered total: HKD  100.00") {
 		t.Fatalf("child-only tag filter should count only child money:\n%s", view)
 	}
