@@ -50,9 +50,18 @@ func TestRouteBuildersAndParsers(t *testing.T) {
 	if gotMonth, ok := reportMonthlyDetailMonth(reportPath); !ok || gotMonth != reportMonth {
 		t.Fatalf("reportMonthlyDetailMonth(%q) = %q, %v", reportPath, gotMonth, ok)
 	}
+	accountReportPath := reportMonthlyAccountPath(reportMonth, name)
+	if gotMonth, gotName, ok := reportMonthlyAccount(accountReportPath); !ok || gotMonth != reportMonth || gotName != name {
+		t.Fatalf("reportMonthlyAccount(%q) = %q %q, %v", accountReportPath, gotMonth, gotName, ok)
+	}
 	for _, invalid := range []string{routeReportsMonthly, "/reports/monthly/2026-5/", "/reports/monthly/2026-13/", "/reports/monthly/2026-05/extra/"} {
 		if gotMonth, ok := reportMonthlyDetailMonth(invalid); ok {
 			t.Fatalf("reportMonthlyDetailMonth(%q) = %q, true; want false", invalid, gotMonth)
+		}
+	}
+	for _, invalid := range []string{reportPath, "/reports/monthly/2026-05/accounts/", "/reports/monthly/2026-05/accounts/cash/extra/", "/reports/monthly/2026-13/accounts/cash/"} {
+		if gotMonth, gotName, ok := reportMonthlyAccount(invalid); ok {
+			t.Fatalf("reportMonthlyAccount(%q) = %q %q, true; want false", invalid, gotMonth, gotName)
 		}
 	}
 }

@@ -211,16 +211,23 @@ func reportMonthlyRowCells(row service.ReportMonthlyRow, cur string) []component
 }
 
 func (a App) reportMonthlyDetailKey(s, month string) App {
-	switch {
-	case isItemPrevKey(s):
-		return a.navReplace(reportMonthlyDetailPath(shiftReportMonth(month, -1)), a.Menu)
-	case isItemNextKey(s):
-		return a.navReplace(reportMonthlyDetailPath(shiftReportMonth(month, 1)), a.Menu)
-	}
 	rows, err := a.filteredReportAccountRows(month)
 	if err != nil {
 		a.Error = err.Error()
 		return a
+	}
+	switch {
+	case s == "enter" && len(rows) > 0:
+		a = a.navSetMenu(clampListCursor(a.Menu, len(rows)))
+		row := rows[a.Menu]
+		if row.Virtual {
+			return a
+		}
+		return a.navPush(reportMonthlyAccountPath(month, row.Name), 0)
+	case isItemPrevKey(s):
+		return a.navReplace(reportMonthlyDetailPath(shiftReportMonth(month, -1)), a.Menu)
+	case isItemNextKey(s):
+		return a.navReplace(reportMonthlyDetailPath(shiftReportMonth(month, 1)), a.Menu)
 	}
 	switch s {
 	case "up", "shift+tab":
@@ -236,6 +243,29 @@ func (a App) reportMonthlyDetailKey(s, month string) App {
 			a.setListFilter(result.filter)
 			nextRows, _ := a.filteredReportAccountRows(month)
 			a = a.navSetMenu(clampListCursor(result.menu, len(nextRows)))
+		}
+	}
+	return a
+}
+
+func (a App) reportMonthlyAccountKey(s, month, name string) App {
+	detail, err := a.Svc.Reports.MonthlyAccountDetail(a.ctx, month, name)
+	if err != nil {
+		a.Error = err.Error()
+		return a
+	}
+	switch {
+	case isItemPrevKey(s):
+		return a.navReplace(reportMonthlyAccountPath(shiftReportMonth(month, -1), name), a.Menu)
+	case isItemNextKey(s):
+		return a.navReplace(reportMonthlyAccountPath(shiftReportMonth(month, 1), name), a.Menu)
+	case isVerticalPrevKey(s):
+		if len(detail.Snapshots) > 0 {
+			a = a.navSetMenu(clampListCursor(a.Menu-1, len(detail.Snapshots)))
+		}
+	case isVerticalNextKey(s):
+		if len(detail.Snapshots) > 0 {
+			a = a.navSetMenu(clampListCursor(a.Menu+1, len(detail.Snapshots)))
 		}
 	}
 	return a
@@ -264,6 +294,75 @@ func reportMonthlyDetailContext(detail service.ReportMonthlyDetail) string {
 		context += "\n" + warningText
 	}
 	return strings.TrimRight(context, "\n")
+}
+
+func (a App) reportMonthlyAccountScreen(month, name string) screen {
+	detail, err := a.Svc.Reports.MonthlyAccountDetail(a.ctx, month, name)
+	if err != nil {
+		return screen{Path: reportMonthlyAccountPath(month, name), Body: "error: " + err.Error() + "\n"}
+	}
+	return screen{
+		Path:    reportMonthlyAccountPath(month, name),
+		Context: reportMonthlyAccountContext(detail),
+		Body:    reportMonthlyAccountBody(detail, a.Menu),
+		Help:    reportMonthlyAccountHelp(),
+	}
+}
+
+func reportMonthlyAccountContext(detail service.ReportMonthlyAccountDetail) string {
+	values := alignedMoneyValues(
+		component.MoneyCell(detail.Metrics.Start, detail.AppCurrency),
+		component.MoneyCell(detail.Metrics.End, detail.AppCurrency),
+		component.MoneyCell(detail.Metrics.Change, detail.AppCurrency),
+		component.MoneyCell(detail.Metrics.High, detail.AppCurrency),
+		component.MoneyCell(detail.Metrics.Low, detail.AppCurrency),
+		component.MoneyCell(detail.Metrics.HighToLow, detail.AppCurrency),
+	)
+	context := fmt.Sprintf(`account     : %s
+period      : %s
+coverage    : %s -> %s
+
+start       : %s
+end         : %s
+change      : %s
+
+high        : %s
+low         : %s
+high-to-low : %s`, detail.AccountName, detail.Period, detail.Coverage.Start, detail.Coverage.End, values[0], values[1], values[2], values[3], values[4], values[5])
+	if warningText := dashboardWarnings(detail.Warnings); warningText != "" {
+		context += "\n" + warningText
+	}
+	return strings.TrimRight(context, "\n")
+}
+
+func reportMonthlyAccountBody(detail service.ReportMonthlyAccountDetail, selected int) string {
+	lines := []string{"snapshots"}
+	if len(detail.Snapshots) == 0 {
+		lines = append(lines, "  date | balance | notes", "  (no snapshots)")
+		return strings.Join(lines, "\n") + "\n"
+	}
+	tableRows := make([][]component.Cell, len(detail.Snapshots))
+	for i, row := range detail.Snapshots {
+		tableRows[i] = reportSnapshotRowCells(row, detail.AppCurrency)
+	}
+	layout := component.NewTableLayoutCells([]string{"date", "balance", "notes"}, tableRows)
+	lines = append(lines, layout.Header("  "))
+	for i, row := range detail.Snapshots {
+		prefix := "  "
+		if i == selected {
+			prefix = "> "
+		}
+		lines = append(lines, layout.RowCells(prefix, reportSnapshotRowCells(row, detail.AppCurrency)))
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+func reportSnapshotRowCells(row service.ReportSnapshotRow, cur string) []component.Cell {
+	return []component.Cell{
+		component.TextCell(row.Date),
+		component.MoneyCell(row.Balance, cur),
+		component.TextCell(row.Notes),
+	}
 }
 
 func reportSummaryContext(period, coverage string, metrics service.ReportPeriodMetrics, cur string) string {
@@ -363,4 +462,8 @@ func reportMonthlyListHelp() []string {
 
 func reportMonthlyDetailHelp() []string {
 	return []string{"type          : filter", "up/down       : navigate", "left/h        : previous month", "right/l       : next month", "backspace     : edit filter", "enter         : confirm", "esc           : back", "?             : help", "ctrl-z        : undo"}
+}
+
+func reportMonthlyAccountHelp() []string {
+	return []string{"up/down       : navigate", "left/h        : previous month", "right/l       : next month", "esc           : back", "?             : help", "ctrl-z        : undo"}
 }

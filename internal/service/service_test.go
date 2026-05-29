@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1667,6 +1668,58 @@ func TestReportMonthlyDetailIncludesAccountTreeRemainingRows(t *testing.T) {
 	}
 	assertMoneyAmount(t, "remaining start", remainingRow.Metrics.Start, 80000)
 	assertMoneyAmount(t, "remaining end", remainingRow.Metrics.End, 90000)
+}
+
+func TestReportMonthlyAccountDetailShowsBoundaryAndSnapshotRows(t *testing.T) {
+	ctx := context.Background()
+	store, accounts, balances, _, _ := serviceStack(t)
+	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
+	cash, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, add := range []struct {
+		date   string
+		amount string
+	}{
+		{"2026-03-01", "1000.00"},
+		{"2026-03-12", "400.00"},
+		{"2026-03-29", "1600.00"},
+		{"2026-04-02", "2000.00"},
+	} {
+		if _, _, err := balances.Add(ctx, cash.ID, add.date, add.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	detail, err := reports.MonthlyAccountDetail(ctx, "2026-03", "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.AccountName != "cash" || detail.Period != "2026-03" || detail.Coverage.Start != "2026-03-01" || detail.Coverage.End != "2026-04-01" {
+		t.Fatalf("account detail = %+v", detail)
+	}
+	assertMoneyAmount(t, "detail start", detail.Metrics.Start, 100000)
+	assertMoneyAmount(t, "detail end", detail.Metrics.End, 160000)
+	if len(detail.Snapshots) != 4 {
+		t.Fatalf("snapshots = %+v", detail.Snapshots)
+	}
+	wants := []struct {
+		date   string
+		amount int64
+		note   string
+	}{
+		{"2026-03-01", 100000, "start boundary"},
+		{"2026-03-12", 40000, "snapshot"},
+		{"2026-03-29", 160000, "snapshot"},
+		{"2026-04-01", 160000, "end boundary"},
+	}
+	for i, want := range wants {
+		got := detail.Snapshots[i]
+		if got.Date != want.date || got.Notes != want.note {
+			t.Fatalf("snapshot %d = %+v, want date %s note %s", i, got, want.date, want.note)
+		}
+		assertMoneyAmount(t, fmt.Sprintf("snapshot %d", i), got.Balance, want.amount)
+	}
 }
 
 func TestReportMonthlyCoverageUsesSharedPeriodBoundaries(t *testing.T) {

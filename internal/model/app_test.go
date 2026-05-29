@@ -262,6 +262,14 @@ func TestReportsMonthlyNavigationAndRendering(t *testing.T) {
 	assertViewContains(t, view, "period      : 2026-05", "coverage    : 2026-05-01 -> 2026-05-24", "on-budget accounts", "cash", "credit-card", "HKD (300.00)")
 	assertNotContains(t, view, "investment")
 
+	app = press(app, tea.KeyEnter)
+	if app.Path != reportMonthlyAccountPath("2026-05", "cash") {
+		t.Fatalf("monthly account detail path = %s", app.Path)
+	}
+	view = app.View()
+	assertViewContains(t, view, "account     : cash", "period      : 2026-05", "snapshots", "2026-05-01", "2026-05-10", "2026-05-24", "start boundary", "end boundary")
+	app = press(app, tea.KeyEsc)
+
 	app = pressRunes(app, "credit")
 	view = app.View()
 	assertViewContains(t, view, "credit-card")

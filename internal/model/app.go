@@ -158,6 +158,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.accountEditKey(s, name)
 		} else if name, ok := tagEditName(a.Path); ok {
 			a = a.tagEditKey(s, name)
+		} else if month, name, ok := reportMonthlyAccount(a.Path); ok {
+			a = a.reportMonthlyAccountKey(s, month, name)
 		} else if month, ok := reportMonthlyDetailMonth(a.Path); ok {
 			a = a.reportMonthlyDetailKey(s, month)
 		}
@@ -333,6 +335,12 @@ func (a App) screen() screen {
 		return a.reportsMenuScreen()
 	case a.Path == routeReportsMonthly:
 		return a.reportMonthlyListScreen()
+	case func() bool {
+		_, _, ok := reportMonthlyAccount(a.Path)
+		return ok
+	}():
+		month, name, _ := reportMonthlyAccount(a.Path)
+		return a.reportMonthlyAccountScreen(month, name)
 	case func() bool {
 		_, ok := reportMonthlyDetailMonth(a.Path)
 		return ok

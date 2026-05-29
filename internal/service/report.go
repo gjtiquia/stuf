@@ -33,6 +33,16 @@ type ReportMonthlyDetail struct {
 	AppCurrency string
 }
 
+type ReportMonthlyAccountDetail struct {
+	AccountName string
+	Period      string
+	Coverage    ReportCoverage
+	Metrics     ReportPeriodMetrics
+	Snapshots   []ReportSnapshotRow
+	Warnings    []string
+	AppCurrency string
+}
+
 type ReportCoverage struct {
 	Start string
 	End   string
@@ -53,6 +63,12 @@ type ReportAccountRow struct {
 	Depth   int
 	Virtual bool
 	Metrics ReportPeriodMetrics
+}
+
+type ReportSnapshotRow struct {
+	Date    string
+	Balance money.Money
+	Notes   string
 }
 
 func (s ReportService) MonthlyRows(ctx context.Context, count int) ([]ReportMonthlyRow, []string, error) {
@@ -109,6 +125,46 @@ func (s ReportService) MonthlyDetail(ctx context.Context, period string) (Report
 		Coverage:    reportPeriodCoverage(histories, month, calcDate),
 		Metrics:     reportPeriodMetrics(histories, month, calcDate, zero),
 		Rows:        rows,
+		Warnings:    warnings,
+		AppCurrency: appCur.Code,
+	}, nil
+}
+
+func (s ReportService) MonthlyAccountDetail(ctx context.Context, period, accountName string) (ReportMonthlyAccountDetail, error) {
+	month, err := time.ParseInLocation("2006-01", period, s.today().Location())
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, fmt.Errorf("month must be YYYY-MM")
+	}
+	today := s.today()
+	appCur, err := s.Currencies.GetByCode(ctx, s.AppCurrency)
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, err
+	}
+	acct, err := s.Accounts.GetByName(ctx, accountName)
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, err
+	}
+	if !acct.OnBudget {
+		return ReportMonthlyAccountDetail{}, fmt.Errorf("account is not on-budget: %s", accountName)
+	}
+	cur, err := s.Currencies.GetByID(ctx, acct.CurrencyID)
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, err
+	}
+	ds := s.dashboard()
+	histories, warnings, err := ds.effectiveAccountHistories(ctx, acct, cur, appCur, today)
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, err
+	}
+	calcDate := reportCalcDate(histories, today)
+	zero := money.Money{Scale: appCur.Scale}
+	coverage := reportPeriodCoverage(histories, month, calcDate)
+	return ReportMonthlyAccountDetail{
+		AccountName: acct.Name,
+		Period:      month.Format("2006-01"),
+		Coverage:    coverage,
+		Metrics:     reportPeriodMetrics(histories, month, calcDate, zero),
+		Snapshots:   reportSnapshotRows(histories, month, calcDate, zero),
 		Warnings:    warnings,
 		AppCurrency: appCur.Code,
 	}, nil
@@ -267,6 +323,46 @@ func reportPeriodCoverage(histories []dashboardAccountHistory, month, calcDate t
 		Start: start.Format("2006-01-02"),
 		End:   end.Format("2006-01-02"),
 	}
+}
+
+func reportSnapshotRows(histories []dashboardAccountHistory, month, calcDate time.Time, zero money.Money) []ReportSnapshotRow {
+	start := monthBoundary(month)
+	end := start.AddDate(0, 1, 0)
+	if sameMonth(month, calcDate) {
+		end = calcDate
+	}
+	dates := map[time.Time]bool{start: true, end: true}
+	for _, history := range histories {
+		for _, balance := range history.Balances {
+			if balance.Date.Before(start) || balance.Date.After(end) {
+				continue
+			}
+			dates[balance.Date] = true
+		}
+	}
+	ordered := make([]time.Time, 0, len(dates))
+	for date := range dates {
+		ordered = append(ordered, date)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Before(ordered[j]) })
+	rows := make([]ReportSnapshotRow, 0, len(ordered))
+	for _, date := range ordered {
+		notes := "snapshot"
+		switch {
+		case date.Equal(start) && date.Equal(end):
+			notes = "start/end boundary"
+		case date.Equal(start):
+			notes = "start boundary"
+		case date.Equal(end):
+			notes = "end boundary"
+		}
+		rows = append(rows, ReportSnapshotRow{
+			Date:    date.Format("2006-01-02"),
+			Balance: totalAsOfValue(histories, date, zero),
+			Notes:   notes,
+		})
+	}
+	return rows
 }
 
 func reportCalcDate(histories []dashboardAccountHistory, today time.Time) time.Time {

@@ -32,6 +32,9 @@ func accountChildrenListPath(name string) string  { return "/accounts/" + name +
 func accountChildCreatePath(name string) string   { return "/accounts/" + name + "/children/create/" }
 func tagEditPathFor(name string) string           { return "/tags/" + name + "/edit/" }
 func reportMonthlyDetailPath(month string) string { return "/reports/monthly/" + month + "/" }
+func reportMonthlyAccountPath(month, name string) string {
+	return "/reports/monthly/" + month + "/accounts/" + name + "/"
+}
 
 func Today() string { return time.Now().Format("2006-01-02") }
 
@@ -47,6 +50,27 @@ func reportMonthlyDetailMonth(path string) (string, bool) {
 		return "", false
 	}
 	return month, true
+}
+
+func reportMonthlyAccount(path string) (string, string, bool) {
+	if !strings.HasPrefix(path, "/reports/monthly/") || !strings.HasSuffix(path, "/") {
+		return "", "", false
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/reports/monthly/"), "/"), "/")
+	if len(parts) != 3 || parts[1] != "accounts" || parts[2] == "" {
+		return "", "", false
+	}
+	month := parts[0]
+	if len(month) != len("2006-01") {
+		return "", "", false
+	}
+	if _, err := time.Parse("2006-01", month); err != nil {
+		return "", "", false
+	}
+	if strings.Contains(parts[2], "/") {
+		return "", "", false
+	}
+	return month, parts[2], true
 }
 
 func accountDetailName(path string) (string, bool) {

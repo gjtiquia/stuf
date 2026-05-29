@@ -65,6 +65,13 @@ func (a App) menuCountFor(path string) int {
 	case routeBackup:
 		return 1
 	default:
+		if month, name, ok := reportMonthlyAccount(path); ok {
+			detail, err := a.Svc.Reports.MonthlyAccountDetail(a.ctx, month, name)
+			if err != nil {
+				return 0
+			}
+			return len(detail.Snapshots)
+		}
 		if month, ok := reportMonthlyDetailMonth(path); ok {
 			rows, err := a.filteredReportAccountRows(month)
 			if err != nil {
