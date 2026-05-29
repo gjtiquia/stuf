@@ -338,14 +338,14 @@ high-to-low : %s`, detail.AccountName, detail.Period, detail.Coverage.Start, det
 func reportMonthlyAccountBody(detail service.ReportMonthlyAccountDetail, selected int) string {
 	lines := []string{"snapshots"}
 	if len(detail.Snapshots) == 0 {
-		lines = append(lines, "  date | balance | notes", "  (no snapshots)")
+		lines = append(lines, "  date | balance | kind | notes", "  (no snapshots)")
 		return strings.Join(lines, "\n") + "\n"
 	}
 	tableRows := make([][]component.Cell, len(detail.Snapshots))
 	for i, row := range detail.Snapshots {
 		tableRows[i] = reportSnapshotRowCells(row, detail.AppCurrency)
 	}
-	layout := component.NewTableLayoutCells([]string{"date", "balance", "notes"}, tableRows)
+	layout := component.NewTableLayoutCells([]string{"date", "balance", "kind", "notes"}, tableRows)
 	lines = append(lines, layout.Header("  "))
 	for i, row := range detail.Snapshots {
 		prefix := "  "
@@ -361,6 +361,7 @@ func reportSnapshotRowCells(row service.ReportSnapshotRow, cur string) []compone
 	return []component.Cell{
 		component.TextCell(row.Date),
 		component.MoneyCell(row.Balance, cur),
+		component.TextCell(row.Kind),
 		component.TextCell(row.Notes),
 	}
 }

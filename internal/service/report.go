@@ -68,6 +68,7 @@ type ReportAccountRow struct {
 type ReportSnapshotRow struct {
 	Date    string
 	Balance money.Money
+	Kind    string
 	Notes   string
 }
 
@@ -156,6 +157,10 @@ func (s ReportService) MonthlyAccountDetail(ctx context.Context, period, account
 	if err != nil {
 		return ReportMonthlyAccountDetail{}, err
 	}
+	balanceNotes, err := s.balanceNotesByDate(ctx, acct.ID)
+	if err != nil {
+		return ReportMonthlyAccountDetail{}, err
+	}
 	calcDate := reportCalcDate(histories, today)
 	zero := money.Money{Scale: appCur.Scale}
 	coverage := reportPeriodCoverage(histories, month, calcDate)
@@ -164,10 +169,22 @@ func (s ReportService) MonthlyAccountDetail(ctx context.Context, period, account
 		Period:      month.Format("2006-01"),
 		Coverage:    coverage,
 		Metrics:     reportPeriodMetrics(histories, month, calcDate, zero),
-		Snapshots:   reportSnapshotRows(histories, month, calcDate, zero),
+		Snapshots:   reportSnapshotRows(histories, month, calcDate, zero, balanceNotes),
 		Warnings:    warnings,
 		AppCurrency: appCur.Code,
 	}, nil
+}
+
+func (s ReportService) balanceNotesByDate(ctx context.Context, accountID int64) (map[string]string, error) {
+	balances, err := s.Balances.ListByAccount(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	notes := map[string]string{}
+	for _, balance := range balances {
+		notes[balance.Date] = balance.Notes
+	}
+	return notes, nil
 }
 
 func (s ReportService) today() time.Time {
@@ -325,7 +342,7 @@ func reportPeriodCoverage(histories []dashboardAccountHistory, month, calcDate t
 	}
 }
 
-func reportSnapshotRows(histories []dashboardAccountHistory, month, calcDate time.Time, zero money.Money) []ReportSnapshotRow {
+func reportSnapshotRows(histories []dashboardAccountHistory, month, calcDate time.Time, zero money.Money, balanceNotes map[string]string) []ReportSnapshotRow {
 	start := monthBoundary(month)
 	end := start.AddDate(0, 1, 0)
 	if sameMonth(month, calcDate) {
@@ -347,22 +364,57 @@ func reportSnapshotRows(histories []dashboardAccountHistory, month, calcDate tim
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Before(ordered[j]) })
 	rows := make([]ReportSnapshotRow, 0, len(ordered))
 	for _, date := range ordered {
-		notes := "snapshot"
-		switch {
-		case date.Equal(start) && date.Equal(end):
-			notes = "start/end boundary"
-		case date.Equal(start):
-			notes = "start boundary"
-		case date.Equal(end):
-			notes = "end boundary"
+		dateText := date.Format("2006-01-02")
+		kind := "snapshot"
+		notes, ok := balanceNotes[dateText]
+		if !ok && (date.Equal(start) || date.Equal(end)) {
+			kind = "boundary"
+			if source := totalAsOfSourceDate(histories, date); source != "" {
+				notes = "carried from " + source
+			}
 		}
 		rows = append(rows, ReportSnapshotRow{
-			Date:    date.Format("2006-01-02"),
+			Date:    dateText,
 			Balance: totalAsOfValue(histories, date, zero),
+			Kind:    kind,
 			Notes:   notes,
 		})
 	}
 	return rows
+}
+
+func totalAsOfSourceDate(histories []dashboardAccountHistory, target time.Time) string {
+	var latest time.Time
+	ok := false
+	for _, history := range histories {
+		date, historyOK := accountAsOfSourceDate(history, target)
+		if !historyOK {
+			continue
+		}
+		if !ok || date.After(latest) {
+			latest = date
+			ok = true
+		}
+	}
+	if !ok {
+		return ""
+	}
+	return latest.Format("2006-01-02")
+}
+
+func accountAsOfSourceDate(history dashboardAccountHistory, target time.Time) (time.Time, bool) {
+	if len(history.Balances) == 0 {
+		return time.Time{}, false
+	}
+	if !target.After(history.Balances[0].Date) {
+		return history.Balances[0].Date, true
+	}
+	for i := len(history.Balances) - 1; i >= 0; i-- {
+		if !history.Balances[i].Date.After(target) {
+			return history.Balances[i].Date, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func reportCalcDate(histories []dashboardAccountHistory, today time.Time) time.Time {

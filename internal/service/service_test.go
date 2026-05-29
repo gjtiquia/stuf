@@ -1681,13 +1681,14 @@ func TestReportMonthlyAccountDetailShowsBoundaryAndSnapshotRows(t *testing.T) {
 	for _, add := range []struct {
 		date   string
 		amount string
+		notes  string
 	}{
-		{"2026-03-01", "1000.00"},
-		{"2026-03-12", "400.00"},
-		{"2026-03-29", "1600.00"},
-		{"2026-04-02", "2000.00"},
+		{"2026-03-01", "1000.00", "opening"},
+		{"2026-03-12", "400.00", "rent shock"},
+		{"2026-03-29", "1600.00", "salary"},
+		{"2026-04-02", "2000.00", "april topup"},
 	} {
-		if _, _, err := balances.Add(ctx, cash.ID, add.date, add.amount, ""); err != nil {
+		if _, _, err := balances.Add(ctx, cash.ID, add.date, add.amount, add.notes); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1706,17 +1707,18 @@ func TestReportMonthlyAccountDetailShowsBoundaryAndSnapshotRows(t *testing.T) {
 	wants := []struct {
 		date   string
 		amount int64
+		kind   string
 		note   string
 	}{
-		{"2026-03-01", 100000, "start boundary"},
-		{"2026-03-12", 40000, "snapshot"},
-		{"2026-03-29", 160000, "snapshot"},
-		{"2026-04-01", 160000, "end boundary"},
+		{"2026-03-01", 100000, "snapshot", "opening"},
+		{"2026-03-12", 40000, "snapshot", "rent shock"},
+		{"2026-03-29", 160000, "snapshot", "salary"},
+		{"2026-04-01", 160000, "boundary", "carried from 2026-03-29"},
 	}
 	for i, want := range wants {
 		got := detail.Snapshots[i]
-		if got.Date != want.date || got.Notes != want.note {
-			t.Fatalf("snapshot %d = %+v, want date %s note %s", i, got, want.date, want.note)
+		if got.Date != want.date || got.Kind != want.kind || got.Notes != want.note {
+			t.Fatalf("snapshot %d = %+v, want date %s kind %s note %s", i, got, want.date, want.kind, want.note)
 		}
 		assertMoneyAmount(t, fmt.Sprintf("snapshot %d", i), got.Balance, want.amount)
 	}
