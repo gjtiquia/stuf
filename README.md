@@ -2638,8 +2638,8 @@ transaction identity
 
 report integration
 - income transactions replace assumed income in reports
-- if no income transactions exist, income = growth `(assumed)`
-- if income transactions exist, expenses = income - growth `(derived)`
+- if no income transactions exist, income = change `(assumed)`
+- if income transactions exist, expenses = income - change `(derived)`
 - expense transactions explain derived expenses in reports
 - reports consume effective transaction rows, not raw parent + child rows
 - reports should not pressure users to enter every expense
@@ -3080,41 +3080,53 @@ deferred transactions
 ### reports
 
 - use reports, not reviews
-- use net growth, not net income
-- dashboard shows net change / balance rhythm for on-budget money
-- reports show growth group with on-budget, off-budget, and total
+- use change for the first on-budget operating reports
+- use growth later when looking at broader assets / off-budget money
+- dashboard shows quick balance rhythm for on-budget money
+- reports show the period story and account breakdown behind that rhythm
 - reports are calendar-period based where applicable
-- reports are the bird's eye view of the app
+- reports are the place to answer: what happened, how bad did it get, and where did it happen?
 - for now, reports are derived from accounts, balances, and transactions only
 - as more input flows are added, reports should incorporate budgets, owed/shared money, transactions, tags, and notes
 - expect report screens to evolve as those data flows become clearer
-- dashboard net change and report growth use shared as-of boundary balance rules
+- dashboard net change and report change use shared as-of boundary balance rules
 - values derived from accounts and balances should be real; only unimplemented domains render as placeholders
 - reports are read-only for v1
 - reports consume input data but do not mutate it
 - balances can be entered on any date
 - dynamic values belong in summaries/tables, not option labels
 - money decimal points should align
+- negative money values should use parentheses
+- the first useful report should focus on actionable on-budget accounts
+- off-budget / total asset growth can be added later without making the first report noisy
 - use income/expenses
 - reports only include effective rows whose transaction date is inside the coverage period
 - unexplained expenses are coverage-local
 - no explained-outside-period bucket for v1
 - income comes from income transactions
-- before income is entered, income equals growth and is marked `(assumed)`
+- before income is entered, income equals change and is marked `(assumed)`
 - before income is entered, expenses are 0
-- after income is entered, expenses = income - growth and can be marked `(derived)`
+- after income is entered, expenses = income - change and can be marked `(derived)`
 
-report questions
-- growth answers: did the month end better or worse?
-- income answers: how much came in?
-- derived expenses answer: how much must have gone out?
-- high-to-low answers: how far did balances fall inside the month?
-- high-to-high answers: is peak capacity improving?
-- low-to-low answers: is the safety floor improving?
-- explained / unexplained expenses answer: what do i already understand, and what still needs explanation?
-- planning answers: what should i change next month?
+what questions am i answering
+- did my usable on-budget money end higher or lower than it started?
+- what was the actual start, end, and change for the month?
+- how high did my on-budget money get?
+- how low did my on-budget money get?
+- how far did it fall from high to low?
+- which account caused the change?
+- which account caused the scary low / drawdown?
+- was this month normal compared to the previous few months?
+- which account or month is worth investigating with transactions later?
+
+report metric groups
+- balance movement = start, end, change
+- liquidity stress = high, low, high-to-low
+- keep an empty line between balance movement and liquidity stress
+- start/end/change answers where the month ended up
+- high/low/high-to-low answers how scary the ride was along the way
 - high-to-low is not the same as expenses; it is balance rhythm context
-- high-to-high stays useful in reports even if the compact dashboard does not show it by default
+- high-to-high and low-to-low stay useful for longer reports, but the monthly detail should first show the actual high and low values
 - later, reports can show high-to-low beside derived expenses because they explain different kinds of monthly load
 
 effective transaction rows
@@ -3139,7 +3151,7 @@ effective transaction rows
 
 expense explanation
 - expense explanation order is derived, explained, unexplained
-- derived expenses come from balance growth and entered income
+- derived expenses come from balance change and entered income
 - explained expenses come from effective expense transaction rows
 - unexplained expenses = derived expenses - explained expenses
 - unexplained expenses are the remaining expense amount not explained by transactions
@@ -3170,14 +3182,13 @@ report types
 ```
 # stuf
 
-growth
+on-budget
 
-monthly           : HKD  5,200.00
-rolling 3 months  : HKD  9,000.00
-rolling 6 months  : HKD 14,000.00
+current month     : HKD (5,000.00)
+rolling 3 months  : HKD  1,200.00
+rolling 6 months  : HKD  6,400.00
 rolling 12 months : HKD 18,000.00
 year-to-date      : HKD 12,400.00
-annual            : HKD 12,400.00
 
 /reports/
 
@@ -3204,20 +3215,24 @@ esc     : back
 current month
 
 period     : 2026-05
-coverage   : 2026-04-30 -> 2026-05-31
+coverage   : 2026-05-01 -> 2026-05-31
 
-growth
-on-budget  : HKD  5,200.00
-off-budget : HKD 30,000.00
-total      : HKD 35,200.00
+on-budget
+start      : HKD 42,000.00
+end        : HKD 37,000.00
+change     : HKD (5,000.00)
+
+high       : HKD 45,000.00
+low        : HKD 24,000.00
+high-to-low : HKD (21,000.00)
 
 /reports/monthly/
 
 > filter   : (type anything...)
 
-  month   | on-budget     | off-budget    | total
-> 2026-05 | HKD  5,200.00 | HKD 30,000.00 | HKD 35,200.00
-  2026-04 | HKD  1,200.00 | HKD      0.00 | HKD  1,200.00
+  month   | start         | end           | change       | high          | low           | high-to-low
+> 2026-05 | HKD 42,000.00 | HKD 37,000.00 | HKD (5,000.00) | HKD 45,000.00 | HKD 24,000.00 | HKD (21,000.00)
+  2026-04 | HKD 40,800.00 | HKD 42,000.00 | HKD  1,200.00  | HKD 44,000.00 | HKD 29,000.00 | HKD (15,000.00)
 
 ---
 type          : filter
@@ -3231,42 +3246,34 @@ esc           : back
 
 - pressing enter on a month opens the monthly report detail
 - monthly report account list is filterable
-- monthly report account list is grouped into on-budget and off-budget accounts
+- monthly report account list starts with on-budget accounts
+- off-budget account reporting is deferred until the user explicitly wants the broader asset view
 - left/right period navigation is dynamic
 
 ```
 # stuf
 
-period     : 2026-05
-coverage   : 2026-04-30 -> 2026-05-31
+period      : 2026-05
+coverage    : 2026-05-01 -> 2026-05-31
 
-growth
-on-budget  : HKD  5,200.00
-off-budget : HKD 30,000.00
-total      : HKD 35,200.00
+on-budget
+start       : HKD 42,000.00
+end         : HKD 37,000.00
+change      : HKD (5,000.00)
 
-income     : HKD  5,200.00 (assumed)
-expenses   : HKD      0.00
+high        : HKD 45,000.00
+low         : HKD 24,000.00
+high-to-low : HKD (21,000.00)
 
 /reports/monthly/2026-05/
 
 > filter   : (type anything...)
 
   on-budget accounts
-  account           | start          | end            | change
-> hsbc-one          | HKD  42,200.00 | HKD  47,400.00 | HKD  5,200.00
-    hsbc-hkd        | HKD  30,000.00 | HKD  35,000.00 | HKD  5,000.00
-    hsbc-usd        | HKD   7,600.00 | HKD   7,800.00 | HKD    200.00
-    hsbc-cad        | HKD   4,600.00 | HKD   4,600.00 | HKD      0.00
-
-  wallet            | HKD   2,600.00 | HKD   2,600.00 | HKD      0.00
-
-  off-budget accounts
-  account           | start          | end            | change
-  investment        | HKD 470,000.00 | HKD 500,000.00 | HKD 30,000.00
-    investment-usd  | HKD 300,000.00 | HKD 320,000.00 | HKD 20,000.00
-    investment-hkd  | HKD 100,000.00 | HKD 100,000.00 | HKD      0.00
-    remaining       | HKD  70,000.00 | HKD  80,000.00 | HKD 10,000.00
+  account      | start         | end           | change       | high          | low           | high-to-low
+> hsbc-one     | HKD 40,000.00 | HKD 36,200.00 | HKD (3,800.00) | HKD 43,000.00 | HKD 25,000.00 | HKD (18,000.00)
+  wallet       | HKD  2,000.00 | HKD    800.00 | HKD (1,200.00) | HKD  2,000.00 | HKD    800.00 | HKD  (1,200.00)
+  credit-card  | HKD      0.00 | HKD (8,000.00) | HKD (8,000.00) | HKD      0.00 | HKD (8,000.00) | HKD  (8,000.00)
 
 ---
 up/down       : navigate
@@ -3277,35 +3284,34 @@ esc           : back
 ?             : help
 ```
 
-- monthly report detail shows balance-derived growth first
+- monthly report detail shows balance-derived on-budget movement first
 - monthly report account tables render account trees like the account list
 - monthly report account tables count child accounts plus parent remaining, not parent plus children
-- transaction explanation comes after account growth so the report still starts from balance truth
+- transaction explanation comes after account movement so the report still starts from balance truth
 - expense explanation uses derived, explained, unexplained order
 
 ```
 # stuf
 
 period      : 2026-05
-coverage    : 2026-04-30 -> 2026-05-31
+coverage    : 2026-05-01 -> 2026-05-31
 
-growth
-on-budget   : HKD  5,200.00
-off-budget  : HKD  1,000.00
-total       : HKD  6,200.00
+on-budget
+start       : HKD 42,000.00
+end         : HKD 37,000.00
+change      : HKD (5,000.00)
+
+high        : HKD 45,000.00
+low         : HKD 24,000.00
+high-to-low : HKD (21,000.00)
 
 income
 entered     : HKD 20,000.00
 
 expenses
-derived     : HKD 14,800.00
+derived     : HKD 25,000.00
 explained   : HKD  8,000.00
-unexplained : HKD  6,800.00
-
-balance rhythm
-high to low : HKD (28,000.00)
-high trend  : HKD   3,000.00
-low trend   : HKD   6,000.00
+unexplained : HKD 17,000.00
 
 /reports/monthly/2026-05/expenses/
 
@@ -3397,7 +3403,7 @@ esc           : back
 - opening original transactions from report detail is deferred for v1
 
 - pressing enter on an account opens the account monthly report detail
-- account monthly report detail is the lowest-level account growth detail for now
+- account monthly report detail is the lowest-level account movement detail for now
 - no action list is shown at the lowest-level report detail
 - only navigation shortcuts are shown
 - opening original records from account report detail is deferred
@@ -3408,11 +3414,15 @@ esc           : back
 account   : hsbc-one
 on-budget : true
 period    : 2026-05
-coverage  : 2026-04-30 -> 2026-05-31
+coverage  : 2026-05-01 -> 2026-05-31
 
 start     : HKD 44,800.00
-end       : HKD 50,000.00
-growth    : HKD  5,200.00
+end       : HKD 41,000.00
+change    : HKD (3,800.00)
+
+high      : HKD 47,000.00
+low       : HKD 29,000.00
+high-to-low : HKD (18,000.00)
 
 /reports/monthly/2026-05/accounts/hsbc-one/
 
@@ -3432,7 +3442,7 @@ monthly report boundary rules
 - if there is no snapshot on or before the boundary, use the first future snapshot as a flat carried value
 - if the boundary is after the latest snapshot, use the latest snapshot as a flat carried value
 - if an account has no balances at all, boundary value is 0
-- monthly growth = resolved end boundary value - resolved start boundary value
+- monthly change = resolved end boundary value - resolved start boundary value
 - this avoids gaps: April end and May start both use the same resolved value for the May 1 boundary
 - example: if snapshots exist on 2026-04-01 and 2026-05-13, the 2026-05-01 boundary uses 2026-04-01
 - example: if the first-ever snapshot is 2026-05-02, the 2026-05-01 boundary uses 2026-05-02 as flat history
