@@ -791,15 +791,17 @@ func (a App) childAccountListRowsWithFilter(parentID int64, filter string) ([]ac
 	if err != nil {
 		return nil, err
 	}
+	parsed := parseAccountFilter(filter)
 	out := make([]accountListRow, 0, len(children))
 	for _, child := range children {
-		if filter != "" && !strings.Contains(child.Name, filter) && !strings.Contains(child.Notes, filter) {
-			continue
-		}
 		row, err := a.accountRow(child, 0)
 		if err != nil {
 			return nil, err
 		}
+		if !parsed.Empty() && !parsed.Match(row) {
+			continue
+		}
+		row.Match = true
 		out = append(out, row)
 	}
 	return out, nil

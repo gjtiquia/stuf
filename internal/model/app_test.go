@@ -295,6 +295,23 @@ func TestAccountListFilteredSummaryCountsOnlyMatchedMoney(t *testing.T) {
 	}
 }
 
+func TestChildAccountListFiltersByEffectiveTags(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	parent, _, err := app.Svc.Accounts.CreateWithTags(ctx, "household", "HKD", true, "", []string{"family"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.CreateChildWithTags(ctx, parent.ID, "household-cash", "HKD", "", []string{"wallet"}); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = accountChildrenListPath(parent.Name)
+	app.Form[formKeyFilter] = "tag:family"
+
+	view := app.View()
+	assertViewContains(t, view, "household-cash", "family")
+}
+
 func TestAccountTreeHappyPathWithParentBalance(t *testing.T) {
 	app, store := testApp(t)
 	ctx := context.Background()
