@@ -2,6 +2,10 @@
 
 ---
 
+## what i feel like doing
+
+- just got my salary, feels like a great time to see what i need minimally, prioritize how i plan my month
+
 - im leaning to transactions. 
 - at least, inputting income to know inferred expenses.
 - then expand the dashboards and reports from there.
