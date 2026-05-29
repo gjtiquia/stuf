@@ -78,4 +78,4 @@
 
 - should put explanations in the help for each screen, explaining rationale behind different choices
 
-
+- apparently this is a thing: Forward-Filling (Step Interpolation), that i sort of re-invented
