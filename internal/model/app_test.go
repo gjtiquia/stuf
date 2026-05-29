@@ -244,7 +244,7 @@ func TestReportsMonthlyNavigationAndRendering(t *testing.T) {
 	if app.Path != routeReports {
 		t.Fatalf("reports path = %s", app.Path)
 	}
-	assertViewContains(t, app.View(), "/reports/", "current month", "monthly", "rolling 3 months (TODO)", "HKD (500.00)")
+	assertViewContains(t, app.View(), "/reports/", "on-budget net change", "current month", "monthly", "rolling 3 months (TODO)", "HKD (500.00)")
 
 	app = press(app, tea.KeyEnter)
 	if app.Path != routeReportsMonthly {

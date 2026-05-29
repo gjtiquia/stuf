@@ -53,7 +53,7 @@ func (a App) reportsMenuContext() (string, error) {
 		component.MoneyCell(rolling12, a.Config.Config.Currency),
 		component.MoneyCell(ytd, a.Config.Config.Currency),
 	)
-	context := fmt.Sprintf(`on-budget
+	context := fmt.Sprintf(`on-budget net change
 
 current month     : %s
 rolling 3 months  : %s
