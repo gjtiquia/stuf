@@ -296,6 +296,25 @@ func TestAccountListFilteredSummaryCountsOnlyMatchedMoney(t *testing.T) {
 	}
 }
 
+func TestAccountListNegativeTagFilterExcludesTaggedAccounts(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.CreateWithTags(ctx, "cash", "HKD", true, "", []string{"wallet"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.CreateWithTags(ctx, "savings", "HKD", true, "", []string{"bank"}); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeAccountList
+	app.Form[formKeyFilter] = "-tag:wallet"
+
+	view := app.View()
+	assertViewContains(t, view, "savings", "bank")
+	if strings.Contains(view, "> cash") || strings.Contains(view, "  cash") {
+		t.Fatalf("negative tag filter should exclude tagged account:\n%s", view)
+	}
+}
+
 func TestChildAccountListFiltersByEffectiveTags(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()

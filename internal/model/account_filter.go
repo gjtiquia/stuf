@@ -9,15 +9,22 @@ type accountFilter struct {
 }
 
 type accountFilterTerm struct {
-	Kind   string
-	Values []string
+	Kind    string
+	Values  []string
+	Negated bool
 }
 
 func parseAccountFilter(input string) accountFilter {
 	var out accountFilter
 	for _, raw := range strings.Fields(input) {
-		if strings.Contains(raw, ":") {
-			parts := strings.SplitN(raw, ":", 2)
+		term := raw
+		negated := false
+		if strings.HasPrefix(term, "-") {
+			negated = true
+			term = strings.TrimPrefix(term, "-")
+		}
+		if strings.Contains(term, ":") {
+			parts := strings.SplitN(term, ":", 2)
 			kind := strings.ToLower(parts[0])
 			var values []string
 			for _, value := range strings.Split(parts[1], ",") {
@@ -27,7 +34,7 @@ func parseAccountFilter(input string) accountFilter {
 				}
 			}
 			if len(values) > 0 && (kind == "tag" || kind == "currency") {
-				out.Terms = append(out.Terms, accountFilterTerm{Kind: kind, Values: values})
+				out.Terms = append(out.Terms, accountFilterTerm{Kind: kind, Values: values, Negated: negated})
 				continue
 			}
 		}
@@ -48,6 +55,14 @@ func (f accountFilter) Match(row accountListRow) bool {
 }
 
 func (t accountFilterTerm) Match(row accountListRow) bool {
+	matched := t.matchPositive(row)
+	if t.Negated {
+		return !matched
+	}
+	return matched
+}
+
+func (t accountFilterTerm) matchPositive(row accountListRow) bool {
 	for _, value := range t.Values {
 		switch t.Kind {
 		case "tag":

@@ -22,6 +22,10 @@ func TestAccountFilterTextTagAndCurrencyTerms(t *testing.T) {
 		{name: "comma or", filter: "tag:missing,wallet", want: true},
 		{name: "repeated terms are and", filter: "tag:wallet currency:HKD", want: true},
 		{name: "and can fail", filter: "tag:wallet currency:USD", want: false},
+		{name: "negative tag excludes matching account", filter: "-tag:wallet", want: false},
+		{name: "negative tag allows non-matching account", filter: "-tag:missing", want: true},
+		{name: "negative tag comma excludes any matching tag", filter: "-tag:missing,wallet", want: false},
+		{name: "positive and negative terms combine", filter: "currency:HKD -tag:missing", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
