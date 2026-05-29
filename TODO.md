@@ -2,6 +2,14 @@
 
 ---
 
+- im leaning to transactions. 
+- at least, inputting income to know inferred expenses.
+- then expand the dashboards and reports from there.
+- and then parent child expenses next.
+- or budgets.... cuz expenses are not directly linked to budgets...??
+
+---
+
 ## design TODOs
 
 - rename to steph
@@ -36,6 +44,7 @@
     - every end of the month need to input EVERY SINGLE transaction
     - blows up in complexity when handling expenses for both wife and i, shared accounts, money owed
     - especially after wedding and trips, going back and forth, hectic lifestyle
+    - tried automating inputting bank statements, eh, PDFs are complex, and still cant answer my questions
 
 - onboarding
     - start with accounts
@@ -61,7 +70,20 @@
             - eg. it may look like you have a lot available, or the monthly lows are ok, but after adding credit card you may realize you are in debt for months
             - eg. it may look like a HUGE net loss, cuz paying credit card, but inputting credit card balance means its simply a large amount transfer and wont count to net change of all accounts
     - then check out dashboard, reports from just the accounts
-    - then input income via transactions
+    - with accounts as your anchor, tbh you already have a pretty good idea of where u are now, how u came to be, and generally what you want to do next
+    - then you decide if you want to dig more into the past => transactions
+        - inputting your income => get your inferred expenses
+        - inputting parent expenses => explains inferred expenses
+        - inputting child expenses => even more granular explanation for parent expenses
+    - or decide you want to be more future facing and thinking what to do tmr => budgets
+        - so you know, your total balance, is not the whole story, there is some money you need to set aside
+        - best if, "every dollar has a job", every dollar set aside in an "envelope" for a reason
+        - if you did transactions first, you may have a better idea of a "starting point" for your budgets
+        - just do keep in mind about reconciling the budgets later if just doing account snapshots
+            - basically... u are allowed to "guess" or "deallocate" money from envelopes, without explicitly "linking" them to actual concrete transactions
+            - so u can still answer the question "how much can i spend at the supermarket" even if you dont know how much you actually spent at the supermarket this past week!
+    - further: money owed
+        - like budgets, this also affects the money you actually have for spending
 
 - usecase:
     - reuse existing aggregations (bank/octopus spending summaries and categories)
