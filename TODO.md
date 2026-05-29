@@ -13,11 +13,19 @@
 ## feature TODOs
 
 - accounts should have tags
-    - husband accounts, wife accounts, shared accounts, credit cards, debit cards
-- then "global" filter
+    - husband accounts, wife accounts, shared accounts, credit cards, debit cards, HKD only, CAD only
     - sometimes i just want to see my own accounts performances
     - sometimes i want to see just my wife's
     - sometimes i want to see the shared account performance
+    - implementation... 
+        - in accounts list
+            - https://docs.github.com/en/enterprise-cloud@latest/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests#about-search-terms
+            - copying syntax from github, singular:, comma = OR, space = AND
+            - OR  : tag:me,wife
+            - AND : tag:me tag:wife
+            - eg. : tag:me currency:HKD
+        - should allow editing tag names, defer tag deletion
+            - ctrl+t in accounts list, edits account tags, shows a filterable list of tags, where we can type to search (or up/down navigate), then ctrl+e to edit
 
 ---
 
