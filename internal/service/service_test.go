@@ -523,6 +523,75 @@ func TestBalanceMutationsAndUndo(t *testing.T) {
 	}
 }
 
+func TestBalanceAddRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, balances, _, _ := serviceStack(t)
+	a, _, err := accounts.Create(ctx, "cash", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, a.ID, "2026-05-24", "10.50", "opening"); err == nil {
+		t.Fatal("expected history failure")
+	}
+	if _, err := s.Bal.GetByAccountDate(ctx, a.ID, "2026-05-24"); err == nil {
+		t.Fatal("balance should be rolled back when history recording fails")
+	}
+}
+
+func TestBalanceUpdateRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, balances, _, _ := serviceStack(t)
+	a, _, err := accounts.Create(ctx, "cash", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bal, _, err := balances.Add(ctx, a.ID, "2026-05-24", "10.50", "old notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Update(ctx, bal.ID, "2026-05-25", "99.00", "new notes"); err == nil {
+		t.Fatal("expected history failure")
+	}
+	unchanged, err := s.Bal.GetByID(ctx, bal.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Date != "2026-05-24" || unchanged.Amount.Amount != 1050 || unchanged.Notes != "old notes" {
+		t.Fatalf("balance should be rolled back, got %+v", unchanged)
+	}
+	if _, err := s.Bal.GetByAccountDate(ctx, a.ID, "2026-05-25"); err == nil {
+		t.Fatal("updated balance date should not exist after rollback")
+	}
+}
+
+func TestBalanceDeleteRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, balances, _, _ := serviceStack(t)
+	a, _, err := accounts.Create(ctx, "cash", "", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bal, _, err := balances.Add(ctx, a.ID, "2026-05-24", "10.50", "opening")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := balances.Delete(ctx, bal.ID); err == nil {
+		t.Fatal("expected history failure")
+	}
+	if _, err := s.Bal.GetByID(ctx, bal.ID); err != nil {
+		t.Fatalf("balance should be restored after failed delete history: %v", err)
+	}
+}
+
 func TestBalanceDuplicateDateReturnsDomainError(t *testing.T) {
 	ctx := context.Background()
 	_, accounts, balances, _, _ := serviceStack(t)

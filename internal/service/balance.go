@@ -30,7 +30,7 @@ func (s BalanceService) Add(ctx context.Context, accountID int64, date, amountTe
 	}
 	var out repo.Balance
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		b, err := s.Balances.Create(ctx, repo.BalanceCreate{AccountID: accountID, Date: date, Amount: amount, Notes: notes})
 		if err != nil {
 			return err
@@ -64,7 +64,7 @@ func (s BalanceService) Update(ctx context.Context, id int64, date, amountText, 
 	next.Date, next.Amount, next.Notes = date, amount, notes
 	var out repo.Balance
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		updated, err := s.Balances.Update(ctx, next)
 		if err != nil {
 			return err
@@ -92,7 +92,7 @@ func (s BalanceService) Delete(ctx context.Context, id int64) (SessionEntry, err
 		return SessionEntry{}, err
 	}
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		if err := s.Balances.Delete(ctx, id); err != nil {
 			return err
 		}
