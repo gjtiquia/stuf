@@ -1021,6 +1021,13 @@ esc         : back
 
 - here we should also be able to have a birds eye view of account stuff like totals
 - accounts list shows a summary above the filter/table with total, on-budget, and off-budget totals
+- accounts list summary totals are scoped to the active account filter
+- when the filter is empty, summary totals describe all visible accounts in the current hidden/non-hidden mode
+- when the filter is active, labels can use filtered total to make the scope clear
+- filtered totals preserve account tree no-double-counting rules
+- if a matching parent has children, totals count matching children plus matching parent remaining, not parent balance plus children
+- parent remaining participates in filtered totals only when the parent account itself is in the filtered scope
+- if only a child matches the filter, totals count that child without pulling in the parent remaining
 - accounts list shows effective account tags in the rightmost column
 - effective account tags include direct tags plus inherited parent tags
 - accounts list does not visually distinguish direct and inherited tags
