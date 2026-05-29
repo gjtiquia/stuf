@@ -290,6 +290,10 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 			lines = append(lines, a.tagSelectLines()...)
 			continue
 		}
+		if i == a.Field && field == "category" && (locked == nil || locked[field] == "") {
+			lines = append(lines, a.budgetCategorySelectLines()...)
+			continue
+		}
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
 			fieldOptions := options[field]

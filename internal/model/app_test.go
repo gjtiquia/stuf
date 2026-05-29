@@ -247,6 +247,64 @@ func TestBudgetHappyPathThroughUIAndServices(t *testing.T) {
 	assertViewContains(t, app.View(), "budgeted  : HKD 2,000.00", "available : HKD     0.00")
 }
 
+func TestBudgetCategoryFieldSelectsExistingCategory(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.BudgetCategories.Create(ctx, "daily", "day to day"); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: routeBudgetList, Menu: 0}, navFrame{Path: routeBudgetCreate, Menu: 0})
+	app.Form = map[string]string{"name": "groceries", "currency": "HKD", "category": "uncategorized"}
+	app.Field = 2
+	app = pressRunes(app, "dai")
+	view := app.View()
+	assertViewContains(t, view, "> 3) category", "> filter  : dai", "> daily")
+	app = press(app, tea.KeyEnter)
+	if app.Form["category"] != "daily" {
+		t.Fatalf("category selection = %q", app.Form["category"])
+	}
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != routeBudgetList || app.Error != "" {
+		t.Fatalf("budget create with selected category failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	b, err := app.Svc.Budgets.GetByName(ctx, "groceries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.CategoryName != "daily" {
+		t.Fatalf("budget category = %q", b.CategoryName)
+	}
+}
+
+func TestBudgetCategoryFieldCreatesCategoryInline(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: routeBudgetList, Menu: 0}, navFrame{Path: routeBudgetCreate, Menu: 0})
+	app.Form = map[string]string{"name": "japan-trip", "currency": "HKD", "category": "uncategorized"}
+	app.Field = 2
+	app = pressRunes(app, "travel")
+	view := app.View()
+	assertViewContains(t, view, "> filter  : travel", `(create new "travel")`)
+	app = press(app, tea.KeyEnter)
+	if app.Form["category"] != "travel" {
+		t.Fatalf("category create selection = %q", app.Form["category"])
+	}
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != routeBudgetList || app.Error != "" {
+		t.Fatalf("budget create with inline category failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	if _, err := app.Svc.BudgetCategories.GetByName(ctx, "travel"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := app.Svc.Budgets.GetByName(ctx, "japan-trip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.CategoryName != "travel" {
+		t.Fatalf("budget category = %q", b.CategoryName)
+	}
+}
+
 func TestMenuNavigationMovesVisibleSelection(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})

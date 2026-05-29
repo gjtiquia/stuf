@@ -13,6 +13,9 @@ const (
 	tagFilterKey        = "_tag_filter"
 	tagCursorKey        = "_tag_cursor"
 	tagPageKey          = "_tag_page"
+	categoryFilterKey   = "_category_filter"
+	categoryCursorKey   = "_category_cursor"
+	categoryPageKey     = "_category_page"
 	newTagsKey          = "_new_tags"
 	textCursorKeyPrefix = "_cursor:"
 )
@@ -55,6 +58,16 @@ func (a App) clearTagSelectState() {
 	delete(a.Form, tagPageKey)
 }
 
+func (a App) categoryFilter() string { return a.Form[categoryFilterKey] }
+
+func (a App) setCategoryFilter(value string) { a.Form[categoryFilterKey] = sanitizeSlug(value) }
+
+func (a App) clearCategorySelectState() {
+	delete(a.Form, categoryFilterKey)
+	delete(a.Form, categoryCursorKey)
+	delete(a.Form, categoryPageKey)
+}
+
 func (a App) setTagSelectCursor(cursor int) {
 	a.Form[tagCursorKey] = strconv.Itoa(cursor)
 	a.Form[tagPageKey] = strconv.Itoa(cursor / currencyPageSize)
@@ -70,6 +83,23 @@ func (a App) tagSelectPage() int {
 
 func (a App) setTagSelectPage(page int) {
 	a.Form[tagPageKey] = strconv.Itoa(page)
+}
+
+func (a App) setCategorySelectCursor(cursor int) {
+	a.Form[categoryCursorKey] = strconv.Itoa(cursor)
+	a.Form[categoryPageKey] = strconv.Itoa(cursor / tagPageSize)
+}
+
+func (a App) resetCategorySelectCursor() {
+	a.setCategorySelectCursor(0)
+}
+
+func (a App) categorySelectPage() int {
+	return parseFormInt(a.Form[categoryPageKey])
+}
+
+func (a App) setCategorySelectPage(page int) {
+	a.Form[categoryPageKey] = strconv.Itoa(page)
 }
 
 func (a App) currencySelectCursor() int {

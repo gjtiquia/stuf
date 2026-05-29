@@ -164,6 +164,9 @@ func (a App) budgetFormKey(s string) (App, bool) {
 	if a.Field == 1 {
 		return a.currencyFieldKey(s, fields)
 	}
+	if a.Field == 2 {
+		return a.budgetCategoryFieldKey(s, fields)
+	}
 	return a.submitFormKey(s, fields)
 }
 
@@ -319,6 +322,120 @@ func (a App) budgetFormView() string {
 	fields := []string{"name", "currency", "category", "notes"}
 	options := map[string][]string{"currency": a.currencyOptions()}
 	return a.formViewWithOptions(fields, nil, options, nil)
+}
+
+func (a App) budgetCategoryOptions() []string {
+	categories, err := a.Svc.BudgetCategories.List(a.ctx)
+	if err != nil {
+		return []string{"uncategorized"}
+	}
+	out := make([]string, len(categories))
+	for i, category := range categories {
+		out[i] = category.Name
+	}
+	return out
+}
+
+func (a App) currentBudgetCategoryOptions() []tagOption {
+	filter := a.categoryFilter()
+	var opts []tagOption
+	exact := false
+	for _, name := range a.budgetCategoryOptions() {
+		if name == filter {
+			exact = true
+		}
+		if filter != "" && !strings.Contains(name, filter) {
+			continue
+		}
+		opts = append(opts, tagOption{Name: name})
+	}
+	if filter != "" && !exact {
+		opts = append(opts, tagOption{Name: filter, Create: true})
+	}
+	return opts
+}
+
+func (a App) budgetCategoryFieldKey(s string, fields []string) (App, bool) {
+	options := a.currentBudgetCategoryOptions()
+	cursor := clampCursor(parseFormInt(a.Form[categoryCursorKey]), len(options))
+	a.setCategorySelectCursor(cursor)
+	switch s {
+	case "down":
+		if len(options) > 0 {
+			a.setCategorySelectCursor((cursor + 1) % len(options))
+		}
+	case "up":
+		if len(options) > 0 {
+			a.setCategorySelectCursor((cursor - 1 + len(options)) % len(options))
+		}
+	case "right":
+		if len(options) > 0 {
+			page := min(a.categorySelectPage()+1, tagPageCount(len(options))-1)
+			a.setCategorySelectPage(page)
+			a.setCategorySelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "left":
+		if len(options) > 0 {
+			page := max(a.categorySelectPage()-1, 0)
+			a.setCategorySelectPage(page)
+			a.setCategorySelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "backspace":
+		if a.categoryFilter() == "" {
+			a.Form["category"] = ""
+			return a, false
+		}
+		a.setCategoryFilter(trimLastRune(a.categoryFilter()))
+		a.resetCategorySelectCursor()
+	case "tab":
+		a.clearCategorySelectState()
+		a.Field = min(a.Field+1, len(fields))
+	case "shift+tab":
+		a.clearCategorySelectState()
+		a.Field = max(a.Field-1, 0)
+	case "enter":
+		if len(options) == 0 {
+			a.clearCategorySelectState()
+			a.Field = min(a.Field+1, len(fields))
+			return a, false
+		}
+		a.Form["category"] = options[cursor].Name
+		a.clearCategorySelectState()
+	default:
+		input := newFilteredListInput(a.categoryFilter(), sanitizeSlug)
+		if updated, handled := input.handleKey(s); handled {
+			a.setCategoryFilter(updated.value())
+			a.resetCategorySelectCursor()
+		}
+	}
+	return a, false
+}
+
+func (a App) budgetCategorySelectLines() []string {
+	filter := a.categoryFilter()
+	options := a.currentBudgetCategoryOptions()
+	cursor := clampCursor(parseFormInt(a.Form[categoryCursorKey]), len(options))
+	page := min(a.categorySelectPage(), tagPageCount(len(options))-1)
+	start := page * tagPageSize
+	end := min(start+tagPageSize, len(options))
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
+	if len(options) == 0 {
+		lines = append(lines, "     (no matching categories)", "", "     [00/00]")
+		return lines
+	}
+	for i, option := range options[start:end] {
+		prefix := "       "
+		if start+i == cursor {
+			prefix = "     > "
+		}
+		label := option.Name
+		if option.Create {
+			label = fmt.Sprintf("(create new %q)", option.Name)
+		}
+		lines = append(lines, prefix+label)
+	}
+	lines = append(lines, "", fmt.Sprintf("     [%02d/%02d]", cursor+1, len(options)))
+	return lines
 }
 
 func (a App) budgetDetailScreen(name string) screen {
