@@ -82,6 +82,7 @@
         - just do keep in mind about reconciling the budgets later if just doing account snapshots
             - basically... u are allowed to "guess" or "deallocate" money from envelopes, without explicitly "linking" them to actual concrete transactions
             - so u can still answer the question "how much can i spend at the supermarket" even if you dont know how much you actually spent at the supermarket this past week!
+        - advanced: goals and default allocations
     - further: money owed
         - like budgets, this also affects the money you actually have for spending
 
