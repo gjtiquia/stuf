@@ -44,4 +44,15 @@ func TestRouteBuildersAndParsers(t *testing.T) {
 	if !balanceEditPath(editBalancePath) {
 		t.Fatalf("balanceEditPath(%q) = false", editBalancePath)
 	}
+
+	reportMonth := "2026-05"
+	reportPath := reportMonthlyDetailPath(reportMonth)
+	if gotMonth, ok := reportMonthlyDetailMonth(reportPath); !ok || gotMonth != reportMonth {
+		t.Fatalf("reportMonthlyDetailMonth(%q) = %q, %v", reportPath, gotMonth, ok)
+	}
+	for _, invalid := range []string{routeReportsMonthly, "/reports/monthly/2026-5/", "/reports/monthly/2026-13/", "/reports/monthly/2026-05/extra/"} {
+		if gotMonth, ok := reportMonthlyDetailMonth(invalid); ok {
+			t.Fatalf("reportMonthlyDetailMonth(%q) = %q, true; want false", invalid, gotMonth)
+		}
+	}
 }

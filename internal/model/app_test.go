@@ -32,6 +32,7 @@ func testApp(t *testing.T) (App, *repo.Store) {
 		Currency:  service.CurrencyService{Currencies: s.Cur},
 		Tags:      service.TagService{Store: s, Tags: s.Tag, History: h},
 		Dashboard: service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
+		Reports:   service.ReportService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		History:   h,
 		Backup: func(context.Context) (string, error) {
 			return "/tmp/db.2026-05-24-1200.sqlite", nil
@@ -203,6 +204,76 @@ func TestMenuNavigationMovesVisibleSelection(t *testing.T) {
 	view = app.View()
 	if !strings.Contains(view, "showing : hidden-only") {
 		t.Fatalf("ctrl+h did not cycle account list visibility:\n%s", view)
+	}
+}
+
+func TestReportsMonthlyNavigationAndRendering(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _, err := app.Svc.Accounts.Create(ctx, "credit-card", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	investment, _, err := app.Svc.Accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, add := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{cash.ID, "2026-05-01", "1000.00"},
+		{cash.ID, "2026-05-10", "1500.00"},
+		{cash.ID, "2026-05-24", "800.00"},
+		{card.ID, "2026-05-01", "0.00"},
+		{card.ID, "2026-05-20", "-300.00"},
+		{investment.ID, "2026-05-01", "9999.00"},
+		{investment.ID, "2026-05-24", "19999.00"},
+	} {
+		if _, _, err := app.Svc.Balances.Add(ctx, add.accountID, add.date, add.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	app = pressRunes(app, "5")
+	if app.Path != routeReports {
+		t.Fatalf("reports path = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "/reports/", "current month", "monthly", "rolling 3 months (TODO)", "HKD (500.00)")
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != routeReportsMonthly {
+		t.Fatalf("monthly reports path = %s", app.Path)
+	}
+	view := app.View()
+	assertViewContains(t, view, "/reports/monthly/", "month", "start", "end", "change", "high-to-low", "2026-05", "HKD (500.00)")
+	assertNotContains(t, view, "investment")
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != reportMonthlyDetailPath("2026-05") {
+		t.Fatalf("monthly detail path = %s", app.Path)
+	}
+	view = app.View()
+	assertViewContains(t, view, "period      : 2026-05", "coverage    : 2026-05-01 -> 2026-05-31", "on-budget accounts", "cash", "credit-card", "HKD (300.00)")
+	assertNotContains(t, view, "investment")
+
+	app = pressRunes(app, "credit")
+	view = app.View()
+	assertViewContains(t, view, "credit-card")
+	assertNotContains(t, view, "cash")
+
+	app = press(app, tea.KeyRight)
+	if app.Path != reportMonthlyDetailPath("2026-06") {
+		t.Fatalf("next month path = %s", app.Path)
+	}
+	app = press(app, tea.KeyLeft)
+	if app.Path != reportMonthlyDetailPath("2026-05") {
+		t.Fatalf("previous month path = %s", app.Path)
 	}
 }
 

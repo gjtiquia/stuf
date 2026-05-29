@@ -54,9 +54,24 @@ func (a App) menuCountFor(path string) int {
 			return 0
 		}
 		return len(rows)
+	case routeReports:
+		return len(reportActions())
+	case routeReportsMonthly:
+		rows, err := a.filteredReportMonthlyRows()
+		if err != nil {
+			return 0
+		}
+		return len(rows)
 	case routeBackup:
 		return 1
 	default:
+		if month, ok := reportMonthlyDetailMonth(path); ok {
+			rows, err := a.filteredReportAccountRows(month)
+			if err != nil {
+				return 0
+			}
+			return len(rows)
+		}
 		if _, ok := accountDetailName(path); ok {
 			return 4
 		}

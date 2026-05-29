@@ -15,6 +15,7 @@ type Services struct {
 	Currency  service.CurrencyService
 	Tags      service.TagService
 	Dashboard service.DashboardService
+	Reports   service.ReportService
 	History   service.HistoryService
 	Backup    func(context.Context) (string, error)
 }
@@ -118,7 +119,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch a.Path {
 	case routeRoot:
-		a = a.menuKey(s, []string{routeAccountList, "/transactions/", "/budgets/", "/owed/", "/reports/", routeSettings, routeBackup})
+		a = a.menuKey(s, []string{routeAccountList, "/transactions/", "/budgets/", "/owed/", routeReports, routeSettings, routeBackup})
 	case routeAccountList:
 		a = a.accountListKey(s)
 	case routeAccountCreate:
@@ -129,6 +130,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a = a.tagCreateKey(s)
 	case routeBackup:
 		a = a.backupKey(s)
+	case routeReports:
+		a = a.reportsMenuKey(s)
+	case routeReportsMonthly:
+		a = a.reportMonthlyListKey(s)
 	case routeSettings:
 		if isMenuBackKey(s) {
 			a.Error = ""
@@ -153,6 +158,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.accountEditKey(s, name)
 		} else if name, ok := tagEditName(a.Path); ok {
 			a = a.tagEditKey(s, name)
+		} else if month, ok := reportMonthlyDetailMonth(a.Path); ok {
+			a = a.reportMonthlyDetailKey(s, month)
 		}
 	}
 	return a, nil
@@ -322,6 +329,16 @@ func (a App) screen() screen {
 			Body:    fmt.Sprintf("last backup : %s\n\nrestore     : close stuf, replace db.sqlite with backup renamed to db.sqlite, reopen stuf\n", a.LastBackup),
 			Actions: []string{"create backup"},
 		}
+	case a.Path == routeReports:
+		return a.reportsMenuScreen()
+	case a.Path == routeReportsMonthly:
+		return a.reportMonthlyListScreen()
+	case func() bool {
+		_, ok := reportMonthlyDetailMonth(a.Path)
+		return ok
+	}():
+		month, _ := reportMonthlyDetailMonth(a.Path)
+		return a.reportMonthlyDetailScreen(month)
 	case strings.Contains(a.Path, "transactions") || strings.Contains(a.Path, "budgets") || strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
 		return screen{Path: a.Path, Body: "(TODO)\n"}
 	default:

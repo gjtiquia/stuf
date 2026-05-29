@@ -1560,6 +1560,112 @@ func TestDashboardNoBalanceHistoryUsesZeroValues(t *testing.T) {
 	assertMonthValue(t, "low 1", summary.Lows[0].Period, summary.Lows[0].Low, "2026-05", 0)
 }
 
+func TestReportMonthlyRowsUseOnBudgetStartEndChangeAndHighLow(t *testing.T) {
+	ctx := context.Background()
+	store, accounts, balances, _, _ := serviceStack(t)
+	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
+	cash, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _, err := accounts.Create(ctx, "credit-card", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	offBudget, _, err := accounts.Create(ctx, "investment", "HKD", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, add := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{cash.ID, "2026-05-01", "1000.00"},
+		{cash.ID, "2026-05-10", "1500.00"},
+		{cash.ID, "2026-05-24", "800.00"},
+		{card.ID, "2026-05-01", "0.00"},
+		{card.ID, "2026-05-20", "-300.00"},
+		{offBudget.ID, "2026-05-01", "9999.00"},
+		{offBudget.ID, "2026-05-24", "19999.00"},
+	} {
+		if _, _, err := balances.Add(ctx, add.accountID, add.date, add.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, warnings, err := reports.MonthlyRows(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v", warnings)
+	}
+	if len(rows) != 1 || rows[0].Period != "2026-05" {
+		t.Fatalf("monthly rows = %+v", rows)
+	}
+	metrics := rows[0].Metrics
+	assertMoneyAmount(t, "start", metrics.Start, 100000)
+	assertMoneyAmount(t, "end", metrics.End, 50000)
+	assertMoneyAmount(t, "change", metrics.Change, -50000)
+	assertMoneyAmount(t, "high", metrics.High, 150000)
+	assertMoneyAmount(t, "low", metrics.Low, 50000)
+	assertMoneyAmount(t, "high-to-low", metrics.HighToLow, -100000)
+}
+
+func TestReportMonthlyDetailIncludesAccountTreeRemainingRows(t *testing.T) {
+	ctx := context.Background()
+	store, accounts, balances, _, _ := serviceStack(t)
+	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
+	parent, _, err := accounts.Create(ctx, "bank", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := accounts.CreateChild(ctx, parent.ID, "wallet", "HKD", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, add := range []struct {
+		accountID int64
+		date      string
+		amount    string
+	}{
+		{parent.ID, "2026-05-01", "1000.00"},
+		{parent.ID, "2026-05-24", "1200.00"},
+		{child.ID, "2026-05-01", "200.00"},
+		{child.ID, "2026-05-24", "300.00"},
+	} {
+		if _, _, err := balances.Add(ctx, add.accountID, add.date, add.amount, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	detail, err := reports.MonthlyDetail(ctx, "2026-05")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Period != "2026-05" || detail.Coverage.Start != "2026-05-01" || detail.Coverage.End != "2026-05-31" {
+		t.Fatalf("detail period/coverage = %+v", detail)
+	}
+	if len(detail.Rows) != 3 {
+		t.Fatalf("account rows = %+v", detail.Rows)
+	}
+	parentRow, childRow, remainingRow := detail.Rows[0], detail.Rows[1], detail.Rows[2]
+	if parentRow.Name != "bank" || parentRow.Depth != 0 || parentRow.Virtual {
+		t.Fatalf("parent row = %+v", parentRow)
+	}
+	assertMoneyAmount(t, "parent start", parentRow.Metrics.Start, 100000)
+	assertMoneyAmount(t, "parent end", parentRow.Metrics.End, 120000)
+	if childRow.Name != "wallet" || childRow.Depth != 1 || childRow.Virtual {
+		t.Fatalf("child row = %+v", childRow)
+	}
+	assertMoneyAmount(t, "child start", childRow.Metrics.Start, 20000)
+	assertMoneyAmount(t, "child end", childRow.Metrics.End, 30000)
+	if remainingRow.Name != "remaining" || remainingRow.Depth != 1 || !remainingRow.Virtual {
+		t.Fatalf("remaining row = %+v", remainingRow)
+	}
+	assertMoneyAmount(t, "remaining start", remainingRow.Metrics.Start, 80000)
+	assertMoneyAmount(t, "remaining end", remainingRow.Metrics.End, 90000)
+}
+
 func assertPeriod(t *testing.T, name, got, want string) {
 	t.Helper()
 	if got != want {

@@ -50,6 +50,7 @@ func main() {
 	tags := service.TagService{Store: store, Tags: store.Tag, History: history}
 	balances := service.BalanceService{Store: store, Accounts: store.Acct, Balances: store.Bal, History: history}
 	dashboard := service.DashboardService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
+	reports := service.ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 
 	app := model.New(ctx, model.Services{
 		Accounts:  accounts,
@@ -57,6 +58,7 @@ func main() {
 		Currency:  curSvc,
 		Tags:      tags,
 		Dashboard: dashboard,
+		Reports:   reports,
 		History:   history,
 		Backup: func(ctx context.Context) (string, error) {
 			return store.Backup(ctx, time.Now())

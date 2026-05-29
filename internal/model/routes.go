@@ -6,13 +6,15 @@ import (
 )
 
 const (
-	routeRoot          = "/"
-	routeAccountList   = "/accounts/list/"
-	routeAccountCreate = "/accounts/create/"
-	routeTagList       = "/tags/list/"
-	routeTagCreate     = "/tags/create/"
-	routeBackup        = "/backup/"
-	routeSettings      = "/settings/"
+	routeRoot           = "/"
+	routeAccountList    = "/accounts/list/"
+	routeAccountCreate  = "/accounts/create/"
+	routeTagList        = "/tags/list/"
+	routeTagCreate      = "/tags/create/"
+	routeBackup         = "/backup/"
+	routeSettings       = "/settings/"
+	routeReports        = "/reports/"
+	routeReportsMonthly = "/reports/monthly/"
 )
 
 func accountPath(name string) string            { return "/accounts/" + name + "/" }
@@ -25,12 +27,27 @@ func accountBalanceAddPath(name string) string { return "/accounts/" + name + "/
 func accountBalanceEditPath(name, date string) string {
 	return "/accounts/" + name + "/balances/" + date + "/edit/"
 }
-func accountTransactionsPath(name string) string { return "/accounts/" + name + "/transactions/" }
-func accountChildrenListPath(name string) string { return "/accounts/" + name + "/children/list/" }
-func accountChildCreatePath(name string) string  { return "/accounts/" + name + "/children/create/" }
-func tagEditPathFor(name string) string          { return "/tags/" + name + "/edit/" }
+func accountTransactionsPath(name string) string  { return "/accounts/" + name + "/transactions/" }
+func accountChildrenListPath(name string) string  { return "/accounts/" + name + "/children/list/" }
+func accountChildCreatePath(name string) string   { return "/accounts/" + name + "/children/create/" }
+func tagEditPathFor(name string) string           { return "/tags/" + name + "/edit/" }
+func reportMonthlyDetailPath(month string) string { return "/reports/monthly/" + month + "/" }
 
 func Today() string { return time.Now().Format("2006-01-02") }
+
+func reportMonthlyDetailMonth(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/reports/monthly/") || !strings.HasSuffix(path, "/") {
+		return "", false
+	}
+	month := strings.TrimSuffix(strings.TrimPrefix(path, "/reports/monthly/"), "/")
+	if strings.Contains(month, "/") || len(month) != len("2006-01") {
+		return "", false
+	}
+	if _, err := time.Parse("2006-01", month); err != nil {
+		return "", false
+	}
+	return month, true
+}
 
 func accountDetailName(path string) (string, bool) {
 	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/") {
