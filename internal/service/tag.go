@@ -37,7 +37,7 @@ func (s TagService) Create(ctx context.Context, name, notes string) (repo.Tag, S
 	}
 	var out repo.Tag
 	var entry SessionEntry
-	err := s.Store.WithWriteLock(func() error {
+	err := s.Store.WithWriteTx(ctx, func() error {
 		tag, err := s.Tags.Create(ctx, name, notes)
 		if err != nil {
 			return err
@@ -67,7 +67,7 @@ func (s TagService) Update(ctx context.Context, id int64, name, notes string) (r
 	next.Name, next.Notes = name, notes
 	var out repo.Tag
 	var entry SessionEntry
-	err = s.Store.WithWriteLock(func() error {
+	err = s.Store.WithWriteTx(ctx, func() error {
 		updated, err := s.Tags.Update(ctx, next)
 		if err != nil {
 			return err

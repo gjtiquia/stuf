@@ -274,6 +274,47 @@ func TestTagValidationRenameAndUndo(t *testing.T) {
 	}
 }
 
+func TestTagCreateRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, history := serviceStack(t)
+	tags := TagService{Store: s, Tags: s.Tag, History: history}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tags.Create(ctx, "owner/me", "owner tag"); err == nil {
+		t.Fatal("expected history failure")
+	}
+	if _, err := s.Tag.GetByName(ctx, "owner/me"); err == nil {
+		t.Fatal("tag should be rolled back when history recording fails")
+	}
+}
+
+func TestTagUpdateRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, history := serviceStack(t)
+	tags := TagService{Store: s, Tags: s.Tag, History: history}
+	tag, _, err := tags.Create(ctx, "owner/me", "old notes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := tags.Update(ctx, tag.ID, "owner/family", "new notes"); err == nil {
+		t.Fatal("expected history failure")
+	}
+	unchanged, err := s.Tag.GetByID(ctx, tag.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Name != "owner/me" || unchanged.Notes != "old notes" {
+		t.Fatalf("tag should be rolled back, got %+v", unchanged)
+	}
+	if _, err := s.Tag.GetByName(ctx, "owner/family"); err == nil {
+		t.Fatal("renamed tag should not exist after rollback")
+	}
+}
+
 func accountTagNames(t *testing.T, accounts AccountService, accountID int64, effective bool) []string {
 	t.Helper()
 	var (
