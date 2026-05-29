@@ -79,3 +79,7 @@
 - should put explanations in the help for each screen, explaining rationale behind different choices
 
 - apparently this is a thing: Forward-Filling (Step Interpolation), that i sort of re-invented
+
+- an interesting analogy of only having bank account snapshots is that we're treating bank account like stock price
+
+- start/end and high/low is apparently re-inventing OHLC (open high low close) candle charts in investing
