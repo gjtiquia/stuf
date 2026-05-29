@@ -488,7 +488,7 @@ func (a App) selectChildAccountInList(path, name string) App {
 	return a.navReplace(path, idx)
 }
 
-func accountSummary(rows []accountListRow, appCurrency string, filtered bool) string {
+func accountSummaryValues(rows []accountListRow, appCurrency string) []string {
 	total := money.Money{Scale: 2}
 	if len(rows) > 0 {
 		total = money.Money{Scale: rows[0].Amount.Scale}
@@ -514,33 +514,11 @@ func accountSummary(rows []accountListRow, appCurrency string, filtered bool) st
 	if hasOffBudget {
 		offBudgetCell = component.MoneyCell(offBudgetTotal, appCurrency)
 	}
-	values := alignedMoneyValues(totalCell, onBudgetCell, offBudgetCell)
-	var lines []string
-	label := "total"
-	if filtered {
-		label = "filtered total"
-	}
-	lines = append(lines, fmt.Sprintf("%-12s: %s", label, values[0]))
-	lines = append(lines, fmt.Sprintf("on-budget   : %s", values[1]))
-	lines = append(lines, fmt.Sprintf("off-budget  : %s", values[2]))
-	return strings.Join(lines, "\n")
-}
-
-func (a App) accountListContext() string {
-	allRows, err := a.accountListRowsWithFilter(a.listFilter())
-	if err != nil {
-		return "error: " + err.Error()
-	}
-	return accountSummary(allRows, a.Config.Config.Currency, strings.TrimSpace(a.listFilter()) != "")
+	return alignedMoneyValues(totalCell, onBudgetCell, offBudgetCell)
 }
 
 func (a App) accountList() string {
-	context := a.accountListContext()
-	body := a.accountListBody()
-	if context == "" {
-		return body
-	}
-	return context + "\n\n" + body
+	return a.accountListBody()
 }
 
 func (a App) accountListBody() string {

@@ -139,6 +139,8 @@ func TestAccountListRenderOrder(t *testing.T) {
 	assertRenderOrder(t, view,
 		"# stuf",
 		"as-of       : none [!]",
+		"on-budget   : HKD 0.00",
+		"off-budget  : HKD 0.00",
 		"total       : HKD 0.00",
 		"on-budget net changes",
 		"2026-05     : HKD 0.00",
@@ -147,8 +149,6 @@ func TestAccountListRenderOrder(t *testing.T) {
 		"on-budget lows",
 		"2026-05     : HKD 0.00",
 		"/accounts/list/",
-		"on-budget   : HKD 0.00",
-		"off-budget  : HKD 0.00",
 		"showing : non-hidden",
 		"> filter : (type anything...)",
 		"---",
@@ -243,8 +243,9 @@ func TestAccountsListSummaryNavigation(t *testing.T) {
 			t.Fatalf("list summary empty state missing %q:\n%s", want, view)
 		}
 	}
-	assertOrdered(t, view, "total       : HKD 0.00", "\n/accounts/list/\n\ntotal       : HKD 0.00")
-	assertOrdered(t, view, "off-budget  : HKD 0.00", "\n> filter : (type anything...)")
+	assertOrdered(t, view, "off-budget  : HKD 0.00", "on-budget net changes")
+	assertOrdered(t, view, "total       : HKD 0.00", "on-budget net changes")
+	assertOrdered(t, view, "\n/accounts/list/\n\nshowing : non-hidden", "\n> filter : (type anything...)")
 }
 
 func TestAccountsListSummaryTotals(t *testing.T) {
@@ -289,9 +290,12 @@ func TestAccountListFilteredSummaryCountsOnlyMatchedMoney(t *testing.T) {
 	app.Path = routeAccountList
 	app.Form[formKeyFilter] = "tag:wallet"
 	view := app.View()
-	assertViewContains(t, view, "filtered total", "> household", "household-cash", "wallet")
-	assertRenderOrder(t, view, "total       : HKD 100.00", "/accounts/list/", "filtered total")
-	if !strings.Contains(view, "filtered total: HKD 100.00") && !strings.Contains(view, "filtered total: HKD  100.00") {
+	assertViewContains(t, view, "> household", "household-cash", "wallet")
+	assertRenderOrder(t, view, "on-budget   : HKD 100.00", "off-budget  : HKD   0.00", "total       : HKD 100.00", "/accounts/list/", "showing : non-hidden")
+	if strings.Contains(view, "filtered total") {
+		t.Fatalf("filtered account list should not render duplicate summary labels:\n%s", view)
+	}
+	if !strings.Contains(view, "total       : HKD 100.00") && !strings.Contains(view, "total       : HKD  100.00") {
 		t.Fatalf("child-only tag filter should count only child money:\n%s", view)
 	}
 }
@@ -3493,8 +3497,8 @@ func TestAccountCreateTagFieldInlineCreateAndFilter(t *testing.T) {
 	}
 	assertViewContains(t, app.View(), "tags", "family/shared")
 	app = pressRunes(app, "tag:family/shared")
-	if view := app.View(); !strings.Contains(view, "filtered total") || !strings.Contains(view, "> cash") {
-		t.Fatalf("tag filter should match account and relabel totals:\n%s", view)
+	if view := app.View(); strings.Contains(view, "filtered total") || !strings.Contains(view, "> cash") {
+		t.Fatalf("tag filter should match account without relabeling totals:\n%s", view)
 	}
 }
 

@@ -27,9 +27,6 @@ func (a App) dashboardContextWithOwed(includeOwed bool) (string, error) {
 }
 
 func (a App) accountListDashboardContext() (string, error) {
-	if strings.TrimSpace(a.listFilter()) == "" {
-		return a.dashboardContextWithoutOwed()
-	}
 	rows, err := a.accountListRowsWithFilter(a.listFilter())
 	if err != nil {
 		return "", err
@@ -38,7 +35,7 @@ func (a App) accountListDashboardContext() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return formatDashboardContext(d, a.Config.Config.Currency, false), nil
+	return formatAccountListDashboardContext(d, a.Config.Config.Currency, rows), nil
 }
 
 func formatDashboardContext(d service.Dashboard, cur string, includeOwed bool) string {
@@ -73,6 +70,32 @@ you owe ppl : %s
 ppl owe you : %s`, owed[0], owed[1])
 	}
 	body += "\n" + warnings
+	return strings.TrimRight(body, "\n")
+}
+
+func formatAccountListDashboardContext(d service.Dashboard, cur string, rows []accountListRow) string {
+	summaryValues := accountSummaryValues(rows, cur)
+	values := alignedMoneyValues(
+		component.MoneyCell(d.NetChanges[0].Change, cur),
+		component.MoneyCell(d.NetChanges[1].Change, cur),
+		component.MoneyCell(d.NetChanges[2].Change, cur),
+		component.MoneyCell(d.HighToLows[0].Drop, cur),
+		component.MoneyCell(d.HighToLows[1].Drop, cur),
+		component.MoneyCell(d.HighToLows[2].Drop, cur),
+		component.MoneyCell(d.Lows[0].Low, cur),
+		component.MoneyCell(d.Lows[1].Low, cur),
+		component.MoneyCell(d.Lows[2].Low, cur),
+	)
+	body := fmt.Sprintf(`as-of       : %s
+
+on-budget   : %s
+off-budget  : %s
+total       : %s
+
+%s`, dashboardAsOf(d), summaryValues[1], summaryValues[2], summaryValues[0], dashboardSectionsWithValues(d, "on-budget ", values))
+	if warnings := dashboardWarnings(d.Warnings); warnings != "" {
+		body += "\n" + warnings
+	}
 	return strings.TrimRight(body, "\n")
 }
 

@@ -6,26 +6,10 @@
 
 - rename to steph
 - design the help popup UI
-- tags should allow "/" in it, for some sort of hierarchy / category of tags, for future query
 
 ---
 
 ## feature TODOs
-
-- accounts should have tags
-    - husband accounts, wife accounts, shared accounts, credit cards, debit cards, HKD only, CAD only
-    - sometimes i just want to see my own accounts performances
-    - sometimes i want to see just my wife's
-    - sometimes i want to see the shared account performance
-    - implementation... 
-        - in accounts list
-            - https://docs.github.com/en/enterprise-cloud@latest/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests#about-search-terms
-            - copying syntax from github, singular:, comma = OR, space = AND
-            - OR  : tag:me,wife
-            - AND : tag:me tag:wife
-            - eg. : tag:me currency:HKD
-        - should allow editing tag names, defer tag deletion
-            - ctrl+t in accounts list, edits account tags, shows a filterable list of tags, where we can type to search (or up/down navigate), then ctrl+e to edit
 
 ---
 
@@ -36,9 +20,8 @@
 
 ---
 
-## bug fix TODOs
+## non-critical bug fix TODOs
 
-- negative amount parenthesis should clamp over the numbers
 - edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
 - edit balance amount cannot move cursor to insert
 - edit negative balance amount, type "-" should not immediately add 0 at the end
@@ -91,3 +74,7 @@
 - an interesting analogy of only having bank account snapshots is that we're treating bank account like stock price
 
 - start/end and high/low is apparently re-inventing OHLC (open high low close) candle charts in investing
+
+- tags like github
+    - https://docs.github.com/en/enterprise-cloud@latest/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests#about-search-terms
+
