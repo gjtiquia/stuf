@@ -361,6 +361,13 @@ account flow decisions
 - in forms, numbers are visual labels only
 - account names are strict slugs
 - fresh app does not seed tags
+- tags are shared metadata across accounts and transactions
+- account tags inherit down the account tree for filtering and list display
+- direct tags are tags assigned directly to a record
+- effective account tags are direct account tags plus inherited parent account tags
+- account tag inheritance has no per-child exclusion for v1
+- if inherited behavior is unwanted, move the tag from the parent to selected children
+- child account direct tags are still editable independently from inherited parent tags
 - accounts have exactly one currency for v1
 - multi-currency institutions can be modeled as parent accounts with child accounts
 - balance entries inherit account currency
@@ -443,16 +450,22 @@ cross-cutting data rules
 - notes are plain text
 - notes can be multiline
 - notes have no markdown semantics for v1
-- tags are transaction-only for v1
-- tag names are strict slugs
+- tags are shared metadata across supported records
+- tags use separate join tables per record type, for example account_tags and transaction_tags
+- tag names are strict slugs with slash hierarchy support
 - tags have immutable internal ids
 - tag names are globally unique
 - tags can be renamed
+- tag rename is a first-class undoable mutation
 - tags have notes
 - fresh app does not seed tags
 - tags are not hidden for v1
 - tag hiding is not planned unless real usage shows a need
 - tag deletion is deferred for v1
+- direct tags are tags assigned directly to a record
+- effective account tags are direct account tags plus inherited parent account tags
+- account tag inheritance has no per-child exclusion for v1
+- transaction tags do not inherit account tags by default
 - transaction parent is nullable
 - any transaction can have a parent transaction
 - transaction tree depth is unlimited conceptually
@@ -507,10 +520,11 @@ v1 edge rules before schema
 - income parents can only have income children in v1 UI
 - deleting a transaction with children is blocked in v1
 - user must delete children before deleting the parent transaction
-- tags are transaction-only for v1
+- tags are shared metadata across accounts and transactions
 - notes are the general breadcrumb field across records
-- tags are primarily for transaction filtering/querying
-- use transaction_tags join table for v1
+- tags are primarily for filtering/querying and reusable meaning
+- accounts use account_tags for v1
+- transactions use transaction_tags when transactions land
 - future taggable records can add their own join tables
 - each owed item has exactly one currency
 - different owed items can use different currencies
@@ -701,24 +715,24 @@ showing     : non-hidden
 > filter    : (type anything...)
 
     on-budget accounts
-    name             | balance                         | notes
-    TOTAL            | HKD  50,000.00                  |
+    name             | balance                         | notes        | tags
+    TOTAL            | HKD  50,000.00                  |              |
 
-  > hsbc-one         | HKD  47,400.00                  |
-      hsbc-hkd       | HKD  35,000.00                  | daily cash
-      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |
-      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |
+  > hsbc-one         | HKD  47,400.00                  |              | owner/me, region/hk
+      hsbc-hkd       | HKD  35,000.00                  | daily cash   | owner/me, region/hk
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |              | owner/me, region/hk
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |              | owner/me, region/hk
 
-    wallet           | HKD   2,600.00                  |
+    wallet           | HKD   2,600.00                  |              | owner/me
 
     off-budget accounts
-    name             | balance                         | notes
-    TOTAL            | HKD 500,000.00                  |
+    name             | balance                         | notes        | tags
+    TOTAL            | HKD 500,000.00                  |              |
 
-    investment       | HKD 500,000.00                  | broker total
-      investment-usd | HKD 320,000.00 (USD 41,025.64)  |
-      investment-hkd | HKD 100,000.00                  |
-      remaining      | HKD  80,000.00                  |
+    investment       | HKD 500,000.00                  | broker total | owner/me, kind/investment
+      investment-usd | HKD 320,000.00 (USD 41,025.64)  |              | owner/me, kind/investment
+      investment-hkd | HKD 100,000.00                  |              | owner/me, kind/investment
+      remaining      | HKD  80,000.00                  |              |
 
 ---
 type          : filter
@@ -728,6 +742,7 @@ left/right    : back/open
 enter         : confirm
 ctrl+n        : new
 ctrl+e        : edit
+ctrl+t        : tags
 ctrl+h        : hidden
 esc           : back
 ?             : help
@@ -759,6 +774,8 @@ esc           : back
   3) on-budget : true
 
   4) notes     :
+
+  5) tags      : []
 
   [confirm]
 
@@ -794,6 +811,8 @@ esc     : back
 
   4) notes     :
 
+  5) tags      : []
+
   [confirm]
 
 ---
@@ -827,6 +846,8 @@ esc        : back
 
   4) notes     :
 
+  5) tags      : []
+
   [confirm]
 
 ---
@@ -855,6 +876,8 @@ esc     : back
 
 > 4) notes     : (type anything...)
 
+  5) tags      : []
+
   [confirm]
 
 ---
@@ -864,6 +887,55 @@ enter       : confirm
 shift-enter : newline
 esc         : back
 ?           : help
+```
+
+- for tags input
+- tags input is a select input component
+- multi-select = true, can-filter = true, can-create = true, default = []
+- account tags use the same shared tag vocabulary as transactions
+- if no exact match for the filter exists, show create as the last option
+- inline-created tags use the typed slug and empty notes
+- add asterisk for new tags until submit
+- tags already added should not show up in the tag option list
+- account create submits the account, inline-created tags, and account tag assignments as one undoable service-level mutation
+- account edit with tags submits account field changes, inline-created tags, and account_tags changes as one undoable service-level mutation
+- if any part of account create/edit with tags fails, the whole mutation fails
+
+```
+# stuf
+
+/accounts/create/
+
+  1) name      : hsbc-one
+
+  2) currency  : HKD
+
+  3) on-budget : true
+
+  4) notes     :
+
+> 5) tags      : []
+
+   > filter    : owner
+
+     > owner/me
+       owner/wife
+       (create new "owner")
+
+     [03/03]
+
+  [confirm]
+
+---
+type       : filter
+h/l        : type in filter
+up/down    : move cursor
+left/right : next/prev page
+enter      : confirm
+backspace  : delete last tag
+tab        : navigate
+esc        : back
+?          : help
 ```
 
 - on the last option "confirm", note the change in keyboard shortcuts
@@ -881,6 +953,8 @@ esc         : back
   3) on-budget : true
 
   4) notes     :
+
+  5) tags      : [owner/me, region/hk]
 
 > [confirm]
 
@@ -932,6 +1006,14 @@ esc         : back
 - accounts list should be filterable
 - perhaps can reuse the multi-select component... or multi-select component should be built from reusable components that this can use
 - filterable because there can be a LOT of accounts
+- plain text account filtering searches account name, notes, effective tag names, currency code, and currency name
+- structured account filters can use GitHub-style terms
+- space between structured terms means AND
+- comma inside one structured term means OR
+- bare words search text-like fields
+- `tag:me,wife` matches accounts with me OR wife
+- `tag:me tag:wife` matches accounts with me AND wife
+- `currency:HKD` matches the account currency code
 - listed alphabetically by default... think about alternative sorting in the future but, alphabetical works as a good default cuz, can just rename them with number prefixes
 - split by on/off budget, but arrow keys and filters should filter both
     - hide either category if no search results for either one
@@ -939,6 +1021,11 @@ esc         : back
 
 - here we should also be able to have a birds eye view of account stuff like totals
 - accounts list shows a summary above the filter/table with total, on-budget, and off-budget totals
+- accounts list shows effective account tags in the rightmost column
+- effective account tags include direct tags plus inherited parent tags
+- accounts list does not visually distinguish direct and inherited tags
+- account detail and edit views can show direct and inherited tags separately
+- ctrl+t from /accounts/list/ opens /tags/list/ to manage the shared tag vocabulary
 
 - do note that history is added!
 - visible history above is shown for the current session only
@@ -996,24 +1083,24 @@ showing     : non-hidden
 > filter    : (type anything...)
 
     on-budget accounts
-    name             | balance                         | notes
-    TOTAL            | HKD  50,000.00                  |
+    name             | balance                         | notes        | tags
+    TOTAL            | HKD  50,000.00                  |              |
 
-  > hsbc-one         | HKD  47,400.00                  |
-      hsbc-hkd       | HKD  35,000.00                  | daily cash
-      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |
-      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |
+  > hsbc-one         | HKD  47,400.00                  |              | owner/me, region/hk
+      hsbc-hkd       | HKD  35,000.00                  | daily cash   | owner/me, region/hk
+      hsbc-usd       | HKD   7,800.00 (USD 1,000.00)   |              | owner/me, region/hk
+      hsbc-cad       | HKD   4,600.00 (CAD   800.00)   |              | owner/me, region/hk
 
-    wallet           | HKD   2,600.00                  |
+    wallet           | HKD   2,600.00                  |              | owner/me
 
     off-budget accounts
-    name             | balance                         | notes
-    TOTAL            | HKD 500,000.00                  |
+    name             | balance                         | notes        | tags
+    TOTAL            | HKD 500,000.00                  |              |
 
-    investment       | HKD 500,000.00                  | broker total
-      investment-usd | HKD 320,000.00 (USD 41,025.64)  |
-      investment-hkd | HKD 100,000.00                  |
-      remaining      | HKD  80,000.00                  |
+    investment       | HKD 500,000.00                  | broker total | owner/me, kind/investment
+      investment-usd | HKD 320,000.00 (USD 41,025.64)  |              | owner/me, kind/investment
+      investment-hkd | HKD 100,000.00                  |              | owner/me, kind/investment
+      remaining      | HKD  80,000.00                  |              |
 
 ---
 type          : filter
@@ -1023,6 +1110,7 @@ left/right    : back/open
 enter         : confirm
 ctrl+n        : new
 ctrl+h        : hidden
+ctrl+t        : tags
 esc           : back
 ?             : help
 ```
@@ -1050,6 +1138,9 @@ children    : HKD 47,400.00
 remaining   : HKD      0.00
 as of       : 2026-05-21
 on-budget   : true
+tags        : [owner/me, region/hk]
+direct tags : [owner/me, region/hk]
+inherited   : []
 notes       :
 
 /accounts/hsbc-one/
@@ -1068,6 +1159,7 @@ esc     : back
 ```
 
 - hide/show is available for all accounts
+- account detail shows effective tags plus direct/inherited tag breakdown
 - delete account is shown only when the account is empty
 - empty account means no balances and no child accounts
 - future transaction support should also make accounts with transactions non-empty
@@ -1176,6 +1268,8 @@ on-budget      : false
 
   3) notes     :
 
+  4) tags      : []
+
   [confirm]
 
 ---
@@ -1189,6 +1283,7 @@ esc     : back
 - child account creation uses the normal account creation behavior with parent context
 - child account on-budget status is inherited from the parent account
 - inherited on-budget status is shown in context, not as an editable form field
+- inherited tags are shown in context/detail, but only direct child tags are edited in the child form
 - after child account create success, goes to /accounts/{parent}/children/list/ automatically
 
 ```
@@ -1286,6 +1381,10 @@ history (ctrl-z to undo)
 
   4) notes     :
 
+  5) tags      : [kind/debit-card]
+
+  inherited    : [owner/me, region/hk]
+
   [confirm]
 
 ---
@@ -1315,6 +1414,10 @@ history (ctrl-z to undo)
 
   4) notes     :
 
+  5) tags      : [kind/debit-card]
+
+  inherited    : [owner/me, region/hk]
+
   [confirm]
 
 ---
@@ -1336,6 +1439,9 @@ name        : hsbc-main
 balance     : HKD 0.00
 as of       : (no balance entered yet)
 on-budget   : true
+tags        : []
+direct tags : []
+inherited   : []
 notes       :
 
 /accounts/hsbc-main/
@@ -1599,8 +1705,8 @@ showing  : hidden-only
 
 > filter : (type anything...)
 
-  name        | balance      | notes
-> old-account | HKD    0.00  | closed account
+  name        | balance      | notes          | tags
+> old-account | HKD    0.00  | closed account | owner/me
 
 ---
 type          : filter
@@ -1611,6 +1717,7 @@ enter         : confirm
 ctrl+n        : new
 ctrl+e        : edit
 ctrl+h        : hidden
+ctrl+t        : tags
 esc           : back
 ?             : help
 ```
@@ -1623,6 +1730,7 @@ balance   : HKD 0.00
 as of     : 2026-05-21
 on-budget : true
 hidden    : true
+tags      : [owner/me]
 notes     : closed account
 
 /accounts/old-account/
@@ -1647,14 +1755,15 @@ esc     : back
 
 ### tags
 
-- tags are transaction breadcrumbs for v1
+- tags are shared breadcrumbs for accounts and transactions
 - notes are the general breadcrumb field across records
-- tags are primarily for transaction filtering/querying
+- tags are primarily for filtering/querying and reusable meaning
 - fresh app does not seed tags
-- tag names are strict slugs
+- tag names are strict slugs with slash hierarchy support
 - tag names are globally unique
 - tags have immutable internal ids
 - renaming a tag updates displays because records link to the immutable tag id
+- renaming a tag records history and can be undone in the current session
 - tags have plain-text multiline notes
 - tags are not hidden for v1
 - tag hiding is not planned unless real usage shows a need
@@ -1663,10 +1772,17 @@ esc     : back
 - accounts and budgets can be hidden because their lists are small and stale entries create significant noise
 - tags are high-volume metadata, so hiding them would add lifecycle complexity without clear value
 - tag deletion is deferred for v1
-- transaction_tags join table is enough for v1
+- account_tags is used for account tag assignment
+- transaction_tags is used for transaction tag assignment when transactions land
 - future taggable records can add their own join tables
 - tag management is not shown on the dashboard for v1
 - tag routes are still direct URL/path targets
+- ctrl+t from /accounts/list/ opens /tags/list/
+- account filters match direct and inherited parent tags
+- transaction filters use directly assigned transaction tags
+- transaction tags do not inherit account tags by default
+- account create/edit with tags is one undoable service-level mutation
+- inline-created tags, record changes, and join-table changes succeed or fail together
 
 ```
 # stuf
@@ -1770,6 +1886,8 @@ esc     : back
 tag validation
 - name is required
 - name must be a strict slug
+- name can include slash hierarchy, for example owner/me or kind/credit-card
+- name cannot start with slash, end with slash, or contain empty slash segments
 - name must be globally unique
 - notes are optional
 
