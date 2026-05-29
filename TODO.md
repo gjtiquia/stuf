@@ -18,12 +18,16 @@
 - seeing the allocation diffs of budgets is also a good indicator of whether i allocated enough
 - cuz i can somewhat anticipate
 
+- an edge case i eventually need to handle is... when im with my wife, i should be doing our finances tgt. 
+- when back to long D, i need to be able to manage my own (while somewhat keeping track of hers)
+
 ---
 
 ## design TODOs
 
 - rename to steph
 - design the help popup UI
+
 
 ---
 
@@ -33,6 +37,11 @@
 
 ## enhancement TODOs
 
+### budgets
+- definitely useful to see the available money in the dashboard, feeling like doing mental math and, seeing "total" on the very top is kind of a lie
+- entering on a budget should directly go to... allocation list..? tho accounts goes to account details first... hmmm...
+
+### reports
 - reports should add month start/end, so can calculate the cashflow for that month
 - reports should include these trends but for longer duration too, for a more holistic view, probably in lists form
 
@@ -40,9 +49,13 @@
 
 ## non-critical bug fix TODOs
 
+### accounts
 - edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
 - edit balance amount cannot move cursor to insert
 - edit negative balance amount, type "-" should not immediately add 0 at the end
+
+### budgets
+- category input super buggy
 
 ---
 
