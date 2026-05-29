@@ -1914,7 +1914,8 @@ deferred tags
 - budgets behave like proxy accounts for on-budget money
 - creating a budget is separate from allocating money to it
 - budgeted = sum of budget balances converted to app currency
-- available = on-budget balance - budgeted - open you-owe remaining
+- available = on-budget balance - budgeted
+- once owed tracking exists, available also subtracts open you-owe remaining
 - available can be negative
 - negative available means money has been spent/allocated/owed beyond current on-budget money
 - money ppl owe you does not increase available until it appears in on-budget balances
@@ -1926,12 +1927,15 @@ deferred tags
 - budget list currency display follows account-list rules
 - budget detail does not show a separate currency field because money prefixes imply it
 - every budget belongs to exactly one category
+- budget categories are grouping labels, not envelopes/proxy accounts
+- budget categories are not allocatable
+- budget categories are exactly one level deep
 - budget categories use strict slugs
 - budget categories are globally unique
 - categories are user-created
 - categories can exist without budgets
 - categories are not hidden for v1
-- seed built-in category `uncategorized`
+- seed built-in category `uncategorized` in the budget schema migration
 - `uncategorized` cannot be deleted or renamed for v1
 - newly-created budgets default to `uncategorized`
 - normal categories are shown even when empty
@@ -1945,34 +1949,17 @@ hide lifecycle
 - hidden items can be shown/unhidden from hidden menus
 - deletion is deferred for v1
 
-```
-# stuf
-
-on-budget  : HKD 50,000.00
-budgeted   : HKD  3,000.00
-available  : HKD 47,000.00
-
-/budgets/
-
-> 1) overview
-  2) list
-  3) categories
-  4) hidden
-  5) create
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
+- home budgets opens `/budgets/list/` directly, matching accounts and account balances
 - budget list is grouped by category
 - budget list follows accounts-list currency display rules
 - `uncategorized` section is omitted when empty
 
 ```
 # stuf
+
+on-budget : HKD 50,000.00
+budgeted  : HKD  3,000.00
+available : HKD 47,000.00
 
 /budgets/list/
 
@@ -2175,13 +2162,13 @@ esc     : back
 - currency options come from the currency table
 - category can be created inline
 - create budget and edit budget share the same form/input components
-- create budget can configure optional default allocation and saving goal
-- setting default allocation does not create an allocation
-- setting a saving goal does not create an allocation
 - allocation itself is still separate from budget creation
 - edit budget is pre-filled with existing budget data
 - currency is locked if allocations or linked transactions exist
-- edit budget configures default allocation and saving goal for v1
+- default allocations and goals are deferred for the first budget slice
+- future budget create/edit can configure optional default allocation and saving goal
+- setting default allocation does not create an allocation
+- setting a saving goal does not create an allocation
 - has default allocation controls whether default allocation fields are shown
 - turning has default allocation from true to false removes the default allocation on confirm
 - has goal controls whether goal fields are shown
@@ -2190,6 +2177,8 @@ esc     : back
 - has goal true requires goal target amount and goal target month
 - optional dependent fields are hidden when their toggle is false
 - apply default allocation is shown only when has default allocation is true
+
+future budget planning create/edit mockups:
 
 ```
 # stuf
@@ -2398,7 +2387,10 @@ allocations
 - allocation entries are deltas internally
 - UI supports set total, add money, remove money
 - set total calculates the corresponding delta internally
+- set total calculates its delta from the running balance immediately before the new allocation
 - allocation date defaults to today
+- multiple allocations on the same date are allowed
+- allocation running balances sort by date, then created_at, then id
 - allocation history should show both change and resulting balance
 
 ```
@@ -2510,7 +2502,7 @@ default allocations
 - default allocation is optional
 - default allocation is a suggested monthly amount
 - default allocation is in budget currency
-- default allocation does not auto-allocate money for v1
+- default allocation does not auto-allocate money
 - default allocation helps future monthly allocation flows
 - apply default allocation = creates an allocation using the configured default allocation amount
 
@@ -2546,6 +2538,7 @@ deferred budgets
 - budget deletion
 - category deletion
 - category hiding
+- default allocations and saving goals
 - detailed category management beyond create/edit
 - recurring/monthly allocation flow
 - yearly expense allocation flow
@@ -3456,17 +3449,17 @@ deferred reports
 
 ### yearly budgeting
 
-- yearly budgeting is handled through saving goals and default allocations for v1
+- yearly budgeting is handled through saving goals and default allocations later
 - a yearly expense is modeled as a budget with target amount and target month
 - monthly needed tells the user how much to allocate
 - budgets remain global/carry-over, not month-bound
-- no separate yearly budget object is needed for v1
+- no separate yearly budget object is needed
 
 ### saving goals
 
 - saving goals live under budgets
 - saving goal is optional
-- one active saving goal per budget for v1
+- one active saving goal per budget
 - saving goal currency is budget currency
 - saving goals do not make budgets month-bound
 - saving goals recommend allocations but do not auto-allocate money
@@ -3474,8 +3467,8 @@ deferred reports
 - saving goal = where am i trying to get to?
 - default allocation = what do i normally put in each month?
 - apply default allocation = create an allocation using the configured default allocation amount
-- saving goals are configured through edit budget for v1
-- there is no separate goal action/page for v1
+- saving goals are configured through edit budget when implemented
+- there is no separate goal action/page
 - has goal toggles goal fields in edit budget
 - turning has goal from true to false removes the goal on confirm
 - target amount and target month are required
@@ -3522,7 +3515,7 @@ esc     : back
 
 - goal fields are shown on budget detail when has goal is true
 - goal fields are hidden on budget detail when has goal is false
-- edit budget is the create/edit/remove flow for saving goals in v1
+- edit budget is the create/edit/remove flow for saving goals when implemented
 
 deferred saving goals
 - goals overview
