@@ -29,6 +29,25 @@ type Account struct {
 	UpdatedAt  string
 }
 
+type Tag struct {
+	ID        int64
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type TagDuplicateNameError struct {
+	Name string
+}
+
+func (e *TagDuplicateNameError) Error() string {
+	if e.Name == "" {
+		return "tag already exists; choose another name"
+	}
+	return fmt.Sprintf("tag already exists: %s; choose another name", e.Name)
+}
+
 type AccountDuplicateNameError struct {
 	Name string
 }

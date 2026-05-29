@@ -40,7 +40,7 @@ func placeholder(value, fallback string) string {
 
 func placeholderFor(field string) string {
 	switch field {
-	case "name", "notes":
+	case "name", "tag-name", "notes":
 		return "(type anything...)"
 	case "balance":
 		return "(type amount...)"
@@ -57,6 +57,8 @@ func normalizeFieldValue(field, value string) string {
 	switch field {
 	case "name":
 		return sanitizeSlug(value)
+	case "tag-name":
+		return sanitizeTagSlug(value)
 	case "date":
 		return sanitizeDateInput(value)
 	case "balance":
@@ -137,6 +139,31 @@ func sanitizeSlug(input string) string {
 	return b.String()
 }
 
+func sanitizeTagSlug(input string) string {
+	var b strings.Builder
+	lastSlash := false
+	for _, r := range input {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r + ('a' - 'A'))
+			lastSlash = false
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+			lastSlash = false
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastSlash = false
+		case r == '-':
+			b.WriteRune(r)
+			lastSlash = false
+		case r == '/' && b.Len() > 0 && !lastSlash:
+			b.WriteRune(r)
+			lastSlash = true
+		}
+	}
+	return b.String()
+}
+
 func parseBoolDefault(value string, fallback bool) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "true", "yes", "1", "on":
@@ -157,12 +184,13 @@ func indexOf(values []string, needle string) int {
 	return -1
 }
 
-func accountFormValues(name, code string, onBudget bool, notes string) map[string]string {
+func accountFormValues(name, code string, onBudget bool, notes string, tags []string) map[string]string {
 	return map[string]string{
 		"name":      name,
 		"currency":  code,
 		"on-budget": fmt.Sprintf("%t", onBudget),
 		"notes":     notes,
+		"tags":      joinTagNames(tags),
 	}
 }
 

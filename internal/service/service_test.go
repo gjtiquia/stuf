@@ -22,7 +22,7 @@ func serviceStack(t *testing.T) (*repo.Store, AccountService, BalanceService, Da
 	t.Cleanup(func() { _ = s.Close() })
 	s.Clock = func() time.Time { return time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC) }
 	h := HistoryService{Repo: s.Hist, Now: s.Clock}
-	a := AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, History: h, AppCurrency: "HKD"}
+	a := AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"}
 	b := BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h}
 	d := DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock}
 	return s, a, b, d, h
@@ -119,6 +119,135 @@ func TestAccountInvalidCurrencyReturnsFriendlyError(t *testing.T) {
 	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
 		t.Fatalf("invalid currency update error = %q", got)
 	}
+}
+
+func TestAccountTagsCreateEditInheritanceAndUndo(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, _, _, history := serviceStack(t)
+	parent, _, err := accounts.CreateWithTags(ctx, "household", "HKD", true, "", []string{"family/shared", "wallet", "wallet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(accountTagNames(t, accounts, parent.ID, false)) != 2 {
+		t.Fatalf("duplicate tags should be suppressed, got %v", accountTagNames(t, accounts, parent.ID, false))
+	}
+	child, _, err := accounts.CreateChildWithTags(ctx, parent.ID, "household-cash", "HKD", "", []string{"cash"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(accountTagNames(t, accounts, child.ID, true), ","); got != "cash,family/shared,wallet" {
+		t.Fatalf("child effective tags = %s", got)
+	}
+	updated, editEntry, err := accounts.UpdateWithTags(ctx, child.ID, child.Name, child.Code, child.OnBudget, child.Hidden, "tiny wallet", []string{"wallet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Notes != "tiny wallet" {
+		t.Fatalf("notes were not updated: %+v", updated)
+	}
+	if got := strings.Join(accountTagNames(t, accounts, child.ID, false), ","); got != "wallet" {
+		t.Fatalf("child direct tags after edit = %s", got)
+	}
+	if err := history.Undo(ctx, editEntry); err != nil {
+		t.Fatal(err)
+	}
+	child, err = accounts.GetByName(ctx, "household-cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Notes != "" || strings.Join(accountTagNames(t, accounts, child.ID, false), ",") != "cash" {
+		t.Fatalf("undo should restore notes and direct tags: child=%+v tags=%v", child, accountTagNames(t, accounts, child.ID, false))
+	}
+	temp, entry, err := accounts.CreateWithTags(ctx, "temporary", "HKD", true, "", []string{"one-off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := accounts.CreateWithTags(ctx, "other", "HKD", true, "", []string{"one-off"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Undo(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Acct.GetByID(ctx, temp.ID); err == nil {
+		t.Fatal("tagged account should be undone")
+	}
+	if _, err := s.Tag.GetByName(ctx, "one-off"); err != nil {
+		t.Fatal("inline-created tag should remain if another account now uses it")
+	}
+	if got := strings.Join(accountTagNames(t, accounts, other.ID, false), ","); got != "one-off" {
+		t.Fatalf("other account should keep shared tag, got %s", got)
+	}
+	unused, unusedEntry, err := accounts.CreateWithTags(ctx, "unused-tag-account", "HKD", true, "", []string{"unused-inline"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Undo(ctx, unusedEntry); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Acct.GetByID(ctx, unused.ID); err == nil {
+		t.Fatal("unused tag account should be undone")
+	}
+	if _, err := s.Tag.GetByName(ctx, "unused-inline"); err == nil {
+		t.Fatal("unused inline-created tag should be undone when account create is undone")
+	}
+}
+
+func TestTagValidationRenameAndUndo(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, _, _, history := serviceStack(t)
+	tags := TagService{Store: s, Tags: s.Tag, History: history}
+	if _, _, err := tags.Create(ctx, "bad//tag", ""); err == nil {
+		t.Fatal("expected invalid slash form")
+	}
+	if _, _, err := tags.Create(ctx, "bad/", ""); err == nil {
+		t.Fatal("expected trailing slash to be invalid")
+	}
+	tag, _, err := tags.Create(ctx, "family/shared", "old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, _, err := accounts.CreateWithTags(ctx, "cash", "HKD", true, "", []string{"family/shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renamed, entry, err := tags.Update(ctx, tag.ID, "family/core", "new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.ID != tag.ID {
+		t.Fatal("tag rename should preserve tag id")
+	}
+	if got := strings.Join(accountTagNames(t, accounts, account.ID, true), ","); got != "family/core" {
+		t.Fatalf("account should display renamed tag through id, got %s", got)
+	}
+	if err := history.Undo(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(accountTagNames(t, accounts, account.ID, true), ","); got != "family/shared" {
+		t.Fatalf("undo should restore old tag name, got %s", got)
+	}
+}
+
+func accountTagNames(t *testing.T, accounts AccountService, accountID int64, effective bool) []string {
+	t.Helper()
+	var (
+		tags []repo.Tag
+		err  error
+	)
+	if effective {
+		tags, err = accounts.ListEffectiveTags(context.Background(), accountID)
+	} else {
+		tags, err = accounts.ListDirectTags(context.Background(), accountID)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, len(tags))
+	for i, tag := range tags {
+		out[i] = tag.Name
+	}
+	return out
 }
 
 func TestChildAccountInheritsOnBudgetAndCannotDiverge(t *testing.T) {

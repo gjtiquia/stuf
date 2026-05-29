@@ -7,7 +7,7 @@ import (
 )
 
 func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
-	fields := []string{"name", "currency", "on-budget", "notes"}
+	fields := []string{"name", "currency", "on-budget", "notes", "tags"}
 	if isSubmitKey(s) {
 		a.clearCurrentTextCursor(fields)
 		return a, true
@@ -27,11 +27,14 @@ func (a App) accountFormKey(s string, locked map[string]bool) (App, bool) {
 	if a.Field == 2 {
 		return a.selectFieldKey(s, "on-budget", []string{"true", "false"}, fields)
 	}
+	if a.Field == 4 {
+		return a.tagFieldKey(s, fields)
+	}
 	return a.submitFormKey(s, fields)
 }
 
 func (a App) childAccountFormKey(s string, locked map[string]bool) (App, bool) {
-	fields := []string{"name", "currency", "notes"}
+	fields := []string{"name", "currency", "notes", "tags"}
 	if isSubmitKey(s) {
 		a.clearCurrentTextCursor(fields)
 		return a, true
@@ -47,6 +50,9 @@ func (a App) childAccountFormKey(s string, locked map[string]bool) (App, bool) {
 	}
 	if a.Field == 1 {
 		return a.currencyFieldKey(s, fields)
+	}
+	if a.Field == 3 {
+		return a.tagFieldKey(s, fields)
 	}
 	return a.submitFormKey(s, fields)
 }
@@ -266,6 +272,9 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 			value = locked[field]
 		}
 		renderedValue := placeholder(value, placeholderFor(field))
+		if field == "tags" {
+			renderedValue = formatTags(splitTagNames(value), splitTagNames(a.Form[newTagsKey]))
+		}
 		if field == "balance" && prefixes != nil && prefixes["balance"] != "" {
 			currency := prefixes["balance"]
 			if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
@@ -273,10 +282,14 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 			} else {
 				renderedValue = formatBalanceDisplay(value, currency)
 			}
-		} else if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
+		} else if field != "tags" && i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
 			renderedValue = renderCaret(value, placeholderFor(field), a.textCursor(field))
 		}
 		lines = append(lines, fmt.Sprintf("%s%d) %-9s: %s", prefix, i+1, field, renderedValue))
+		if i == a.Field && field == "tags" && (locked == nil || locked[field] == "") {
+			lines = append(lines, a.tagSelectLines()...)
+			continue
+		}
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
 			fieldOptions := options[field]

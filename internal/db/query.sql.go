@@ -10,6 +10,35 @@ import (
 	"database/sql"
 )
 
+const addAccountTag = `-- name: AddAccountTag :exec
+INSERT OR IGNORE INTO account_tags (account_id, tag_id, created_at)
+VALUES (?, ?, ?)
+`
+
+type AddAccountTagParams struct {
+	AccountID int64
+	TagID     int64
+	CreatedAt string
+}
+
+func (q *Queries) AddAccountTag(ctx context.Context, arg AddAccountTagParams) error {
+	_, err := q.db.ExecContext(ctx, addAccountTag, arg.AccountID, arg.TagID, arg.CreatedAt)
+	return err
+}
+
+const countAccountTagsByTagID = `-- name: CountAccountTagsByTagID :one
+SELECT count(*)
+FROM account_tags
+WHERE tag_id = ?
+`
+
+func (q *Queries) CountAccountTagsByTagID(ctx context.Context, tagID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAccountTagsByTagID, tagID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countBalancesByAccountID = `-- name: CountBalancesByAccountID :one
 SELECT count(*) FROM balances WHERE account_id = ?
 `
@@ -117,12 +146,44 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (s
 	)
 }
 
+const createTag = `-- name: CreateTag :execresult
+
+INSERT INTO tags (name, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateTagParams struct {
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// Tags
+func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createTag,
+		arg.Name,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
 const deleteAccount = `-- name: DeleteAccount :exec
 DELETE FROM accounts WHERE id = ?
 `
 
 func (q *Queries) DeleteAccount(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteAccount, id)
+	return err
+}
+
+const deleteAccountTagsByAccountID = `-- name: DeleteAccountTagsByAccountID :exec
+DELETE FROM account_tags WHERE account_id = ?
+`
+
+func (q *Queries) DeleteAccountTagsByAccountID(ctx context.Context, accountID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteAccountTagsByAccountID, accountID)
 	return err
 }
 
@@ -141,6 +202,15 @@ DELETE FROM history WHERE id = ?
 
 func (q *Queries) DeleteHistory(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteHistory, id)
+	return err
+}
+
+const deleteTag = `-- name: DeleteTag :exec
+DELETE FROM tags WHERE id = ?
+`
+
+func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTag, id)
 	return err
 }
 
@@ -416,6 +486,44 @@ func (q *Queries) GetLatestBalanceByAccount(ctx context.Context, accountID int64
 		&i.Date,
 		&i.Amount,
 		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTagByID = `-- name: GetTagByID :one
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+WHERE id = ?
+`
+
+func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagByID, id)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTagByName = `-- name: GetTagByName :one
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+WHERE name = ?
+`
+
+func (q *Queries) GetTagByName(ctx context.Context, name string) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagByName, name)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -818,6 +926,48 @@ func (q *Queries) ListDescendantAccounts(ctx context.Context, parentID sql.NullI
 	return items, nil
 }
 
+const listEffectiveTagsByAccountID = `-- name: ListEffectiveTagsByAccountID :many
+WITH RECURSIVE ancestors(id, parent_id) AS (
+  SELECT accounts.id, accounts.parent_id FROM accounts WHERE accounts.id = ?
+  UNION ALL
+  SELECT a.id, a.parent_id FROM accounts a JOIN ancestors x ON x.parent_id = a.id
+)
+SELECT DISTINCT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN account_tags at ON at.tag_id = t.id
+JOIN ancestors x ON x.id = at.account_id
+ORDER BY t.name
+`
+
+func (q *Queries) ListEffectiveTagsByAccountID(ctx context.Context, id int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listEffectiveTagsByAccountID, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listHistory = `-- name: ListHistory :many
 SELECT id, timestamp, action, path, old_data, new_data
 FROM history
@@ -905,6 +1055,78 @@ func (q *Queries) ListRootAccounts(ctx context.Context) ([]ListRootAccountsRow, 
 			&i.Scale,
 			&i.OnBudget,
 			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTags = `-- name: ListTags :many
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+ORDER BY name
+`
+
+func (q *Queries) ListTags(ctx context.Context) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTagsByAccountID = `-- name: ListTagsByAccountID :many
+SELECT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN account_tags at ON at.tag_id = t.id
+WHERE at.account_id = ?
+ORDER BY t.name
+`
+
+func (q *Queries) ListTagsByAccountID(ctx context.Context, accountID int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsByAccountID, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1177,6 +1399,29 @@ func (q *Queries) UpdateBalance(ctx context.Context, arg UpdateBalanceParams) er
 		arg.Date,
 		arg.Amount,
 		arg.Scale,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateTag = `-- name: UpdateTag :exec
+UPDATE tags
+SET name = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateTagParams struct {
+	Name      string
+	Notes     string
+	UpdatedAt string
+	ID        int64
+}
+
+func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) error {
+	_, err := q.db.ExecContext(ctx, updateTag,
+		arg.Name,
 		arg.Notes,
 		arg.UpdatedAt,
 		arg.ID,

@@ -10,15 +10,19 @@ import (
 )
 
 type accountListRow struct {
-	Name     string
-	Balance  component.Cell
-	Amount   money.Money
-	Notes    string
-	OnBudget bool
-	AsOf     string
-	Hidden   bool
-	Depth    int
-	Virtual  bool
+	Name         string
+	Balance      component.Cell
+	Amount       money.Money
+	Notes        string
+	Tags         []string
+	Currency     string
+	CurrencyName string
+	OnBudget     bool
+	AsOf         string
+	Hidden       bool
+	Depth        int
+	Virtual      bool
+	Match        bool
 }
 
 type accountVisibilityMode int
@@ -65,7 +69,7 @@ func (a App) accountCreateKey(s string) App {
 	name := strings.TrimSpace(next.Form["name"])
 	currency := strings.TrimSpace(next.Form["currency"])
 	onBudget := parseBoolDefault(next.Form["on-budget"], true)
-	acct, entry, err := next.Svc.Accounts.Create(next.ctx, name, currency, onBudget, next.Form["notes"])
+	acct, entry, err := next.Svc.Accounts.CreateWithTags(next.ctx, name, currency, onBudget, next.Form["notes"], splitTagNames(next.Form["tags"]))
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -108,7 +112,7 @@ func (a App) accountChildCreateKey(s, parentName string) App {
 	}
 	name := strings.TrimSpace(next.Form["name"])
 	currency := strings.TrimSpace(next.Form["currency"])
-	acct, entry, err := next.Svc.Accounts.CreateChild(next.ctx, parent.ID, name, currency, next.Form["notes"])
+	acct, entry, err := next.Svc.Accounts.CreateChildWithTags(next.ctx, parent.ID, name, currency, next.Form["notes"], splitTagNames(next.Form["tags"]))
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -156,7 +160,7 @@ func (a App) accountListKey(s string) App {
 		}
 		a.Error = ""
 		a = a.captureAccountListReturn(acct.Name)
-		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes, a.directTagNames(acct.ID))
 		a.Field = 0
 		return a.navPush(accountEditPathFor(acct.Name), 0)
 	}
@@ -164,6 +168,10 @@ func (a App) accountListKey(s string) App {
 		a.Error = ""
 		a.AccountVisible = a.AccountVisible.next()
 		return a.navSetMenu(clampListCursor(0, a.accountListRowCount()))
+	}
+	if s == "ctrl+t" {
+		a.Error = ""
+		return a.navPush(routeTagList, 0)
 	}
 	switch s {
 	case "left":
@@ -299,7 +307,7 @@ func (a App) accountDetailKey(s, name string) App {
 	case 2:
 		return a.navPush(accountTransactionsPath(name), 0)
 	case 3:
-		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes, a.directTagNames(acct.ID))
 		a.Field = 0
 		a.ListReturn = listReturnState{}
 		return a.navPush(accountEditPathFor(name), 0)
@@ -359,7 +367,7 @@ func (a App) accountChildrenListKey(s, parentName string) App {
 			return a
 		}
 		a = a.captureChildAccountListReturn(parentName, acct.Name)
-		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes)
+		a.Form = accountFormValues(acct.Name, acct.Code, acct.OnBudget, acct.Notes, a.directTagNames(acct.ID))
 		a.Field = 0
 		return a.navPush(accountEditPathFor(acct.Name), 0)
 	}
@@ -418,7 +426,7 @@ func (a App) accountEditKey(s, name string) App {
 	if acct.ParentID == nil {
 		onBudget = parseBoolDefault(next.Form["on-budget"], acct.OnBudget)
 	}
-	updated, entry, err := next.Svc.Accounts.Update(next.ctx, acct.ID, strings.TrimSpace(next.Form["name"]), strings.TrimSpace(next.Form["currency"]), onBudget, acct.Hidden, next.Form["notes"])
+	updated, entry, err := next.Svc.Accounts.UpdateWithTags(next.ctx, acct.ID, strings.TrimSpace(next.Form["name"]), strings.TrimSpace(next.Form["currency"]), onBudget, acct.Hidden, next.Form["notes"], splitTagNames(next.Form["tags"]))
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -479,7 +487,7 @@ func (a App) selectChildAccountInList(path, name string) App {
 	return a.navReplace(path, idx)
 }
 
-func accountSummary(rows []accountListRow, appCurrency string) string {
+func accountSummary(rows []accountListRow, appCurrency string, filtered bool) string {
 	total := money.Money{Scale: 2}
 	if len(rows) > 0 {
 		total = money.Money{Scale: rows[0].Amount.Scale}
@@ -507,21 +515,22 @@ func accountSummary(rows []accountListRow, appCurrency string) string {
 	}
 	values := alignedMoneyValues(totalCell, onBudgetCell, offBudgetCell)
 	var lines []string
-	lines = append(lines, fmt.Sprintf("total       : %s", values[0]))
+	label := "total"
+	if filtered {
+		label = "filtered total"
+	}
+	lines = append(lines, fmt.Sprintf("%-12s: %s", label, values[0]))
 	lines = append(lines, fmt.Sprintf("on-budget   : %s", values[1]))
 	lines = append(lines, fmt.Sprintf("off-budget  : %s", values[2]))
 	return strings.Join(lines, "\n")
 }
 
 func (a App) accountListContext() string {
-	if a.AccountVisible != accountVisibilityNonHidden {
-		return ""
-	}
-	allRows, err := a.accountListRowsWithFilter("")
+	allRows, err := a.accountListRowsWithFilter(a.listFilter())
 	if err != nil {
 		return "error: " + err.Error()
 	}
-	return accountSummary(allRows, a.Config.Config.Currency)
+	return accountSummary(allRows, a.Config.Config.Currency, strings.TrimSpace(a.listFilter()) != "")
 }
 
 func (a App) accountList() string {
@@ -558,6 +567,7 @@ func (a App) accountListBody() string {
 				component.TextCell(accountRowDisplayName(row)),
 				row.Balance,
 				component.TextCell(row.Notes),
+				component.TextCell(strings.Join(row.Tags, ", ")),
 			}
 			if a.AccountVisible == accountVisibilityAll {
 				hidden := ""
@@ -584,6 +594,7 @@ func accountListTableLayoutFor(rows []accountListRow, appCurrency string, includ
 				component.TextCell("TOTAL"),
 				component.MoneyCell(total, appCurrency),
 				component.TextCell(""),
+				component.TextCell(""),
 			}
 			if includeHiddenColumn {
 				cells = append(cells, component.TextCell(""))
@@ -596,6 +607,7 @@ func accountListTableLayoutFor(rows []accountListRow, appCurrency string, includ
 			component.TextCell(accountRowDisplayName(row)),
 			row.Balance,
 			component.TextCell(row.Notes),
+			component.TextCell(strings.Join(row.Tags, ", ")),
 		}
 		if includeHiddenColumn {
 			hidden := ""
@@ -606,7 +618,7 @@ func accountListTableLayoutFor(rows []accountListRow, appCurrency string, includ
 		}
 		tableRows = append(tableRows, cells)
 	}
-	headers := []string{"name", "balance", "notes"}
+	headers := []string{"name", "balance", "notes", "tags"}
 	if includeHiddenColumn {
 		headers = append(headers, "hidden")
 	}
@@ -619,11 +631,22 @@ func accountSectionTotal(rows []accountListRow, onBudget bool) (money.Money, boo
 	}
 	total := money.Money{Scale: rows[0].Amount.Scale}
 	found := false
+	skipDescendantsOfDepth := -1
 	for _, row := range rows {
-		if row.OnBudget != onBudget || row.Depth != 0 || row.Virtual {
+		if skipDescendantsOfDepth >= 0 && row.Depth > skipDescendantsOfDepth {
+			continue
+		}
+		if skipDescendantsOfDepth >= 0 && row.Depth <= skipDescendantsOfDepth {
+			skipDescendantsOfDepth = -1
+		}
+		if row.OnBudget != onBudget || !row.Match {
+			continue
+		}
+		if row.Virtual {
 			continue
 		}
 		found = true
+		skipDescendantsOfDepth = row.Depth
 		next, err := total.Add(row.Amount)
 		if err == nil {
 			total = next
@@ -641,9 +664,10 @@ func (a App) accountListRowsWithFilter(filter string) ([]accountListRow, error) 
 	if err != nil {
 		return nil, err
 	}
+	parsed := parseAccountFilter(filter)
 	var visible []accountListRow
 	for _, acct := range accounts {
-		rows, err := a.accountTreeRows(acct, 0, filter)
+		rows, err := a.accountTreeRows(acct, 0, parsed)
 		if err != nil {
 			return nil, err
 		}
@@ -652,7 +676,7 @@ func (a App) accountListRowsWithFilter(filter string) ([]accountListRow, error) 
 	return visible, nil
 }
 
-func (a App) accountTreeRows(acct repo.Account, depth int, filter string) ([]accountListRow, error) {
+func (a App) accountTreeRows(acct repo.Account, depth int, filter accountFilter) ([]accountListRow, error) {
 	if a.AccountVisible == accountVisibilityNonHidden && acct.Hidden {
 		return nil, nil
 	}
@@ -672,12 +696,13 @@ func (a App) accountTreeRows(acct repo.Account, depth int, filter string) ([]acc
 		}
 		childRows = append(childRows, rows...)
 	}
-	matches := filter == "" || strings.Contains(acct.Name, filter) || strings.Contains(acct.Notes, filter)
+	row, err := a.accountRow(acct, depth)
+	if err != nil {
+		return nil, err
+	}
+	matches := filter.Empty() || filter.Match(row)
+	row.Match = matches
 	if matches || len(childRows) > 0 {
-		row, err := a.accountRow(acct, depth)
-		if err != nil {
-			return nil, err
-		}
 		out = append(out, row)
 		out = append(out, childRows...)
 		if row.Depth == depth && row.Name != "remaining" {
@@ -686,6 +711,7 @@ func (a App) accountTreeRows(acct repo.Account, depth int, filter string) ([]acc
 				return nil, err
 			}
 			if remaining != nil {
+				remaining.Match = matches
 				out = append(out, *remaining)
 			}
 		}
@@ -711,15 +737,22 @@ func (a App) accountRow(acct repo.Account, depth int) (accountListRow, error) {
 	if summary.AsOf != "" {
 		asOf = summary.AsOf
 	}
+	currencyName := ""
+	if cur, err := a.Svc.Currency.Get(a.ctx, acct.Code); err == nil {
+		currencyName = cur.Name
+	}
 	return accountListRow{
-		Name:     acct.Name,
-		Balance:  balance,
-		Amount:   appAmount,
-		Notes:    acct.Notes,
-		OnBudget: acct.OnBudget,
-		AsOf:     asOf,
-		Hidden:   acct.Hidden,
-		Depth:    depth,
+		Name:         acct.Name,
+		Balance:      balance,
+		Amount:       appAmount,
+		Notes:        acct.Notes,
+		Tags:         a.effectiveTagNames(acct.ID),
+		Currency:     acct.Code,
+		CurrencyName: currencyName,
+		OnBudget:     acct.OnBudget,
+		AsOf:         asOf,
+		Hidden:       acct.Hidden,
+		Depth:        depth,
 	}, nil
 }
 
@@ -741,7 +774,7 @@ func (a App) remainingRow(acct repo.Account, depth int) (*accountListRow, error)
 	return &accountListRow{
 		Name:     "remaining",
 		Balance:  component.MoneyCell(summary.Remaining, a.Config.Config.Currency),
-		Amount:   money.Money{Scale: summary.Remaining.Scale},
+		Amount:   summary.Remaining,
 		OnBudget: acct.OnBudget,
 		AsOf:     summary.AsOf,
 		Depth:    depth,
@@ -828,6 +861,7 @@ func appendAccountSection(lines []string, title string, rows []accountListRow, o
 			component.TextCell(accountRowDisplayName(row)),
 			row.Balance,
 			component.TextCell(row.Notes),
+			component.TextCell(strings.Join(row.Tags, ", ")),
 		}))
 	}
 	return lines
@@ -898,6 +932,7 @@ func (a App) accountChildrenListScreen(name string) screen {
 				component.TextCell(row.Name),
 				row.Balance,
 				component.TextCell(row.Notes),
+				component.TextCell(strings.Join(row.Tags, ", ")),
 			}))
 		}
 	}
@@ -914,7 +949,7 @@ func (a App) accountChildCreateScreen(name string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
-	context := fmt.Sprintf("parent    : %s\non-budget : %t", acct.Name, acct.OnBudget)
+	context := fmt.Sprintf("parent         : %s\non-budget      : %t\ninherited tags : %s", acct.Name, acct.OnBudget, formatTags(a.effectiveTagNames(acct.ID), nil))
 	return screen{Path: accountChildCreatePath(name), Context: context, Body: a.childAccountFormView(nil), Help: a.childAccountFormHelp()}
 }
 
@@ -929,20 +964,21 @@ func (a App) accountEditScreen() screen {
 		locked["currency"] = acct.Code + " (locked because balances exist)"
 	}
 	if acct.ParentID != nil {
-		return screen{Path: a.Path, Body: a.childAccountFormView(locked), Help: a.childAccountFormHelp()}
+		body := a.childAccountFormView(locked) + "\ninherited : " + formatTags(a.inheritedTagNames(acct.ID), nil) + "\n"
+		return screen{Path: a.Path, Body: body, Help: a.childAccountFormHelp()}
 	}
 	return screen{Path: a.Path, Body: a.accountFormView(locked), Help: a.accountFormHelp()}
 }
 
 func (a App) accountFormView(locked map[string]string) string {
-	return a.formViewWithOptions([]string{"name", "currency", "on-budget", "notes"}, locked, map[string][]string{
+	return a.formViewWithOptions([]string{"name", "currency", "on-budget", "notes", "tags"}, locked, map[string][]string{
 		"currency":  a.currencyOptions(),
 		"on-budget": {"true", "false"},
 	}, nil)
 }
 
 func (a App) childAccountFormView(locked map[string]string) string {
-	return a.formViewWithOptions([]string{"name", "currency", "notes"}, locked, map[string][]string{
+	return a.formViewWithOptions([]string{"name", "currency", "notes", "tags"}, locked, map[string][]string{
 		"currency": a.currencyOptions(),
 	}, nil)
 }

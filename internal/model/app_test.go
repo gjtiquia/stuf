@@ -27,9 +27,10 @@ func testApp(t *testing.T) (App, *repo.Store) {
 	h := service.HistoryService{Repo: s.Hist, Now: s.Clock}
 	cfg := config.Loaded{Config: config.Config{Currency: "HKD"}, Path: "/tmp/config.jsonc"}
 	return New(ctx, Services{
-		Accounts:  service.AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, History: h, AppCurrency: "HKD"},
+		Accounts:  service.AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"},
 		Balances:  service.BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h},
 		Currency:  service.CurrencyService{Currencies: s.Cur},
+		Tags:      service.TagService{Store: s, Tags: s.Tag, History: h},
 		Dashboard: service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		History:   h,
 		Backup: func(context.Context) (string, error) {
@@ -264,6 +265,33 @@ func TestAccountsListSummaryTotals(t *testing.T) {
 	}
 	if strings.Contains(view, "old-account") {
 		t.Fatalf("hidden account should be excluded from list summary:\n%s", view)
+	}
+}
+
+func TestAccountListFilteredSummaryCountsOnlyMatchedMoney(t *testing.T) {
+	app, store := testApp(t)
+	ctx := context.Background()
+	setCurrencyRate(t, store, "HKD", 1, 0)
+	parent, _, err := app.Svc.Accounts.CreateWithTags(ctx, "household", "HKD", true, "", []string{"family"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := app.Svc.Accounts.CreateChildWithTags(ctx, parent.ID, "household-cash", "HKD", "", []string{"wallet"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, parent.ID, "2026-05-24", "500.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, child.ID, "2026-05-24", "100.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeAccountList
+	app.Form[formKeyFilter] = "tag:wallet"
+	view := app.View()
+	assertViewContains(t, view, "filtered total", "> household", "household-cash", "wallet")
+	if !strings.Contains(view, "filtered total: HKD 100.00") && !strings.Contains(view, "filtered total: HKD  100.00") {
+		t.Fatalf("child-only tag filter should count only child money:\n%s", view)
 	}
 }
 
@@ -1174,6 +1202,11 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
+	if view = app.View(); !strings.Contains(view, "> 5) tags") || !strings.Contains(view, "filter  : (type anything...)") {
+		t.Fatalf("tags focus missing:\n%s", view)
+	}
+	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	app = m.(App)
 	if view = app.View(); !strings.Contains(view, "> [confirm]") || !strings.Contains(view, "shift-tab : navigate") || !strings.Contains(view, "ctrl+s    : submit") {
 		t.Fatalf("confirm focus/footer missing:\n%s", view)
 	}
@@ -1275,13 +1308,13 @@ func TestAccountCreateDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
 	}
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true", "notes": "keep me"}
-	app.Field = 4
+	app.Field = 5
 
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/create/" {
 		t.Fatalf("duplicate account create should stay on form, got %s", app.Path)
 	}
-	if app.Field != 4 {
+	if app.Field != 5 {
 		t.Fatalf("duplicate account create should preserve field, got %d", app.Field)
 	}
 	if app.Form["name"] != "cash" || app.Form["notes"] != "keep me" {
@@ -1301,11 +1334,11 @@ func TestAccountCreateDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
 	}
 
 	app = press(app, tea.KeyShiftTab)
-	if app.Field != 3 {
-		t.Fatalf("shift+tab after duplicate account error should move cursor to notes, got %d", app.Field)
+	if app.Field != 4 {
+		t.Fatalf("shift+tab after duplicate account error should move cursor to tags, got %d", app.Field)
 	}
 	app.Form["name"] = "wallet"
-	app.Field = 4
+	app.Field = 5
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/list/" {
 		t.Fatalf("corrected account create should return to list, got %s", app.Path)
@@ -1331,13 +1364,13 @@ func TestAccountEditDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
 		t.Fatalf("ctrl+e should open account edit form, got %s", app.Path)
 	}
 	app.Form = map[string]string{"name": "savings", "currency": "HKD", "on-budget": "true", "notes": "rename collision"}
-	app.Field = 4
+	app.Field = 5
 
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/cash/edit/" {
 		t.Fatalf("duplicate account edit should stay on form, got %s", app.Path)
 	}
-	if app.Field != 4 {
+	if app.Field != 5 {
 		t.Fatalf("duplicate account edit should preserve field, got %d", app.Field)
 	}
 	if app.Form["name"] != "savings" || app.Form["notes"] != "rename collision" {
@@ -1357,7 +1390,7 @@ func TestAccountEditDuplicateNameErrorIsFriendlyAndRecoverable(t *testing.T) {
 	}
 
 	app.Form["name"] = "wallet"
-	app.Field = 4
+	app.Field = 5
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/list/" {
 		t.Fatalf("corrected account edit should return to list, got %s", app.Path)
@@ -1374,10 +1407,10 @@ func TestAccountFormInvalidCurrencyErrorsAreFriendlyAndRecoverable(t *testing.T)
 	app, _ := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "ZZZ", "on-budget": "true", "notes": "keep"}
-	app.Field = 4
+	app.Field = 5
 
 	app = press(app, tea.KeyCtrlS)
-	if app.Path != "/accounts/create/" || app.Field != 4 {
+	if app.Path != "/accounts/create/" || app.Field != 5 {
 		t.Fatalf("invalid currency create should stay on form and field, path=%s field=%d", app.Path, app.Field)
 	}
 	view := app.View()
@@ -1400,10 +1433,10 @@ func TestAccountFormInvalidCurrencyErrorsAreFriendlyAndRecoverable(t *testing.T)
 	}
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/wallet/", Menu: 2}, navFrame{Path: "/accounts/wallet/edit/", Menu: 0})
 	app.Form = map[string]string{"name": "wallet", "currency": "ZZZ", "on-budget": "true", "notes": "edit keep"}
-	app.Field = 4
+	app.Field = 5
 
 	app = press(app, tea.KeyCtrlS)
-	if app.Path != "/accounts/wallet/edit/" || app.Field != 4 {
+	if app.Path != "/accounts/wallet/edit/" || app.Field != 5 {
 		t.Fatalf("invalid currency edit should stay on form and field, path=%s field=%d", app.Path, app.Field)
 	}
 	view = app.View()
@@ -1571,7 +1604,7 @@ func TestAccountEditSelectToggleAndLockedCurrencyOptions(t *testing.T) {
 	if view := app.View(); !strings.Contains(view, "on-budget: false") || !strings.Contains(view, "     > false") {
 		t.Fatalf("edit on-budget select did not toggle:\n%s", view)
 	}
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	updated, err := store.Acct.GetByName(ctx, "cash")
@@ -2345,7 +2378,7 @@ func TestSanitizedNameSubmitsAndEditRedirectsToNewSlug(t *testing.T) {
 	app.Path = "/accounts/create/"
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=My Cash!!")})
 	app = m.(App)
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
@@ -2360,7 +2393,7 @@ func TestSanitizedNameSubmitsAndEditRedirectsToNewSlug(t *testing.T) {
 	app.Field = 0
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=New CASH Account!!")})
 	app = m.(App)
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/new-cash-account/" {
@@ -2413,7 +2446,7 @@ func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set name=!!!")})
 	app = m.(App)
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if !strings.Contains(app.View(), "strict slug") {
@@ -2423,7 +2456,7 @@ func TestAccountCreateValidationHistoryAndUndo(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=HKD")})
 	app = m.(App)
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" || len(app.History) != 1 {
@@ -2547,7 +2580,7 @@ func TestExitConfirmationHistoryWarningAndCancel(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("set currency=HKD")})
 	app = m.(App)
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if len(app.History) != 1 {
@@ -2586,7 +2619,7 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 		m, _ := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		app = m.(App)
 	}
-	app.Field = 4
+	app.Field = 5
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
@@ -2747,7 +2780,7 @@ func TestUndoResetsNavigationStack(t *testing.T) {
 	app = m.(App)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
-	app.Field = 4
+	app.Field = 5
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
@@ -2808,7 +2841,7 @@ func TestAccountCreateRedirectRestoresListCursorOnBack(t *testing.T) {
 	app, store := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
-	app.Field = 4
+	app.Field = 5
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
 	if app.Path != "/accounts/list/" {
@@ -3325,6 +3358,89 @@ func TestCtrlNFromAccountListsOpensCreate(t *testing.T) {
 	}
 }
 
+func TestCtrlTFromAccountListOpensTagList(t *testing.T) {
+	app, _ := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
+	app = press(app, tea.KeyCtrlT)
+	if app.Path != routeTagList {
+		t.Fatalf("ctrl+t on account list should open tag list, got %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "/tags/list/", "name | notes", "(no tags yet)", "ctrl+n")
+}
+
+func TestTagRoutesCreateEditAndListSelection(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: routeTagList, Menu: 0})
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != routeTagCreate {
+		t.Fatalf("ctrl+n on tag list should open tag create, got %s", app.Path)
+	}
+	app.Form = map[string]string{"tag-name": "family/shared", "notes": "household tag"}
+	app.Field = 2
+	app = press(app, tea.KeyEnter)
+	if app.Path != routeTagList {
+		t.Fatalf("tag create should return to tag list, got %s\n%s", app.Path, app.View())
+	}
+	assertViewContains(t, app.View(), "family/shared", "household tag")
+	tag, err := store.Tag.GetByName(context.Background(), "family/shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app = press(app, tea.KeyEnter)
+	if app.Path != tagEditPathFor("family/shared") {
+		t.Fatalf("enter on tag list should open tag edit, got %s", app.Path)
+	}
+	app.Form = map[string]string{"tag-name": "family/core", "notes": "renamed"}
+	app.Field = 2
+	app = press(app, tea.KeyEnter)
+	if app.Path != routeTagList {
+		t.Fatalf("tag edit should return to tag list, got %s", app.Path)
+	}
+	if _, err := store.Tag.GetByName(context.Background(), "family/shared"); err == nil {
+		t.Fatal("old tag name should not remain after rename")
+	}
+	renamed, err := store.Tag.GetByName(context.Background(), "family/core")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renamed.ID != tag.ID {
+		t.Fatal("tag rename should preserve id")
+	}
+	assertViewContains(t, app.View(), "family/core", "renamed")
+}
+
+func TestAccountCreateTagFieldInlineCreateAndFilter(t *testing.T) {
+	app, store := testApp(t)
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
+	app.Form = map[string]string{"name": "cash", "currency": "HKD", "on-budget": "true"}
+	app.Field = 4
+	app = pressRunes(app, "family/shared")
+	app = press(app, tea.KeyEnter)
+	if app.Form["tags"] != "family/shared" || app.Form[newTagsKey] != "family/shared" {
+		t.Fatalf("inline tag should be selected as draft-created, form=%#v", app.Form)
+	}
+	app = press(app, tea.KeyEnter)
+	if app.Path != routeAccountList {
+		t.Fatalf("second enter on empty tag filter should submit account, got %s\n%s", app.Path, app.View())
+	}
+	acct, err := store.Acct.GetByName(context.Background(), "cash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, err := store.Tag.ListEffectiveByAccountID(context.Background(), acct.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagNames(tags); strings.Join(got, ",") != "family/shared" {
+		t.Fatalf("account effective tags = %v", got)
+	}
+	assertViewContains(t, app.View(), "tags", "family/shared")
+	app = pressRunes(app, "tag:family/shared")
+	if view := app.View(); !strings.Contains(view, "filtered total") || !strings.Contains(view, "> cash") {
+		t.Fatalf("tag filter should match account and relabel totals:\n%s", view)
+	}
+}
+
 func TestPlainNStillTypesIntoAccountListFilter(t *testing.T) {
 	app, _ := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
@@ -3395,7 +3511,7 @@ func TestAccountListEditConfirmReturnsToList(t *testing.T) {
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0})
 	app = press(app, tea.KeyCtrlE)
 	app.Form["notes"] = "confirmed note"
-	app.Field = 4
+	app.Field = 5
 	app = press(app, tea.KeyEnter)
 	if app.Path != "/accounts/list/" {
 		t.Fatalf("confirm from list-launched account edit should return to list, got %s", app.Path)

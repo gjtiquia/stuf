@@ -40,6 +40,83 @@ func TestFreshDBMigrationsAndSeeding(t *testing.T) {
 	if err := s.SeedCurrencies(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	for _, table := range []string{"tags", "account_tags"} {
+		var count int
+		if err := s.DB.QueryRowContext(context.Background(), "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("missing table %s", table)
+		}
+	}
+}
+
+func TestTagRepoAccountTagsAndInheritance(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	parent, err := s.Acct.Create(ctx, AccountCreate{Name: "household", CurrencyID: hkd.ID, OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := s.Acct.Create(ctx, AccountCreate{Name: "household-cash", CurrencyID: hkd.ID, ParentID: ptrInt64(parent.ID), OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared, err := s.Tag.Create(ctx, "family/shared", "shared money")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wallet, err := s.Tag.Create(ctx, "wallet", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Tag.Create(ctx, "wallet", "duplicate"); err == nil {
+		t.Fatal("expected duplicate tag name error")
+	} else {
+		var dup *TagDuplicateNameError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate tag name error, got %T %[1]v", err)
+		}
+	}
+	if err := s.Tag.SetAccountTags(ctx, parent.ID, []int64{shared.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tag.SetAccountTags(ctx, child.ID, []int64{wallet.ID}); err != nil {
+		t.Fatal(err)
+	}
+	direct, err := s.Tag.ListByAccountID(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(direct); strings.Join(got, ",") != "wallet" {
+		t.Fatalf("child direct tags = %v", got)
+	}
+	effective, err := s.Tag.ListEffectiveByAccountID(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(effective); strings.Join(got, ",") != "family/shared,wallet" {
+		t.Fatalf("child effective tags = %v", got)
+	}
+	if err := s.Tag.SetAccountTags(ctx, child.ID, []int64{shared.ID}); err != nil {
+		t.Fatal(err)
+	}
+	effective, err = s.Tag.ListEffectiveByAccountID(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(effective); strings.Join(got, ",") != "family/shared" {
+		t.Fatalf("replaced effective tags = %v", got)
+	}
+}
+
+func tagTestNames(tags []Tag) []string {
+	out := make([]string, len(tags))
+	for i, tag := range tags {
+		out[i] = tag.Name
+	}
+	return out
 }
 
 func TestRejectsNonStufSQLiteDatabase(t *testing.T) {

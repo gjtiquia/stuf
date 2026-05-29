@@ -6,11 +6,15 @@ import (
 )
 
 const (
-	formKeyFilter         = "filter"
-	currencyFilterKey     = "_currency_filter"
-	currencyCursorKey     = "_currency_cursor"
-	currencyPageKey       = "_currency_page"
-	textCursorKeyPrefix   = "_cursor:"
+	formKeyFilter       = "filter"
+	currencyFilterKey   = "_currency_filter"
+	currencyCursorKey   = "_currency_cursor"
+	currencyPageKey     = "_currency_page"
+	tagFilterKey        = "_tag_filter"
+	tagCursorKey        = "_tag_cursor"
+	tagPageKey          = "_tag_page"
+	newTagsKey          = "_new_tags"
+	textCursorKeyPrefix = "_cursor:"
 )
 
 func cursorKey(field string) string { return textCursorKeyPrefix + field }
@@ -39,6 +43,33 @@ func (a App) clearCurrencySelectState() {
 	delete(a.Form, currencyFilterKey)
 	delete(a.Form, currencyCursorKey)
 	delete(a.Form, currencyPageKey)
+}
+
+func (a App) tagFilter() string { return a.Form[tagFilterKey] }
+
+func (a App) setTagFilter(value string) { a.Form[tagFilterKey] = sanitizeTagSlug(value) }
+
+func (a App) clearTagSelectState() {
+	delete(a.Form, tagFilterKey)
+	delete(a.Form, tagCursorKey)
+	delete(a.Form, tagPageKey)
+}
+
+func (a App) setTagSelectCursor(cursor int) {
+	a.Form[tagCursorKey] = strconv.Itoa(cursor)
+	a.Form[tagPageKey] = strconv.Itoa(cursor / currencyPageSize)
+}
+
+func (a App) resetTagSelectCursor() {
+	a.setTagSelectCursor(0)
+}
+
+func (a App) tagSelectPage() int {
+	return parseFormInt(a.Form[tagPageKey])
+}
+
+func (a App) setTagSelectPage(page int) {
+	a.Form[tagPageKey] = strconv.Itoa(page)
 }
 
 func (a App) currencySelectCursor() int {
@@ -116,7 +147,7 @@ func clampCursor(cursor, count int) int {
 	return cursor
 }
 
-func clampListCursor(cursor, count int) int  { return clampCursor(cursor, count) }
+func clampListCursor(cursor, count int) int     { return clampCursor(cursor, count) }
 func clampCurrencyCursor(cursor, count int) int { return clampCursor(cursor, count) }
 
 func currencyPageForCursor(cursor int) int {

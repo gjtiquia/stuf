@@ -159,6 +159,66 @@ SELECT count(*) FROM balances WHERE account_id = ?;
 -- name: CountChildrenByAccountID :one
 SELECT count(*) FROM accounts WHERE parent_id = ?;
 
+-- Tags
+
+-- name: CreateTag :execresult
+INSERT INTO tags (name, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?);
+
+-- name: GetTagByID :one
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+WHERE id = ?;
+
+-- name: GetTagByName :one
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+WHERE name = ?;
+
+-- name: ListTags :many
+SELECT id, name, notes, created_at, updated_at
+FROM tags
+ORDER BY name;
+
+-- name: UpdateTag :exec
+UPDATE tags
+SET name = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteTag :exec
+DELETE FROM tags WHERE id = ?;
+
+-- name: DeleteAccountTagsByAccountID :exec
+DELETE FROM account_tags WHERE account_id = ?;
+
+-- name: AddAccountTag :exec
+INSERT OR IGNORE INTO account_tags (account_id, tag_id, created_at)
+VALUES (?, ?, ?);
+
+-- name: ListTagsByAccountID :many
+SELECT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN account_tags at ON at.tag_id = t.id
+WHERE at.account_id = ?
+ORDER BY t.name;
+
+-- name: ListEffectiveTagsByAccountID :many
+WITH RECURSIVE ancestors(id, parent_id) AS (
+  SELECT accounts.id, accounts.parent_id FROM accounts WHERE accounts.id = ?
+  UNION ALL
+  SELECT a.id, a.parent_id FROM accounts a JOIN ancestors x ON x.parent_id = a.id
+)
+SELECT DISTINCT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN account_tags at ON at.tag_id = t.id
+JOIN ancestors x ON x.id = at.account_id
+ORDER BY t.name;
+
+-- name: CountAccountTagsByTagID :one
+SELECT count(*)
+FROM account_tags
+WHERE tag_id = ?;
+
 -- name: ListRootAccounts :many
 SELECT
   a.id,

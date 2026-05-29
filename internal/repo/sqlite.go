@@ -31,6 +31,7 @@ type Store struct {
 	Bal   *BalanceRepo
 	Cur   *CurrencyRepo
 	Hist  *HistoryRepo
+	Tag   *TagRepo
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -53,6 +54,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	store.Bal = &BalanceRepo{store: store}
 	store.Cur = &CurrencyRepo{store: store}
 	store.Hist = &HistoryRepo{store: store}
+	store.Tag = &TagRepo{store: store}
 	if existed {
 		var n int
 		if err := sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
@@ -147,7 +149,7 @@ func (s *Store) verifyStuf(ctx context.Context) error {
 }
 
 func (s *Store) validateSchema(ctx context.Context) error {
-	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history"} {
+	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history", "tags", "account_tags"} {
 		var name string
 		err := s.DB.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
 		if err != nil {

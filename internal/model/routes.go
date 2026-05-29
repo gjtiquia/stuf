@@ -9,6 +9,8 @@ const (
 	routeRoot          = "/"
 	routeAccountList   = "/accounts/list/"
 	routeAccountCreate = "/accounts/create/"
+	routeTagList       = "/tags/list/"
+	routeTagCreate     = "/tags/create/"
 	routeBackup        = "/backup/"
 	routeSettings      = "/settings/"
 )
@@ -26,6 +28,7 @@ func accountBalanceEditPath(name, date string) string {
 func accountTransactionsPath(name string) string { return "/accounts/" + name + "/transactions/" }
 func accountChildrenListPath(name string) string { return "/accounts/" + name + "/children/list/" }
 func accountChildCreatePath(name string) string  { return "/accounts/" + name + "/children/create/" }
+func tagEditPathFor(name string) string          { return "/tags/" + name + "/edit/" }
 
 func Today() string { return time.Now().Format("2006-01-02") }
 
@@ -82,6 +85,14 @@ func accountChildCreateName(path string) (string, bool) {
 func accountChildCreatePathMatch(path string) bool {
 	_, ok := accountChildCreateName(path)
 	return ok
+}
+
+func tagEditName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/tags/") || !strings.HasSuffix(path, "/edit/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/tags/"), "/edit/")
+	return name, name != ""
 }
 
 func balanceListName(path string) (string, bool) {

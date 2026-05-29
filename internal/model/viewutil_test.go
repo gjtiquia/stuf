@@ -20,18 +20,31 @@ func TestSanitizeSlug(t *testing.T) {
 	}
 }
 
+func TestSanitizeTagSlugAllowsSlashHierarchyWhileTyping(t *testing.T) {
+	tests := map[string]string{
+		"Family/Shared": "family/shared",
+		"//owner//me/":  "owner/me/",
+		"bad tag!!":     "badtag",
+	}
+	for input, want := range tests {
+		if got := sanitizeTagSlug(input); got != want {
+			t.Fatalf("sanitizeTagSlug(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestSanitizeDateInput(t *testing.T) {
 	tests := map[string]string{
-		"":               "",
-		"2026":           "2026",
-		"20260":          "2026-0",
-		"202605":         "2026-05",
-		"2026052":        "2026-05-2",
-		"20260524":       "2026-05-24",
-		"2026/05/24":     "2026-05-24",
-		"2026 05 xx 24":  "2026-05-24",
-		"202605241999":   "2026-05-24",
-		"abc":            "",
+		"":              "",
+		"2026":          "2026",
+		"20260":         "2026-0",
+		"202605":        "2026-05",
+		"2026052":       "2026-05-2",
+		"20260524":      "2026-05-24",
+		"2026/05/24":    "2026-05-24",
+		"2026 05 xx 24": "2026-05-24",
+		"202605241999":  "2026-05-24",
+		"abc":           "",
 	}
 	for input, want := range tests {
 		if got := sanitizeDateInput(input); got != want {
@@ -42,16 +55,16 @@ func TestSanitizeDateInput(t *testing.T) {
 
 func TestSanitizeBalanceAmount(t *testing.T) {
 	tests := map[string]string{
-		"":              "",
-		"1234.56":       "1234.56",
-		"-1234.56":      "-1234.56",
-		"1,234.56":      "1234.56",
-		"HKD 1234.56":   "1234.56",
-		"12a34.5b6":     "1234.56",
-		"12..34":        "12.34",
-		"--123":         "-123",
-		".5":            ".5",
-		"abc":           "",
+		"":            "",
+		"1234.56":     "1234.56",
+		"-1234.56":    "-1234.56",
+		"1,234.56":    "1234.56",
+		"HKD 1234.56": "1234.56",
+		"12a34.5b6":   "1234.56",
+		"12..34":      "12.34",
+		"--123":       "-123",
+		".5":          ".5",
+		"abc":         "",
 	}
 	for input, want := range tests {
 		if got := sanitizeBalanceAmount(input); got != want {
@@ -70,7 +83,7 @@ func TestFormatBalanceDisplay(t *testing.T) {
 }
 
 func TestAccountFormValues(t *testing.T) {
-	got := accountFormValues("cash", "HKD", true, "wallet")
+	got := accountFormValues("cash", "HKD", true, "wallet", nil)
 	if got["name"] != "cash" || got["currency"] != "HKD" || got["on-budget"] != "true" || got["notes"] != "wallet" {
 		t.Fatalf("unexpected form values: %#v", got)
 	}

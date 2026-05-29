@@ -46,7 +46,8 @@ func main() {
 	}
 
 	history := service.HistoryService{Repo: store.Hist, Now: store.Clock}
-	accounts := service.AccountService{Store: store, Accounts: store.Acct, Balances: store.Bal, Currency: store.Cur, History: history, AppCurrency: loaded.Config.Currency}
+	accounts := service.AccountService{Store: store, Accounts: store.Acct, Balances: store.Bal, Currency: store.Cur, Tags: store.Tag, History: history, AppCurrency: loaded.Config.Currency}
+	tags := service.TagService{Store: store, Tags: store.Tag, History: history}
 	balances := service.BalanceService{Store: store, Accounts: store.Acct, Balances: store.Bal, History: history}
 	dashboard := service.DashboardService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 
@@ -54,6 +55,7 @@ func main() {
 		Accounts:  accounts,
 		Balances:  balances,
 		Currency:  curSvc,
+		Tags:      tags,
 		Dashboard: dashboard,
 		History:   history,
 		Backup: func(ctx context.Context) (string, error) {

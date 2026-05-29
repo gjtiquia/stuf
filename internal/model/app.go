@@ -13,6 +13,7 @@ type Services struct {
 	Accounts  service.AccountService
 	Balances  service.BalanceService
 	Currency  service.CurrencyService
+	Tags      service.TagService
 	Dashboard service.DashboardService
 	History   service.HistoryService
 	Backup    func(context.Context) (string, error)
@@ -122,6 +123,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a = a.accountListKey(s)
 	case routeAccountCreate:
 		a = a.accountCreateKey(s)
+	case routeTagList:
+		a = a.tagListKey(s)
+	case routeTagCreate:
+		a = a.tagCreateKey(s)
 	case routeBackup:
 		a = a.backupKey(s)
 	case routeSettings:
@@ -146,6 +151,8 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.balanceListTableKey(s, name)
 		} else if name, ok := accountEditName(a.Path); ok {
 			a = a.accountEditKey(s, name)
+		} else if name, ok := tagEditName(a.Path); ok {
+			a = a.tagEditKey(s, name)
 		}
 	}
 	return a, nil
@@ -303,6 +310,10 @@ func (a App) screen() screen {
 		return screen{Path: routeAccountList, Context: context, Body: body, Help: accountListHelp()}
 	case a.Path == routeAccountCreate:
 		return screen{Path: routeAccountCreate, Body: a.accountFormView(nil), Help: a.accountFormHelp()}
+	case a.Path == routeTagList:
+		return a.tagListScreen()
+	case a.Path == routeTagCreate:
+		return a.tagCreateScreen()
 	case a.Path == routeSettings:
 		return screen{Path: routeSettings, Body: fmt.Sprintf("config   : %s\ncurrency : %s\n", a.Config.Path, a.Config.Config.Currency)}
 	case a.Path == routeBackup:
@@ -346,6 +357,9 @@ func (a App) screen() screen {
 		}
 		if _, ok := accountEditName(a.Path); ok {
 			return a.accountEditScreen()
+		}
+		if name, ok := tagEditName(a.Path); ok {
+			return a.tagEditScreen(name)
 		}
 		return screen{Path: a.Path}
 	}

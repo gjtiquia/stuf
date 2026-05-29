@@ -20,6 +20,12 @@ type Account struct {
 	ParentID   sql.NullInt64
 }
 
+type AccountTag struct {
+	AccountID int64
+	TagID     int64
+	CreatedAt string
+}
+
 type AppMetum struct {
 	Key   string
 	Value string
@@ -60,4 +66,12 @@ type History struct {
 	Path      string
 	OldData   sql.NullString
 	NewData   sql.NullString
+}
+
+type Tag struct {
+	ID        int64
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
 }

@@ -29,7 +29,7 @@ func (f filteredListInput) handleKey(key string) (filteredListInput, bool) {
 		return f, true
 	default:
 		if isTextInputKey(key) {
-			f.filter += f.sanitize(key)
+			f.filter = f.sanitize(f.filter + key)
 			return f, true
 		}
 	}

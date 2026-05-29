@@ -91,6 +91,9 @@ func (a App) accountDashboardContext(name string) (string, error) {
 		fmt.Sprintf("remaining : %s", values[2]),
 		fmt.Sprintf("as of     : %s", dashboardAsOf(d)),
 		fmt.Sprintf("on-budget : %t", acct.OnBudget),
+		fmt.Sprintf("tags      : %s", formatTags(a.effectiveTagNames(acct.ID), nil)),
+		fmt.Sprintf("direct    : %s", formatTags(a.directTagNames(acct.ID), nil)),
+		fmt.Sprintf("inherited : %s", formatTags(a.inheritedTagNames(acct.ID), nil)),
 	}
 	if acct.Hidden {
 		lines = append(lines, "hidden    : true")

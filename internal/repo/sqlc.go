@@ -2,10 +2,14 @@ package repo
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
 
 	"stuf/internal/db"
 	"stuf/internal/money"
+
+	"modernc.org/sqlite"
 )
 
 func accountFromFields(id int64, name string, currencyID int64, parentID sql.NullInt64, code string, scale int64, onBudget, hidden int64, notes, createdAt, updatedAt string) Account {
@@ -65,6 +69,38 @@ func mapAccountErr(err error) error {
 		return fmt.Errorf("account not found")
 	}
 	return err
+}
+
+func tagFromDB(t db.Tag) Tag {
+	return Tag{
+		ID:        t.ID,
+		Name:      t.Name,
+		Notes:     t.Notes,
+		CreatedAt: t.CreatedAt,
+		UpdatedAt: t.UpdatedAt,
+	}
+}
+
+func mapTagErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("tag not found")
+	}
+	return err
+}
+
+func mapTagWriteErr(err error, name string) error {
+	if isTagDuplicateNameErr(err) {
+		return &TagDuplicateNameError{Name: name}
+	}
+	return err
+}
+
+func isTagDuplicateNameErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "tags.name")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: tags.name")
 }
 
 func currencyFromFields(id int64, code, name string, scale int64, amount, rateScale sql.NullInt64, updated sql.NullString) Currency {
