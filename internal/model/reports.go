@@ -143,8 +143,7 @@ func (a App) reportMonthlyListContext() (string, error) {
 	if len(rows) == 0 {
 		return "", nil
 	}
-	coverage := reportCoverageLabel(rows[0].Period)
-	context := "current month\n\n" + reportSummaryContext(rows[0].Period, coverage, rows[0].Metrics, a.Config.Config.Currency)
+	context := "current month\n\n" + reportSummaryContext(rows[0].Period, rows[0].Coverage.Start+" -> "+rows[0].Coverage.End, rows[0].Metrics, a.Config.Config.Currency)
 	if warningText := dashboardWarnings(warnings); warningText != "" {
 		context += "\n" + warningText
 	}
@@ -356,15 +355,6 @@ func shiftReportMonth(month string, delta int) string {
 		return month
 	}
 	return t.AddDate(0, delta, 0).Format("2006-01")
-}
-
-func reportCoverageLabel(period string) string {
-	t, err := time.Parse("2006-01", period)
-	if err != nil {
-		return ""
-	}
-	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
-	return start.Format("2006-01-02") + " -> " + start.AddDate(0, 1, -1).Format("2006-01-02")
 }
 
 func reportMonthlyListHelp() []string {

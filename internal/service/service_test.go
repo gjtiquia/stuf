@@ -1603,6 +1603,9 @@ func TestReportMonthlyRowsUseOnBudgetStartEndChangeAndHighLow(t *testing.T) {
 	if len(rows) != 1 || rows[0].Period != "2026-05" {
 		t.Fatalf("monthly rows = %+v", rows)
 	}
+	if rows[0].Coverage.Start != "2026-05-01" || rows[0].Coverage.End != "2026-05-24" {
+		t.Fatalf("coverage = %+v", rows[0].Coverage)
+	}
 	metrics := rows[0].Metrics
 	assertMoneyAmount(t, "start", metrics.Start, 100000)
 	assertMoneyAmount(t, "end", metrics.End, 50000)
@@ -1642,7 +1645,7 @@ func TestReportMonthlyDetailIncludesAccountTreeRemainingRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if detail.Period != "2026-05" || detail.Coverage.Start != "2026-05-01" || detail.Coverage.End != "2026-05-31" {
+	if detail.Period != "2026-05" || detail.Coverage.Start != "2026-05-01" || detail.Coverage.End != "2026-05-24" {
 		t.Fatalf("detail period/coverage = %+v", detail)
 	}
 	if len(detail.Rows) != 3 {
@@ -1664,6 +1667,35 @@ func TestReportMonthlyDetailIncludesAccountTreeRemainingRows(t *testing.T) {
 	}
 	assertMoneyAmount(t, "remaining start", remainingRow.Metrics.Start, 80000)
 	assertMoneyAmount(t, "remaining end", remainingRow.Metrics.End, 90000)
+}
+
+func TestReportMonthlyCoverageUsesSharedPeriodBoundaries(t *testing.T) {
+	ctx := context.Background()
+	store, accounts, balances, _, _ := serviceStack(t)
+	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
+	cash, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, cash.ID, "2026-04-02", "1000.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, cash.ID, "2026-05-24", "1200.00", ""); err != nil {
+		t.Fatal(err)
+	}
+	rows, _, err := reports.MonthlyRows(ctx, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Period != "2026-05" || rows[0].Coverage.Start != "2026-05-01" || rows[0].Coverage.End != "2026-05-24" {
+		t.Fatalf("may coverage = %+v", rows[0])
+	}
+	if rows[1].Period != "2026-04" || rows[1].Coverage.Start != "2026-04-01" || rows[1].Coverage.End != "2026-05-01" {
+		t.Fatalf("april coverage = %+v", rows[1])
+	}
+	if rows[1].Coverage.End != rows[0].Coverage.Start {
+		t.Fatalf("coverage boundary should be shared, got april end %s and may start %s", rows[1].Coverage.End, rows[0].Coverage.Start)
+	}
 }
 
 func assertPeriod(t *testing.T, name, got, want string) {

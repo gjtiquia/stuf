@@ -19,8 +19,9 @@ type ReportService struct {
 }
 
 type ReportMonthlyRow struct {
-	Period  string
-	Metrics ReportPeriodMetrics
+	Period   string
+	Coverage ReportCoverage
+	Metrics  ReportPeriodMetrics
 }
 
 type ReportMonthlyDetail struct {
@@ -73,8 +74,9 @@ func (s ReportService) MonthlyRows(ctx context.Context, count int) ([]ReportMont
 	for i := 0; i < count; i++ {
 		month := today.AddDate(0, -i, 0)
 		rows = append(rows, ReportMonthlyRow{
-			Period:  month.Format("2006-01"),
-			Metrics: reportPeriodMetrics(histories, month, calcDate, zero),
+			Period:   month.Format("2006-01"),
+			Coverage: reportPeriodCoverage(histories, month, calcDate),
+			Metrics:  reportPeriodMetrics(histories, month, calcDate, zero),
 		})
 	}
 	return rows, warnings, nil
@@ -103,7 +105,7 @@ func (s ReportService) MonthlyDetail(ctx context.Context, period string) (Report
 	warnings = appendUniqueStrings(warnings, rowWarnings...)
 	return ReportMonthlyDetail{
 		Period:      month.Format("2006-01"),
-		Coverage:    reportCoverage(month),
+		Coverage:    reportPeriodCoverage(histories, month, calcDate),
 		Metrics:     reportPeriodMetrics(histories, month, calcDate, zero),
 		Rows:        rows,
 		Warnings:    warnings,
@@ -254,11 +256,15 @@ func reportPeriodMetrics(histories []dashboardAccountHistory, month, calcDate ti
 	}
 }
 
-func reportCoverage(month time.Time) ReportCoverage {
+func reportPeriodCoverage(histories []dashboardAccountHistory, month, calcDate time.Time) ReportCoverage {
 	start := monthBoundary(month)
+	end := start.AddDate(0, 1, 0)
+	if sameMonth(month, calcDate) {
+		end = calcDate
+	}
 	return ReportCoverage{
 		Start: start.Format("2006-01-02"),
-		End:   start.AddDate(0, 1, -1).Format("2006-01-02"),
+		End:   end.Format("2006-01-02"),
 	}
 }
 
