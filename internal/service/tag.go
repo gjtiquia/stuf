@@ -37,12 +37,13 @@ func (s TagService) Create(ctx context.Context, name, notes string) (repo.Tag, S
 	}
 	var out repo.Tag
 	var entry SessionEntry
-	err := s.Store.WithWriteTx(ctx, func() error {
-		tag, err := s.Tags.Create(ctx, name, notes)
+	err := s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		tag, err := tx.Tag.Create(ctx, name, notes)
 		if err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "create", "/tags/"+tag.Name, nil, tagMutationData{Tag: tag}, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "create", "/tags/"+tag.Name, nil, tagMutationData{Tag: tag}, func(ctx context.Context) error {
 			return s.Tags.DeleteIfUnused(ctx, tag.ID)
 		})
 		if err != nil {
@@ -67,12 +68,13 @@ func (s TagService) Update(ctx context.Context, id int64, name, notes string) (r
 	next.Name, next.Notes = name, notes
 	var out repo.Tag
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		updated, err := s.Tags.Update(ctx, next)
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		updated, err := tx.Tag.Update(ctx, next)
 		if err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "edit", "/tags/"+updated.Name, tagMutationData{Tag: old}, tagMutationData{Tag: updated}, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "edit", "/tags/"+updated.Name, tagMutationData{Tag: old}, tagMutationData{Tag: updated}, func(ctx context.Context) error {
 			_, err := s.Tags.Update(ctx, old)
 			return err
 		})

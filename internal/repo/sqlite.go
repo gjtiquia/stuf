@@ -96,19 +96,15 @@ func (s *Store) WithWriteLock(fn func() error) error {
 	return fn()
 }
 
-func (s *Store) WithWriteTx(ctx context.Context, fn func() error) error {
+func (s *Store) WithWriteTx(ctx context.Context, fn func(tx *Store) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	oldQueries := s.Q
-	s.Q = s.Q.WithTx(tx)
-	defer func() {
-		s.Q = oldQueries
-	}()
-	if err := fn(); err != nil {
+	txStore := s.withQueries(s.Q.WithTx(tx))
+	if err := fn(txStore); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -116,6 +112,16 @@ func (s *Store) WithWriteTx(ctx context.Context, fn func() error) error {
 		return err
 	}
 	return nil
+}
+
+func (s *Store) withQueries(q *db.Queries) *Store {
+	txStore := &Store{DB: s.DB, Q: q, Path: s.Path, Clock: s.Clock}
+	txStore.Acct = &AccountRepo{store: txStore}
+	txStore.Bal = &BalanceRepo{store: txStore}
+	txStore.Cur = &CurrencyRepo{store: txStore}
+	txStore.Hist = &HistoryRepo{store: txStore}
+	txStore.Tag = &TagRepo{store: txStore}
+	return txStore
 }
 
 func (s *Store) Backup(ctx context.Context, now time.Time) (string, error) {

@@ -30,12 +30,13 @@ func (s BalanceService) Add(ctx context.Context, accountID int64, date, amountTe
 	}
 	var out repo.Balance
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		b, err := s.Balances.Create(ctx, repo.BalanceCreate{AccountID: accountID, Date: date, Amount: amount, Notes: notes})
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		b, err := tx.Bal.Create(ctx, repo.BalanceCreate{AccountID: accountID, Date: date, Amount: amount, Notes: notes})
 		if err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "add", "/accounts/"+a.Name+"/balances/"+b.Date, nil, b, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "add", "/accounts/"+a.Name+"/balances/"+b.Date, nil, b, func(ctx context.Context) error {
 			return s.Balances.Delete(ctx, b.ID)
 		})
 		if err != nil {
@@ -64,12 +65,13 @@ func (s BalanceService) Update(ctx context.Context, id int64, date, amountText, 
 	next.Date, next.Amount, next.Notes = date, amount, notes
 	var out repo.Balance
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		updated, err := s.Balances.Update(ctx, next)
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		updated, err := tx.Bal.Update(ctx, next)
 		if err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "edit", "/accounts/"+a.Name+"/balances/"+updated.Date, old, updated, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "edit", "/accounts/"+a.Name+"/balances/"+updated.Date, old, updated, func(ctx context.Context) error {
 			_, err := s.Balances.Update(ctx, old)
 			return err
 		})
@@ -92,11 +94,12 @@ func (s BalanceService) Delete(ctx context.Context, id int64) (SessionEntry, err
 		return SessionEntry{}, err
 	}
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		if err := s.Balances.Delete(ctx, id); err != nil {
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		if err := tx.Bal.Delete(ctx, id); err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "delete", "/accounts/"+a.Name+"/balances/"+old.Date, old, nil, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "delete", "/accounts/"+a.Name+"/balances/"+old.Date, old, nil, func(ctx context.Context) error {
 			_, err := s.Balances.Create(ctx, repo.BalanceCreate{AccountID: old.AccountID, Date: old.Date, Amount: old.Amount, Notes: old.Notes})
 			return err
 		})

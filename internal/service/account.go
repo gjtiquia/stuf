@@ -81,19 +81,20 @@ func (s AccountService) create(ctx context.Context, name, currencyCode string, p
 	}
 	var out repo.Account
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		a, err := s.Accounts.Create(ctx, repo.AccountCreate{Name: name, CurrencyID: cur.ID, ParentID: parentID, OnBudget: onBudget, Hidden: hidden, Notes: notes})
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		a, err := tx.Acct.Create(ctx, repo.AccountCreate{Name: name, CurrencyID: cur.ID, ParentID: parentID, OnBudget: onBudget, Hidden: hidden, Notes: notes})
 		if err != nil {
 			return err
 		}
-		tags, createdTags, err := s.resolveTags(ctx, tagNames)
+		tags, createdTags, err := s.resolveTagsWith(ctx, tx.Tag, tagNames)
 		if err != nil {
 			return err
 		}
-		if err := s.Tags.SetAccountTags(ctx, a.ID, tagIDs(tags)); err != nil {
+		if err := tx.Tag.SetAccountTags(ctx, a.ID, tagIDs(tags)); err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "create", "/accounts/"+a.Name, nil, accountMutationData{Account: a, Tags: tags}, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "create", "/accounts/"+a.Name, nil, accountMutationData{Account: a, Tags: tags}, func(ctx context.Context) error {
 			if err := s.Tags.SetAccountTags(ctx, a.ID, nil); err != nil {
 				return err
 			}
@@ -165,24 +166,25 @@ func (s AccountService) UpdateWithTags(ctx context.Context, id int64, name, curr
 	next.Name, next.CurrencyID, next.OnBudget, next.Hidden, next.Notes = name, currencyID, onBudget, hidden, notes
 	var out repo.Account
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		updated, err := s.Accounts.Update(ctx, next)
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		updated, err := tx.Acct.Update(ctx, next)
 		if err != nil {
 			return err
 		}
 		if old.ParentID == nil && old.OnBudget != updated.OnBudget {
-			if err := s.cascadeOnBudget(ctx, updated.ID, updated.OnBudget); err != nil {
+			if err := cascadeOnBudget(ctx, tx.Acct, updated.ID, updated.OnBudget); err != nil {
 				return err
 			}
 		}
-		tags, createdTags, err := s.resolveTags(ctx, tagNames)
+		tags, createdTags, err := s.resolveTagsWith(ctx, tx.Tag, tagNames)
 		if err != nil {
 			return err
 		}
-		if err := s.Tags.SetAccountTags(ctx, updated.ID, tagIDs(tags)); err != nil {
+		if err := tx.Tag.SetAccountTags(ctx, updated.ID, tagIDs(tags)); err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "edit", "/accounts/"+updated.Name, accountMutationData{Account: old, Tags: oldTags}, accountMutationData{Account: updated, Tags: tags}, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "edit", "/accounts/"+updated.Name, accountMutationData{Account: old, Tags: oldTags}, accountMutationData{Account: updated, Tags: tags}, func(ctx context.Context) error {
 			if _, err := s.Accounts.Update(ctx, old); err != nil {
 				return err
 			}
@@ -204,13 +206,17 @@ func (s AccountService) UpdateWithTags(ctx context.Context, id int64, name, curr
 }
 
 func (s AccountService) cascadeOnBudget(ctx context.Context, accountID int64, onBudget bool) error {
-	descendants, err := s.Accounts.ListDescendants(ctx, accountID)
+	return cascadeOnBudget(ctx, s.Accounts, accountID, onBudget)
+}
+
+func cascadeOnBudget(ctx context.Context, accounts *repo.AccountRepo, accountID int64, onBudget bool) error {
+	descendants, err := accounts.ListDescendants(ctx, accountID)
 	if err != nil {
 		return err
 	}
 	for _, child := range descendants {
 		child.OnBudget = onBudget
-		if _, err := s.Accounts.Update(ctx, child); err != nil {
+		if _, err := accounts.Update(ctx, child); err != nil {
 			return err
 		}
 	}
@@ -218,12 +224,16 @@ func (s AccountService) cascadeOnBudget(ctx context.Context, accountID int64, on
 }
 
 func (s AccountService) resolveTags(ctx context.Context, names []string) ([]repo.Tag, []repo.Tag, error) {
+	return s.resolveTagsWith(ctx, s.Tags, names)
+}
+
+func (s AccountService) resolveTagsWith(ctx context.Context, tagsRepo *repo.TagRepo, names []string) ([]repo.Tag, []repo.Tag, error) {
 	var tags []repo.Tag
 	var created []repo.Tag
 	for _, name := range names {
-		tag, err := s.Tags.GetByName(ctx, name)
+		tag, err := tagsRepo.GetByName(ctx, name)
 		if err != nil {
-			tag, err = s.Tags.Create(ctx, name, "")
+			tag, err = tagsRepo.Create(ctx, name, "")
 			if err != nil {
 				return nil, nil, err
 			}
@@ -290,14 +300,15 @@ func (s AccountService) DeleteEmpty(ctx context.Context, id int64) (repo.Account
 		return repo.Account{}, SessionEntry{}, errors.New("account is not empty; hide it instead")
 	}
 	var entry SessionEntry
-	err = s.Store.WithWriteTx(ctx, func() error {
-		if err := s.Tags.SetAccountTags(ctx, old.ID, nil); err != nil {
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		if err := tx.Tag.SetAccountTags(ctx, old.ID, nil); err != nil {
 			return err
 		}
-		if err := s.Accounts.Delete(ctx, old.ID); err != nil {
+		if err := tx.Acct.Delete(ctx, old.ID); err != nil {
 			return err
 		}
-		e, err := s.History.Record(ctx, "delete", "/accounts/"+old.Name, accountMutationData{Account: old, Tags: oldTags}, nil, func(ctx context.Context) error {
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "delete", "/accounts/"+old.Name, accountMutationData{Account: old, Tags: oldTags}, nil, func(ctx context.Context) error {
 			restored, err := s.Accounts.Create(ctx, repo.AccountCreate{
 				Name:       old.Name,
 				CurrencyID: old.CurrencyID,
