@@ -12,6 +12,12 @@
 - and then parent child expenses next.
 - or budgets.... cuz expenses are not directly linked to budgets...??
 
+- yeah budgets, budgets are forward facing
+- whereas transactions are for past analysis in making better future decisions
+- but its ultimately past analysis
+- seeing the allocation diffs of budgets is also a good indicator of whether i allocated enough
+- cuz i can somewhat anticipate
+
 ---
 
 ## design TODOs
@@ -49,6 +55,8 @@
     - blows up in complexity when handling expenses for both wife and i, shared accounts, money owed
     - especially after wedding and trips, going back and forth, hectic lifestyle
     - tried automating inputting bank statements, eh, PDFs are complex, and still cant answer my questions
+    - also... moving around back and forth, wedding, lots of sudden events, analyzing the past becomes somewhat meaningless as there's no reliable spending pattern
+    - hence a lot of common budgeting tools sort of... break down, as the assumptions they had for building those kind of broke down as well
 
 - onboarding
     - start with accounts
