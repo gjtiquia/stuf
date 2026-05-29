@@ -15,6 +15,8 @@ type Dashboard struct {
 	AsOfStale                      bool
 	Period                         string
 	Total                          money.Money
+	Budgeted                       money.Money
+	Available                      money.Money
 	NetChangeFromMonthStart        money.Money
 	NetChangeFromMonthHigh         money.Money
 	NetChangeFromPreviousMonthHigh money.Money
@@ -65,6 +67,8 @@ type dashboardBalance struct {
 type DashboardService struct {
 	Accounts    *repo.AccountRepo
 	Balances    *repo.BalanceRepo
+	Budgets     *repo.BudgetRepo
+	Allocations *repo.BudgetAllocationRepo
 	Currencies  *repo.CurrencyRepo
 	AppCurrency string
 	Now         func() time.Time
@@ -104,6 +108,23 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 		histories = append(histories, accountHistories...)
 	}
 	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
+	if s.Budgets != nil && s.Allocations != nil {
+		budgeted, budgetWarnings, err := s.budgetedTotal(ctx, appCur, today)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		out.Budgeted = budgeted
+		out.Available, _ = out.Total.Sub(budgeted)
+		for _, warning := range budgetWarnings {
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+		}
+	} else {
+		out.Budgeted = money.Money{Scale: appCur.Scale}
+		out.Available = out.Total
+	}
 	out.Warnings = warnings
 	return out, nil
 }
@@ -147,6 +168,8 @@ func (s DashboardService) SummaryForAccounts(ctx context.Context, accountIDs []i
 		histories = append(histories, accountHistories...)
 	}
 	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
+	out.Budgeted = money.Money{Scale: appCur.Scale}
+	out.Available = out.Total
 	out.Warnings = warnings
 	return out, nil
 }
@@ -166,6 +189,8 @@ func (s DashboardService) AccountSummary(ctx context.Context, accountID int64) (
 		return Dashboard{}, err
 	}
 	out := dashboardFromHistories(today, money.Money{Scale: cur.Scale}, histories)
+	out.Budgeted = money.Money{Scale: cur.Scale}
+	out.Available = out.Total
 	out.Warnings = warnings
 	return out, nil
 }
@@ -250,6 +275,59 @@ func (s DashboardService) effectiveAccountHistories(ctx context.Context, a repo.
 		histories = append(histories, remainingAccountHistory(history, histories, money.Money{Scale: target.Scale}))
 	}
 	return histories, warnings, nil
+}
+
+func (s DashboardService) budgetedTotal(ctx context.Context, appCur repo.Currency, today time.Time) (money.Money, []string, error) {
+	budgets, err := s.Budgets.List(ctx, false)
+	if err != nil {
+		return money.Money{}, nil, err
+	}
+	total := money.Money{Scale: appCur.Scale}
+	warnings := []string{}
+	warned := map[string]bool{}
+	for _, budget := range budgets {
+		cur, err := s.Currencies.GetByID(ctx, budget.CurrencyID)
+		if err != nil {
+			return money.Money{}, nil, err
+		}
+		balance, err := s.budgetBalanceOn(ctx, budget.ID, today, money.Money{Scale: budget.Scale})
+		if err != nil {
+			return money.Money{}, nil, err
+		}
+		converted, err := money.Convert(balance, cur.RateToUSD, appCur.RateToUSD, appCur.Scale)
+		if err != nil {
+			warning := fmt.Sprintf("missing conversion for %s", cur.Code)
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+			continue
+		}
+		total, err = total.Add(converted)
+		if err != nil {
+			return money.Money{}, nil, err
+		}
+	}
+	return total, warnings, nil
+}
+
+func (s DashboardService) budgetBalanceOn(ctx context.Context, budgetID int64, today time.Time, zero money.Money) (money.Money, error) {
+	allocs, err := s.Allocations.ListByBudget(ctx, budgetID)
+	if err != nil {
+		return money.Money{}, err
+	}
+	total := zero
+	for _, alloc := range allocs {
+		allocationDate, err := parseDashboardDate(alloc.Date, today.Location())
+		if err != nil || allocationDate.After(today) {
+			continue
+		}
+		total, err = total.Add(alloc.Amount)
+		if err != nil {
+			return money.Money{}, err
+		}
+	}
+	return total, nil
 }
 
 func remainingAccountHistory(parent dashboardAccountHistory, children []dashboardAccountHistory, zero money.Money) dashboardAccountHistory {

@@ -237,7 +237,7 @@ func (a App) formKey(s string, fields []string) App {
 			runes := []rune(current)
 			next := string(runes[:cursor]) + s + string(runes[cursor:])
 			a.Form[field] = normalizeFieldValue(field, next)
-			if field == "name" || field == "date" || field == "balance" {
+			if field == "name" || field == "date" || field == "balance" || field == "amount" {
 				a.resetTextCursor(field)
 			} else {
 				a.setTextCursor(field, cursor+len([]rune(s)))
@@ -275,8 +275,8 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 		if field == "tags" {
 			renderedValue = formatTags(splitTagNames(value), splitTagNames(a.Form[newTagsKey]))
 		}
-		if field == "balance" && prefixes != nil && prefixes["balance"] != "" {
-			currency := prefixes["balance"]
+		if (field == "balance" || field == "amount") && prefixes != nil && prefixes[field] != "" {
+			currency := prefixes[field]
 			if i == a.Field && isFormTextField(field, options) && (locked == nil || locked[field] == "") {
 				renderedValue = renderBalanceCaret(value, currency)
 			} else {

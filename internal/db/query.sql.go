@@ -39,12 +39,34 @@ func (q *Queries) CountAccountTagsByTagID(ctx context.Context, tagID int64) (int
 	return count, err
 }
 
+const countAllocationsByBudgetID = `-- name: CountAllocationsByBudgetID :one
+SELECT count(*) FROM budget_allocations WHERE budget_id = ?
+`
+
+func (q *Queries) CountAllocationsByBudgetID(ctx context.Context, budgetID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countAllocationsByBudgetID, budgetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countBalancesByAccountID = `-- name: CountBalancesByAccountID :one
 SELECT count(*) FROM balances WHERE account_id = ?
 `
 
 func (q *Queries) CountBalancesByAccountID(ctx context.Context, accountID int64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countBalancesByAccountID, accountID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countBudgetsByCategoryID = `-- name: CountBudgetsByCategoryID :one
+SELECT count(*) FROM budgets WHERE category_id = ?
+`
+
+func (q *Queries) CountBudgetsByCategoryID(ctx context.Context, categoryID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countBudgetsByCategoryID, categoryID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -115,6 +137,87 @@ func (q *Queries) CreateBalance(ctx context.Context, arg CreateBalanceParams) (s
 		arg.Date,
 		arg.Amount,
 		arg.Scale,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
+const createBudget = `-- name: CreateBudget :execresult
+
+INSERT INTO budgets (name, currency_id, category_id, hidden, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateBudgetParams struct {
+	Name       string
+	CurrencyID int64
+	CategoryID int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+// Budgets
+func (q *Queries) CreateBudget(ctx context.Context, arg CreateBudgetParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createBudget,
+		arg.Name,
+		arg.CurrencyID,
+		arg.CategoryID,
+		arg.Hidden,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
+const createBudgetAllocation = `-- name: CreateBudgetAllocation :execresult
+
+INSERT INTO budget_allocations (budget_id, date, amount, scale, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateBudgetAllocationParams struct {
+	BudgetID  int64
+	Date      string
+	Amount    int64
+	Scale     int64
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// Budget allocations
+func (q *Queries) CreateBudgetAllocation(ctx context.Context, arg CreateBudgetAllocationParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createBudgetAllocation,
+		arg.BudgetID,
+		arg.Date,
+		arg.Amount,
+		arg.Scale,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
+const createBudgetCategory = `-- name: CreateBudgetCategory :execresult
+
+INSERT INTO budget_categories (name, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?)
+`
+
+type CreateBudgetCategoryParams struct {
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+// Budget categories
+func (q *Queries) CreateBudgetCategory(ctx context.Context, arg CreateBudgetCategoryParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createBudgetCategory,
+		arg.Name,
 		arg.Notes,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -193,6 +296,33 @@ DELETE FROM balances WHERE id = ?
 
 func (q *Queries) DeleteBalance(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteBalance, id)
+	return err
+}
+
+const deleteBudget = `-- name: DeleteBudget :exec
+DELETE FROM budgets WHERE id = ?
+`
+
+func (q *Queries) DeleteBudget(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteBudget, id)
+	return err
+}
+
+const deleteBudgetAllocation = `-- name: DeleteBudgetAllocation :exec
+DELETE FROM budget_allocations WHERE id = ?
+`
+
+func (q *Queries) DeleteBudgetAllocation(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteBudgetAllocation, id)
+	return err
+}
+
+const deleteBudgetCategory = `-- name: DeleteBudgetCategory :exec
+DELETE FROM budget_categories WHERE id = ?
+`
+
+func (q *Queries) DeleteBudgetCategory(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteBudgetCategory, id)
 	return err
 }
 
@@ -371,6 +501,170 @@ func (q *Queries) GetBalanceByID(ctx context.Context, id int64) (Balance, error)
 		&i.Date,
 		&i.Amount,
 		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBudgetAllocationByID = `-- name: GetBudgetAllocationByID :one
+SELECT id, budget_id, date, amount, scale, notes, created_at, updated_at
+FROM budget_allocations
+WHERE id = ?
+`
+
+func (q *Queries) GetBudgetAllocationByID(ctx context.Context, id int64) (BudgetAllocation, error) {
+	row := q.db.QueryRowContext(ctx, getBudgetAllocationByID, id)
+	var i BudgetAllocation
+	err := row.Scan(
+		&i.ID,
+		&i.BudgetID,
+		&i.Date,
+		&i.Amount,
+		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBudgetByID = `-- name: GetBudgetByID :one
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.id = ?
+`
+
+type GetBudgetByIDRow struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int64
+	Hidden       int64
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) GetBudgetByID(ctx context.Context, id int64) (GetBudgetByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getBudgetByID, id)
+	var i GetBudgetByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrencyID,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.Code,
+		&i.Scale,
+		&i.Hidden,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBudgetByName = `-- name: GetBudgetByName :one
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.name = ?
+`
+
+type GetBudgetByNameRow struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int64
+	Hidden       int64
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) GetBudgetByName(ctx context.Context, name string) (GetBudgetByNameRow, error) {
+	row := q.db.QueryRowContext(ctx, getBudgetByName, name)
+	var i GetBudgetByNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrencyID,
+		&i.CategoryID,
+		&i.CategoryName,
+		&i.Code,
+		&i.Scale,
+		&i.Hidden,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBudgetCategoryByID = `-- name: GetBudgetCategoryByID :one
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+WHERE id = ?
+`
+
+func (q *Queries) GetBudgetCategoryByID(ctx context.Context, id int64) (BudgetCategory, error) {
+	row := q.db.QueryRowContext(ctx, getBudgetCategoryByID, id)
+	var i BudgetCategory
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getBudgetCategoryByName = `-- name: GetBudgetCategoryByName :one
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+WHERE name = ?
+`
+
+func (q *Queries) GetBudgetCategoryByName(ctx context.Context, name string) (BudgetCategory, error) {
+	row := q.db.QueryRowContext(ctx, getBudgetCategoryByName, name)
+	var i BudgetCategory
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -713,6 +1007,217 @@ func (q *Queries) ListBalancesByAccount(ctx context.Context, accountID int64) ([
 			&i.Date,
 			&i.Amount,
 			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgetAllocationsByBudget = `-- name: ListBudgetAllocationsByBudget :many
+SELECT id, budget_id, date, amount, scale, notes, created_at, updated_at
+FROM budget_allocations
+WHERE budget_id = ?
+ORDER BY date, created_at, id
+`
+
+func (q *Queries) ListBudgetAllocationsByBudget(ctx context.Context, budgetID int64) ([]BudgetAllocation, error) {
+	rows, err := q.db.QueryContext(ctx, listBudgetAllocationsByBudget, budgetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BudgetAllocation
+	for rows.Next() {
+		var i BudgetAllocation
+		if err := rows.Scan(
+			&i.ID,
+			&i.BudgetID,
+			&i.Date,
+			&i.Amount,
+			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgetCategories = `-- name: ListBudgetCategories :many
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+ORDER BY name
+`
+
+func (q *Queries) ListBudgetCategories(ctx context.Context) ([]BudgetCategory, error) {
+	rows, err := q.db.QueryContext(ctx, listBudgetCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BudgetCategory
+	for rows.Next() {
+		var i BudgetCategory
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgets = `-- name: ListBudgets :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+ORDER BY bc.name, b.name
+`
+
+type ListBudgetsRow struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int64
+	Hidden       int64
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) ListBudgets(ctx context.Context) ([]ListBudgetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBudgets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBudgetsRow
+	for rows.Next() {
+		var i ListBudgetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.Code,
+			&i.Scale,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBudgetsByCategoryID = `-- name: ListBudgetsByCategoryID :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.category_id = ?
+ORDER BY b.name
+`
+
+type ListBudgetsByCategoryIDRow struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int64
+	Hidden       int64
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) ListBudgetsByCategoryID(ctx context.Context, categoryID int64) ([]ListBudgetsByCategoryIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listBudgetsByCategoryID, categoryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListBudgetsByCategoryIDRow
+	for rows.Next() {
+		var i ListBudgetsByCategoryIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.Code,
+			&i.Scale,
+			&i.Hidden,
 			&i.Notes,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -1212,6 +1717,75 @@ func (q *Queries) ListVisibleAccounts(ctx context.Context) ([]ListVisibleAccount
 	return items, nil
 }
 
+const listVisibleBudgets = `-- name: ListVisibleBudgets :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.hidden = 0
+ORDER BY bc.name, b.name
+`
+
+type ListVisibleBudgetsRow struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int64
+	Hidden       int64
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+func (q *Queries) ListVisibleBudgets(ctx context.Context) ([]ListVisibleBudgetsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listVisibleBudgets)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVisibleBudgetsRow
+	for rows.Next() {
+		var i ListVisibleBudgetsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.Code,
+			&i.Scale,
+			&i.Hidden,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleChildAccounts = `-- name: ListVisibleChildAccounts :many
 SELECT
   a.id,
@@ -1399,6 +1973,85 @@ func (q *Queries) UpdateBalance(ctx context.Context, arg UpdateBalanceParams) er
 		arg.Date,
 		arg.Amount,
 		arg.Scale,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateBudget = `-- name: UpdateBudget :exec
+UPDATE budgets
+SET name = ?, currency_id = ?, category_id = ?, hidden = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateBudgetParams struct {
+	Name       string
+	CurrencyID int64
+	CategoryID int64
+	Hidden     int64
+	Notes      string
+	UpdatedAt  string
+	ID         int64
+}
+
+func (q *Queries) UpdateBudget(ctx context.Context, arg UpdateBudgetParams) error {
+	_, err := q.db.ExecContext(ctx, updateBudget,
+		arg.Name,
+		arg.CurrencyID,
+		arg.CategoryID,
+		arg.Hidden,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateBudgetAllocation = `-- name: UpdateBudgetAllocation :exec
+UPDATE budget_allocations
+SET date = ?, amount = ?, scale = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateBudgetAllocationParams struct {
+	Date      string
+	Amount    int64
+	Scale     int64
+	Notes     string
+	UpdatedAt string
+	ID        int64
+}
+
+func (q *Queries) UpdateBudgetAllocation(ctx context.Context, arg UpdateBudgetAllocationParams) error {
+	_, err := q.db.ExecContext(ctx, updateBudgetAllocation,
+		arg.Date,
+		arg.Amount,
+		arg.Scale,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateBudgetCategory = `-- name: UpdateBudgetCategory :exec
+UPDATE budget_categories
+SET name = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateBudgetCategoryParams struct {
+	Name      string
+	Notes     string
+	UpdatedAt string
+	ID        int64
+}
+
+func (q *Queries) UpdateBudgetCategory(ctx context.Context, arg UpdateBudgetCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, updateBudgetCategory,
+		arg.Name,
 		arg.Notes,
 		arg.UpdatedAt,
 		arg.ID,

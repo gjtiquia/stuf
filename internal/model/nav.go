@@ -7,6 +7,9 @@ func (a App) syncFromNav() App {
 	if a.Path == routeAccountList && prevPath != routeAccountList {
 		a.AccountVisible = accountVisibilityNonHidden
 	}
+	if a.Path == routeBudgetList && prevPath != routeBudgetList {
+		a.BudgetVisible = accountVisibilityNonHidden
+	}
 	a.Menu = clampListCursor(cur.Menu, a.menuCountFor(cur.Path))
 	a.Nav.setCurrentMenu(a.Menu)
 	return a
@@ -54,6 +57,14 @@ func (a App) menuCountFor(path string) int {
 			return 0
 		}
 		return len(rows)
+	case routeBudgetList:
+		return a.budgetListRowCount()
+	case routeBudgetCatList:
+		rows, err := a.filteredBudgetCategories()
+		if err != nil {
+			return 0
+		}
+		return len(rows)
 	case routeReports:
 		return len(reportActions())
 	case routeReportsMonthly:
@@ -81,6 +92,19 @@ func (a App) menuCountFor(path string) int {
 		}
 		if _, ok := accountDetailName(path); ok {
 			return 4
+		}
+		if _, ok := budgetDetailName(path); ok {
+			return 3
+		}
+		if name, ok := budgetAllocationListName(path); ok {
+			rows, err := a.budgetAllocationRows(name)
+			if err != nil {
+				return 0
+			}
+			return len(rows)
+		}
+		if _, ok := budgetCategoryDetailName(path); ok {
+			return 3
 		}
 		if name, ok := balanceListName(path); ok {
 			acct, err := a.Svc.Accounts.GetByName(a.ctx, name)

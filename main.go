@@ -49,17 +49,23 @@ func main() {
 	accounts := service.AccountService{Store: store, Accounts: store.Acct, Balances: store.Bal, Currency: store.Cur, Tags: store.Tag, History: history, AppCurrency: loaded.Config.Currency}
 	tags := service.TagService{Store: store, Tags: store.Tag, History: history}
 	balances := service.BalanceService{Store: store, Accounts: store.Acct, Balances: store.Bal, History: history}
-	dashboard := service.DashboardService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
+	budgetCategories := service.BudgetCategoryService{Store: store, Categories: store.BudCat, Budgets: store.Bud, History: history}
+	budgets := service.BudgetService{Store: store, Budgets: store.Bud, Categories: store.BudCat, Currency: store.Cur, Allocations: store.Alloc, History: history, AppCurrency: loaded.Config.Currency}
+	allocations := service.BudgetAllocationService{Store: store, Budgets: store.Bud, Allocations: store.Alloc, History: history}
+	dashboard := service.DashboardService{Accounts: store.Acct, Balances: store.Bal, Budgets: store.Bud, Allocations: store.Alloc, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 	reports := service.ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 
 	app := model.New(ctx, model.Services{
-		Accounts:  accounts,
-		Balances:  balances,
-		Currency:  curSvc,
-		Tags:      tags,
-		Dashboard: dashboard,
-		Reports:   reports,
-		History:   history,
+		Accounts:          accounts,
+		Balances:          balances,
+		Currency:          curSvc,
+		Tags:              tags,
+		BudgetCategories:  budgetCategories,
+		Budgets:           budgets,
+		BudgetAllocations: allocations,
+		Dashboard:         dashboard,
+		Reports:           reports,
+		History:           history,
 		Backup: func(ctx context.Context) (string, error) {
 			return store.Backup(ctx, time.Now())
 		},

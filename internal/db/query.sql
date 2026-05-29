@@ -314,6 +314,172 @@ JOIN descendants d ON d.id = a.id
 JOIN currencies c ON c.id = a.currency_id
 ORDER BY a.name;
 
+-- Budget categories
+
+-- name: CreateBudgetCategory :execresult
+INSERT INTO budget_categories (name, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?);
+
+-- name: GetBudgetCategoryByID :one
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+WHERE id = ?;
+
+-- name: GetBudgetCategoryByName :one
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+WHERE name = ?;
+
+-- name: ListBudgetCategories :many
+SELECT id, name, notes, created_at, updated_at
+FROM budget_categories
+ORDER BY name;
+
+-- name: UpdateBudgetCategory :exec
+UPDATE budget_categories
+SET name = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteBudgetCategory :exec
+DELETE FROM budget_categories WHERE id = ?;
+
+-- name: CountBudgetsByCategoryID :one
+SELECT count(*) FROM budgets WHERE category_id = ?;
+
+-- Budgets
+
+-- name: CreateBudget :execresult
+INSERT INTO budgets (name, currency_id, category_id, hidden, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetBudgetByID :one
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.id = ?;
+
+-- name: GetBudgetByName :one
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.name = ?;
+
+-- name: ListBudgets :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+ORDER BY bc.name, b.name;
+
+-- name: ListVisibleBudgets :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.hidden = 0
+ORDER BY bc.name, b.name;
+
+-- name: ListBudgetsByCategoryID :many
+SELECT
+  b.id,
+  b.name,
+  b.currency_id,
+  b.category_id,
+  bc.name AS category_name,
+  c.code,
+  c.scale,
+  b.hidden,
+  b.notes,
+  b.created_at,
+  b.updated_at
+FROM budgets b
+JOIN budget_categories bc ON bc.id = b.category_id
+JOIN currencies c ON c.id = b.currency_id
+WHERE b.category_id = ?
+ORDER BY b.name;
+
+-- name: UpdateBudget :exec
+UPDATE budgets
+SET name = ?, currency_id = ?, category_id = ?, hidden = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteBudget :exec
+DELETE FROM budgets WHERE id = ?;
+
+-- name: CountAllocationsByBudgetID :one
+SELECT count(*) FROM budget_allocations WHERE budget_id = ?;
+
+-- Budget allocations
+
+-- name: CreateBudgetAllocation :execresult
+INSERT INTO budget_allocations (budget_id, date, amount, scale, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetBudgetAllocationByID :one
+SELECT id, budget_id, date, amount, scale, notes, created_at, updated_at
+FROM budget_allocations
+WHERE id = ?;
+
+-- name: ListBudgetAllocationsByBudget :many
+SELECT id, budget_id, date, amount, scale, notes, created_at, updated_at
+FROM budget_allocations
+WHERE budget_id = ?
+ORDER BY date, created_at, id;
+
+-- name: UpdateBudgetAllocation :exec
+UPDATE budget_allocations
+SET date = ?, amount = ?, scale = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteBudgetAllocation :exec
+DELETE FROM budget_allocations WHERE id = ?;
+
 -- Balances
 
 -- name: CreateBalance :execresult

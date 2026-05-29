@@ -42,6 +42,36 @@ type Balance struct {
 	UpdatedAt string
 }
 
+type Budget struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	CategoryID int64
+	Hidden     int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type BudgetAllocation struct {
+	ID        int64
+	BudgetID  int64
+	Date      string
+	Amount    int64
+	Scale     int64
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type BudgetCategory struct {
+	ID        int64
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
 type Currency struct {
 	ID        int64
 	Code      string

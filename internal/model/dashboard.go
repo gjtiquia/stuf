@@ -41,7 +41,7 @@ func (a App) accountListDashboardContext() (string, error) {
 func formatDashboardContext(d service.Dashboard, cur string, includeOwed bool) string {
 	values := alignedMoneyValues(
 		component.MoneyCell(d.Total, cur),
-		component.MoneyCell(money.Money{Scale: 2}, cur),
+		component.MoneyCell(d.Budgeted, cur),
 		component.MoneyCell(d.NetChanges[0].Change, cur),
 		component.MoneyCell(d.NetChanges[1].Change, cur),
 		component.MoneyCell(d.NetChanges[2].Change, cur),
@@ -217,6 +217,6 @@ func (a App) dashboardScreen() screen {
 	return screen{
 		Path:    "/",
 		Context: context,
-		Actions: []string{"accounts", "transactions (TODO)", "budgets (TODO)", "owed (TODO)", "reports", "settings", "backup"},
+		Actions: []string{"accounts", "transactions (TODO)", "budgets", "owed (TODO)", "reports", "settings", "backup"},
 	}
 }

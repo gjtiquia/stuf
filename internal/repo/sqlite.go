@@ -22,16 +22,19 @@ import (
 )
 
 type Store struct {
-	DB    *sql.DB
-	Q     *db.Queries
-	Path  string
-	mu    sync.Mutex
-	Clock func() time.Time
-	Acct  *AccountRepo
-	Bal   *BalanceRepo
-	Cur   *CurrencyRepo
-	Hist  *HistoryRepo
-	Tag   *TagRepo
+	DB     *sql.DB
+	Q      *db.Queries
+	Path   string
+	mu     sync.Mutex
+	Clock  func() time.Time
+	Acct   *AccountRepo
+	Bal    *BalanceRepo
+	Cur    *CurrencyRepo
+	Hist   *HistoryRepo
+	Tag    *TagRepo
+	BudCat *BudgetCategoryRepo
+	Bud    *BudgetRepo
+	Alloc  *BudgetAllocationRepo
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -55,6 +58,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	store.Cur = &CurrencyRepo{store: store}
 	store.Hist = &HistoryRepo{store: store}
 	store.Tag = &TagRepo{store: store}
+	store.BudCat = &BudgetCategoryRepo{store: store}
+	store.Bud = &BudgetRepo{store: store}
+	store.Alloc = &BudgetAllocationRepo{store: store}
 	if existed {
 		var n int
 		if err := sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
@@ -121,6 +127,9 @@ func (s *Store) withQueries(q *db.Queries) *Store {
 	txStore.Cur = &CurrencyRepo{store: txStore}
 	txStore.Hist = &HistoryRepo{store: txStore}
 	txStore.Tag = &TagRepo{store: txStore}
+	txStore.BudCat = &BudgetCategoryRepo{store: txStore}
+	txStore.Bud = &BudgetRepo{store: txStore}
+	txStore.Alloc = &BudgetAllocationRepo{store: txStore}
 	return txStore
 }
 
@@ -177,7 +186,7 @@ func (s *Store) verifyStuf(ctx context.Context) error {
 }
 
 func (s *Store) validateSchema(ctx context.Context) error {
-	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history", "tags", "account_tags"} {
+	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history", "tags", "account_tags", "budget_categories", "budgets", "budget_allocations"} {
 		var name string
 		err := s.DB.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
 		if err != nil {

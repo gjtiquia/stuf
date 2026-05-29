@@ -103,6 +103,96 @@ func isTagDuplicateNameErr(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed: tags.name")
 }
 
+func budgetCategoryFromDB(c db.BudgetCategory) BudgetCategory {
+	return BudgetCategory{
+		ID:        c.ID,
+		Name:      c.Name,
+		Notes:     c.Notes,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+	}
+}
+
+func mapBudgetCategoryErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("budget category not found")
+	}
+	return err
+}
+
+func mapBudgetCategoryWriteErr(err error, name string) error {
+	if isBudgetCategoryDuplicateNameErr(err) {
+		return &BudgetCategoryDuplicateNameError{Name: name}
+	}
+	return err
+}
+
+func isBudgetCategoryDuplicateNameErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "budget_categories.name")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: budget_categories.name")
+}
+
+func budgetFromFields(id int64, name string, currencyID, categoryID int64, categoryName, code string, scale, hidden int64, notes, createdAt, updatedAt string) Budget {
+	return Budget{
+		ID:           id,
+		Name:         name,
+		CurrencyID:   currencyID,
+		CategoryID:   categoryID,
+		CategoryName: categoryName,
+		Code:         code,
+		Scale:        int(scale),
+		Hidden:       hidden == 1,
+		Notes:        notes,
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
+	}
+}
+
+func budgetFromGetRow(row db.GetBudgetByIDRow) Budget {
+	return budgetFromFields(row.ID, row.Name, row.CurrencyID, row.CategoryID, row.CategoryName, row.Code, row.Scale, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func budgetFromNameRow(row db.GetBudgetByNameRow) Budget {
+	return budgetFromFields(row.ID, row.Name, row.CurrencyID, row.CategoryID, row.CategoryName, row.Code, row.Scale, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func budgetFromListRow(row db.ListBudgetsRow) Budget {
+	return budgetFromFields(row.ID, row.Name, row.CurrencyID, row.CategoryID, row.CategoryName, row.Code, row.Scale, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func budgetFromVisibleRow(row db.ListVisibleBudgetsRow) Budget {
+	return budgetFromFields(row.ID, row.Name, row.CurrencyID, row.CategoryID, row.CategoryName, row.Code, row.Scale, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func budgetFromCategoryRow(row db.ListBudgetsByCategoryIDRow) Budget {
+	return budgetFromFields(row.ID, row.Name, row.CurrencyID, row.CategoryID, row.CategoryName, row.Code, row.Scale, row.Hidden, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func mapBudgetErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("budget not found")
+	}
+	return err
+}
+
+func mapBudgetWriteErr(err error, name string) error {
+	if isBudgetDuplicateNameErr(err) {
+		return &BudgetDuplicateNameError{Name: name}
+	}
+	return err
+}
+
+func isBudgetDuplicateNameErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "budgets.name")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: budgets.name")
+}
+
 func currencyFromFields(id int64, code, name string, scale int64, amount, rateScale sql.NullInt64, updated sql.NullString) Currency {
 	c := Currency{
 		ID:    id,
@@ -153,6 +243,25 @@ func balanceFromDB(b db.Balance) Balance {
 		CreatedAt: b.CreatedAt,
 		UpdatedAt: b.UpdatedAt,
 	}
+}
+
+func budgetAllocationFromDB(a db.BudgetAllocation) BudgetAllocation {
+	return BudgetAllocation{
+		ID:        a.ID,
+		BudgetID:  a.BudgetID,
+		Date:      a.Date,
+		Amount:    money.Money{Amount: a.Amount, Scale: int(a.Scale)},
+		Notes:     a.Notes,
+		CreatedAt: a.CreatedAt,
+		UpdatedAt: a.UpdatedAt,
+	}
+}
+
+func mapBudgetAllocationErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("budget allocation not found")
+	}
+	return err
 }
 
 func mapBalanceErr(err error) error {

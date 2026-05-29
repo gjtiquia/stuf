@@ -45,6 +45,33 @@ func TestRouteBuildersAndParsers(t *testing.T) {
 		t.Fatalf("balanceEditPath(%q) = false", editBalancePath)
 	}
 
+	budget := "groceries"
+	if got, ok := budgetDetailName(budgetPath(budget)); !ok || got != budget {
+		t.Fatalf("budgetDetailName = %q, %v", got, ok)
+	}
+	if got, ok := budgetEditName(budgetEditPathFor(budget)); !ok || got != budget {
+		t.Fatalf("budgetEditName = %q, %v", got, ok)
+	}
+	if got, ok := budgetAllocationListName(budgetAllocationListPath(budget)); !ok || got != budget {
+		t.Fatalf("budgetAllocationListName = %q, %v", got, ok)
+	}
+	if got, ok := budgetAllocationAddName(budgetAllocationAddPath(budget)); !ok || got != budget {
+		t.Fatalf("budgetAllocationAddName = %q, %v", got, ok)
+	}
+	if gotName, gotID, ok := budgetAllocationEditName(budgetAllocationEditPath(budget, 42)); !ok || gotName != budget || gotID != 42 {
+		t.Fatalf("budgetAllocationEditName = %q %d, %v", gotName, gotID, ok)
+	}
+	category := "daily"
+	if got, ok := budgetCategoryDetailName(budgetCategoryPath(category)); !ok || got != category {
+		t.Fatalf("budgetCategoryDetailName = %q, %v", got, ok)
+	}
+	if got, ok := budgetCategoryEditName(budgetCategoryEditPathFor(category)); !ok || got != category {
+		t.Fatalf("budgetCategoryEditName = %q, %v", got, ok)
+	}
+	if got, ok := budgetCategoryBudgetCreateName(budgetCategoryBudgetCreatePath(category)); !ok || got != category {
+		t.Fatalf("budgetCategoryBudgetCreateName = %q, %v", got, ok)
+	}
+
 	reportMonth := "2026-05"
 	reportPath := reportMonthlyDetailPath(reportMonth)
 	if gotMonth, ok := reportMonthlyDetailMonth(reportPath); !ok || gotMonth != reportMonth {

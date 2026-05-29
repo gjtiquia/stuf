@@ -42,7 +42,7 @@ func placeholderFor(field string) string {
 	switch field {
 	case "name", "tag-name", "notes":
 		return "(type anything...)"
-	case "balance":
+	case "balance", "amount":
 		return "(type amount...)"
 	default:
 		return ""
@@ -61,7 +61,7 @@ func normalizeFieldValue(field, value string) string {
 		return sanitizeTagSlug(value)
 	case "date":
 		return sanitizeDateInput(value)
-	case "balance":
+	case "balance", "amount":
 		return sanitizeBalanceAmount(value)
 	default:
 		return value

@@ -27,13 +27,16 @@ func testApp(t *testing.T) (App, *repo.Store) {
 	h := service.HistoryService{Repo: s.Hist, Now: s.Clock}
 	cfg := config.Loaded{Config: config.Config{Currency: "HKD"}, Path: "/tmp/config.jsonc"}
 	return New(ctx, Services{
-		Accounts:  service.AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"},
-		Balances:  service.BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h},
-		Currency:  service.CurrencyService{Currencies: s.Cur},
-		Tags:      service.TagService{Store: s, Tags: s.Tag, History: h},
-		Dashboard: service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
-		Reports:   service.ReportService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
-		History:   h,
+		Accounts:          service.AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"},
+		Balances:          service.BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h},
+		Currency:          service.CurrencyService{Currencies: s.Cur},
+		Tags:              service.TagService{Store: s, Tags: s.Tag, History: h},
+		BudgetCategories:  service.BudgetCategoryService{Store: s, Categories: s.BudCat, Budgets: s.Bud, History: h},
+		Budgets:           service.BudgetService{Store: s, Budgets: s.Bud, Categories: s.BudCat, Currency: s.Cur, Allocations: s.Alloc, History: h, AppCurrency: "HKD"},
+		BudgetAllocations: service.BudgetAllocationService{Store: s, Budgets: s.Bud, Allocations: s.Alloc, History: h},
+		Dashboard:         service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
+		Reports:           service.ReportService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
+		History:           h,
 		Backup: func(context.Context) (string, error) {
 			return "/tmp/db.2026-05-24-1200.sqlite", nil
 		},
@@ -181,6 +184,67 @@ func TestBalanceListRenderOrder(t *testing.T) {
 		"> 2026-05-21 | HKD 50,000.00",
 		"---",
 	)
+}
+
+func TestBudgetHappyPathThroughUIAndServices(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	cash, _, err := app.Svc.Accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-01", "5000.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+
+	app = pressRunes(app, "3")
+	if app.Path != routeBudgetList {
+		t.Fatalf("budgets should open list route, got %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "/budgets/list/", "on-budget : HKD 5,000.00", "budgeted  : HKD     0.00", "available : HKD 5,000.00")
+
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != routeBudgetCreate {
+		t.Fatalf("budget create route = %s", app.Path)
+	}
+	app.Form["name"] = "groceries"
+	app.Form["category"] = "daily"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != routeBudgetList || app.Error != "" {
+		t.Fatalf("budget create failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "daily", "> groceries")
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != budgetPath("groceries") {
+		t.Fatalf("budget detail route = %s", app.Path)
+	}
+	app = press(app, tea.KeyEnter)
+	if app.Path != budgetAllocationListPath("groceries") {
+		t.Fatalf("allocation list route = %s", app.Path)
+	}
+	app = press(app, tea.KeyCtrlN)
+	app.Form["amount"] = "3000.00"
+	app.Form["date"] = "2026-05-02"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != budgetAllocationListPath("groceries") || app.Error != "" {
+		t.Fatalf("allocation add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: routeBudgetList, Menu: 0})
+	assertViewContains(t, app.View(), "budgeted  : HKD 3,000.00", "available : HKD 2,000.00")
+	if _, _, err := app.Svc.Balances.Add(ctx, cash.ID, "2026-05-24", "2000.00", "drop"); err != nil {
+		t.Fatal(err)
+	}
+	assertViewContains(t, app.View(), "available : HKD (1,000.00)")
+	budget, err := app.Svc.Budgets.GetByName(ctx, "groceries")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.BudgetAllocations.Add(ctx, budget.ID, service.AllocationActionRemoveMoney, "1000.00", "2026-05-24", "rebalance"); err != nil {
+		t.Fatal(err)
+	}
+	assertViewContains(t, app.View(), "budgeted  : HKD 2,000.00", "available : HKD     0.00")
 }
 
 func TestMenuNavigationMovesVisibleSelection(t *testing.T) {

@@ -37,6 +37,38 @@ type Tag struct {
 	UpdatedAt string
 }
 
+type BudgetCategory struct {
+	ID        int64
+	Name      string
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type Budget struct {
+	ID           int64
+	Name         string
+	CurrencyID   int64
+	CategoryID   int64
+	CategoryName string
+	Code         string
+	Scale        int
+	Hidden       bool
+	Notes        string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+type BudgetAllocation struct {
+	ID        int64
+	BudgetID  int64
+	Date      string
+	Amount    money.Money
+	Notes     string
+	CreatedAt string
+	UpdatedAt string
+}
+
 type TagDuplicateNameError struct {
 	Name string
 }
@@ -46,6 +78,28 @@ func (e *TagDuplicateNameError) Error() string {
 		return "tag already exists; choose another name"
 	}
 	return fmt.Sprintf("tag already exists: %s; choose another name", e.Name)
+}
+
+type BudgetCategoryDuplicateNameError struct {
+	Name string
+}
+
+func (e *BudgetCategoryDuplicateNameError) Error() string {
+	if e.Name == "" {
+		return "budget category already exists; choose another name"
+	}
+	return fmt.Sprintf("budget category already exists: %s; choose another name", e.Name)
+}
+
+type BudgetDuplicateNameError struct {
+	Name string
+}
+
+func (e *BudgetDuplicateNameError) Error() string {
+	if e.Name == "" {
+		return "budget already exists; choose another name"
+	}
+	return fmt.Sprintf("budget already exists: %s; choose another name", e.Name)
 }
 
 type AccountDuplicateNameError struct {

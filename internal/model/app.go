@@ -10,14 +10,17 @@ import (
 )
 
 type Services struct {
-	Accounts  service.AccountService
-	Balances  service.BalanceService
-	Currency  service.CurrencyService
-	Tags      service.TagService
-	Dashboard service.DashboardService
-	Reports   service.ReportService
-	History   service.HistoryService
-	Backup    func(context.Context) (string, error)
+	Accounts          service.AccountService
+	Balances          service.BalanceService
+	Currency          service.CurrencyService
+	Tags              service.TagService
+	BudgetCategories  service.BudgetCategoryService
+	Budgets           service.BudgetService
+	BudgetAllocations service.BudgetAllocationService
+	Dashboard         service.DashboardService
+	Reports           service.ReportService
+	History           service.HistoryService
+	Backup            func(context.Context) (string, error)
 }
 
 type App struct {
@@ -36,6 +39,7 @@ type App struct {
 	Field           int
 	SelectedAccount string
 	AccountVisible  accountVisibilityMode
+	BudgetVisible   accountVisibilityMode
 	ListReturn      listReturnState
 }
 
@@ -78,6 +82,24 @@ func (a App) notesFocused() bool {
 		return a.Field == 3
 	case balanceAddPath(a.Path), balanceEditPath(a.Path):
 		return a.Field == 2
+	case a.Path == routeBudgetCreate:
+		return a.Field == 3
+	case budgetEditPath(a.Path):
+		return a.Field == 3
+	case a.Path == routeBudgetCatCreate:
+		return a.Field == 1
+	case func() bool {
+		_, ok := budgetCategoryEditName(a.Path)
+		return ok
+	}():
+		return a.Field == 1
+	case budgetAllocationAddPathMatch(a.Path):
+		return a.Field == 3
+	case func() bool {
+		_, _, ok := budgetAllocationEditName(a.Path)
+		return ok
+	}():
+		return a.Field == 2
 	default:
 		return false
 	}
@@ -119,7 +141,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch a.Path {
 	case routeRoot:
-		a = a.menuKey(s, []string{routeAccountList, "/transactions/", "/budgets/", "/owed/", routeReports, routeSettings, routeBackup})
+		a = a.menuKey(s, []string{routeAccountList, "/transactions/", routeBudgetList, "/owed/", routeReports, routeSettings, routeBackup})
 	case routeAccountList:
 		a = a.accountListKey(s)
 	case routeAccountCreate:
@@ -128,6 +150,14 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a = a.tagListKey(s)
 	case routeTagCreate:
 		a = a.tagCreateKey(s)
+	case routeBudgetList:
+		a = a.budgetListKey(s)
+	case routeBudgetCreate:
+		a = a.budgetCreateKey(s)
+	case routeBudgetCatList:
+		a = a.budgetCategoryListKey(s)
+	case routeBudgetCatCreate:
+		a = a.budgetCategoryCreateKey(s)
 	case routeBackup:
 		a = a.backupKey(s)
 	case routeReports:
@@ -158,6 +188,22 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.accountEditKey(s, name)
 		} else if name, ok := tagEditName(a.Path); ok {
 			a = a.tagEditKey(s, name)
+		} else if name, ok := budgetDetailName(a.Path); ok {
+			a = a.budgetDetailKey(s, name)
+		} else if name, ok := budgetEditName(a.Path); ok {
+			a = a.budgetEditKey(s, name)
+		} else if name, ok := budgetAllocationListName(a.Path); ok {
+			a = a.budgetAllocationListKey(s, name)
+		} else if name, ok := budgetAllocationAddName(a.Path); ok {
+			a = a.budgetAllocationAddKey(s, name)
+		} else if name, id, ok := budgetAllocationEditName(a.Path); ok {
+			a = a.budgetAllocationEditKey(s, name, id)
+		} else if name, ok := budgetCategoryDetailName(a.Path); ok {
+			a = a.budgetCategoryDetailKey(s, name)
+		} else if name, ok := budgetCategoryEditName(a.Path); ok {
+			a = a.budgetCategoryEditKey(s, name)
+		} else if name, ok := budgetCategoryBudgetCreateName(a.Path); ok {
+			a = a.budgetCategoryBudgetCreateKey(s, name)
 		} else if month, name, ok := reportMonthlyAccount(a.Path); ok {
 			a = a.reportMonthlyAccountKey(s, month, name)
 		} else if month, ok := reportMonthlyDetailMonth(a.Path); ok {
@@ -323,6 +369,14 @@ func (a App) screen() screen {
 		return a.tagListScreen()
 	case a.Path == routeTagCreate:
 		return a.tagCreateScreen()
+	case a.Path == routeBudgetList:
+		return a.budgetListScreen()
+	case a.Path == routeBudgetCreate:
+		return a.budgetCreateScreen()
+	case a.Path == routeBudgetCatList:
+		return a.budgetCategoryListScreen()
+	case a.Path == routeBudgetCatCreate:
+		return a.budgetCategoryCreateScreen()
 	case a.Path == routeSettings:
 		return screen{Path: routeSettings, Body: fmt.Sprintf("config   : %s\ncurrency : %s\n", a.Config.Path, a.Config.Config.Currency)}
 	case a.Path == routeBackup:
@@ -347,7 +401,7 @@ func (a App) screen() screen {
 	}():
 		month, _ := reportMonthlyDetailMonth(a.Path)
 		return a.reportMonthlyDetailScreen(month)
-	case strings.Contains(a.Path, "transactions") || strings.Contains(a.Path, "budgets") || strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
+	case strings.Contains(a.Path, "transactions") || strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
 		return screen{Path: a.Path, Body: "(TODO)\n"}
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
@@ -385,6 +439,30 @@ func (a App) screen() screen {
 		}
 		if name, ok := tagEditName(a.Path); ok {
 			return a.tagEditScreen(name)
+		}
+		if name, ok := budgetDetailName(a.Path); ok {
+			return a.budgetDetailScreen(name)
+		}
+		if name, ok := budgetEditName(a.Path); ok {
+			return a.budgetEditScreen(name)
+		}
+		if name, ok := budgetAllocationListName(a.Path); ok {
+			return a.budgetAllocationListScreen(name)
+		}
+		if name, ok := budgetAllocationAddName(a.Path); ok {
+			return a.budgetAllocationAddScreen(name)
+		}
+		if name, id, ok := budgetAllocationEditName(a.Path); ok {
+			return a.budgetAllocationEditScreen(name, id)
+		}
+		if name, ok := budgetCategoryDetailName(a.Path); ok {
+			return a.budgetCategoryDetailScreen(name)
+		}
+		if name, ok := budgetCategoryEditName(a.Path); ok {
+			return a.budgetCategoryEditScreen(name)
+		}
+		if name, ok := budgetCategoryBudgetCreateName(a.Path); ok {
+			return a.budgetCategoryBudgetCreateScreen(name)
 		}
 		return screen{Path: a.Path}
 	}

@@ -25,8 +25,27 @@ func serviceStack(t *testing.T) (*repo.Store, AccountService, BalanceService, Da
 	h := HistoryService{Repo: s.Hist, Now: s.Clock}
 	a := AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"}
 	b := BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h}
-	d := DashboardService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock}
+	d := DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock}
 	return s, a, b, d, h
+}
+
+func budgetServiceStack(t *testing.T) (*repo.Store, AccountService, BalanceService, BudgetCategoryService, BudgetService, BudgetAllocationService, DashboardService, HistoryService) {
+	t.Helper()
+	ctx := context.Background()
+	s, err := repo.Open(ctx, filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.Clock = func() time.Time { return time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC) }
+	h := HistoryService{Repo: s.Hist, Now: s.Clock}
+	a := AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"}
+	bal := BalanceService{Store: s, Accounts: s.Acct, Balances: s.Bal, History: h}
+	cat := BudgetCategoryService{Store: s, Categories: s.BudCat, Budgets: s.Bud, History: h}
+	bud := BudgetService{Store: s, Budgets: s.Bud, Categories: s.BudCat, Currency: s.Cur, Allocations: s.Alloc, History: h, AppCurrency: "HKD"}
+	alloc := BudgetAllocationService{Store: s, Budgets: s.Bud, Allocations: s.Alloc, History: h}
+	d := DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock}
+	return s, a, bal, cat, bud, alloc, d, h
 }
 
 func setServiceRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
@@ -119,6 +138,117 @@ func TestAccountInvalidCurrencyReturnsFriendlyError(t *testing.T) {
 		t.Fatal("expected invalid currency update error")
 	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
 		t.Fatalf("invalid currency update error = %q", got)
+	}
+}
+
+func TestBudgetHappyPathNegativeAvailableAndReadjust(t *testing.T) {
+	ctx := context.Background()
+	_, accounts, balances, categories, budgets, allocations, dashboard, _ := budgetServiceStack(t)
+	cash, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := balances.Add(ctx, cash.ID, "2026-05-01", "50000.00", "start"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := categories.Create(ctx, "daily", "day to day"); err != nil {
+		t.Fatal(err)
+	}
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "daily", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	travel, _, err := budgets.Create(ctx, "travel", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := allocations.Add(ctx, groceries.ID, AllocationActionSetTotal, "3000.00", "2026-05-02", "paycheck"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := allocations.Add(ctx, travel.ID, AllocationActionAddMoney, "2000.00", "2026-05-02", "trip"); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Budgeted.Amount != 500000 || summary.Available.Amount != 4500000 {
+		t.Fatalf("initial budget totals = budgeted %v available %v", summary.Budgeted, summary.Available)
+	}
+	if _, _, err := balances.Add(ctx, cash.ID, "2026-05-24", "4000.00", "cash dropped"); err != nil {
+		t.Fatal(err)
+	}
+	summary, err = dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Budgeted.Amount != 500000 || summary.Available.Amount != -100000 {
+		t.Fatalf("negative available totals = budgeted %v available %v", summary.Budgeted, summary.Available)
+	}
+	if _, _, err := allocations.Add(ctx, travel.ID, AllocationActionRemoveMoney, "1000.00", "2026-05-24", "rebalance"); err != nil {
+		t.Fatal(err)
+	}
+	summary, err = dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Budgeted.Amount != 400000 || summary.Available.Amount != 0 {
+		t.Fatalf("readjusted totals = budgeted %v available %v", summary.Budgeted, summary.Available)
+	}
+}
+
+func TestBudgetCategorySeedAndProtection(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, categories, _, _, _, _ := budgetServiceStack(t)
+	cat, err := categories.GetByName(ctx, "uncategorized")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := categories.Update(ctx, cat.ID, "other", "nope"); err == nil {
+		t.Fatal("expected uncategorized edit to be blocked")
+	}
+	if _, _, err := categories.Create(ctx, "daily", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := categories.Create(ctx, "daily", "duplicate"); err == nil {
+		t.Fatal("expected duplicate category error")
+	} else {
+		var dup *repo.BudgetCategoryDuplicateNameError
+		if !errors.As(err, &dup) {
+			t.Fatalf("expected duplicate category domain error, got %T %[1]v", err)
+		}
+	}
+}
+
+func TestBudgetAllocationActionsAndSameDateOrdering(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, _, budgets, allocations, _, _ := budgetServiceStack(t)
+	b, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := allocations.Add(ctx, b.ID, AllocationActionAddMoney, "100.00", "2026-05-10", "first"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := allocations.Add(ctx, b.ID, AllocationActionRemoveMoney, "25.00", "2026-05-10", "second"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := allocations.Add(ctx, b.ID, AllocationActionSetTotal, "50.00", "2026-05-10", "set"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := allocations.ListWithBalances(ctx, b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d", len(rows))
+	}
+	got := []int64{rows[0].Balance.Amount, rows[1].Balance.Amount, rows[2].Balance.Amount}
+	want := []int64{10000, 7500, 5000}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("running balance[%d] = %d want %d; rows=%+v", i, got[i], want[i], rows)
+		}
 	}
 }
 
