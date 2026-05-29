@@ -3426,6 +3426,26 @@ func TestTagRoutesCreateEditAndListSelection(t *testing.T) {
 	assertViewContains(t, app.View(), "family/core", "renamed")
 }
 
+func TestTagListNavigationCanSelectRowsAfterFirst(t *testing.T) {
+	app, store := testApp(t)
+	if _, err := store.Tag.Create(context.Background(), "family", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Tag.Create(context.Background(), "wallet", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: routeTagList, Menu: 0})
+
+	app = press(app, tea.KeyDown)
+	if view := app.View(); !strings.Contains(view, "> wallet") {
+		t.Fatalf("down should move tag list selection to second row:\n%s", view)
+	}
+	app = press(app, tea.KeyEnter)
+	if app.Path != tagEditPathFor("wallet") {
+		t.Fatalf("enter should open selected tag, got %s", app.Path)
+	}
+}
+
 func TestAccountCreateTagFieldInlineCreateAndFilter(t *testing.T) {
 	app, store := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})

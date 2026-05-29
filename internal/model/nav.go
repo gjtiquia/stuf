@@ -48,6 +48,12 @@ func (a App) menuCountFor(path string) int {
 		return 7
 	case routeAccountList:
 		return a.accountListRowCount()
+	case routeTagList:
+		rows, err := a.filteredTags()
+		if err != nil {
+			return 0
+		}
+		return len(rows)
 	case routeBackup:
 		return 1
 	default:
