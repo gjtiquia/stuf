@@ -126,3 +126,33 @@
 - tags like github
     - https://docs.github.com/en/enterprise-cloud@latest/issues/tracking-your-work-with-issues/using-issues/filtering-and-searching-issues-and-pull-requests#about-search-terms
 
+---
+
+## research TODOs
+
+"Frictionless Tracking" / Flow-Based Budgeting:
+Look up blogs on "anti-budgets" or "flow-based budgeting."
+They argue that tracking net-worth snapshots (like your balance anchors) is the only reliable way to measure financial health,
+while transaction tracking is just behavioral therapy.
+
+Read up on Paula Pant (Afford Anything). 
+She heavily promotes the "Anti-Budget." 
+The core thesis is that willpower is finite. 
+If you hit your 20% savings goal on payday, 
+it mathematically does not matter if you spend the remaining 80% on groceries, home improvement tools, or a spontaneous trip to Tokyo. 
+You just look at your checking account balance, and if it's above zero, you're good.
+The core principle is "Save first, spend the rest." 
+This is a mathematical, not behavioral, approach. 
+It acknowledges that categorizing coffee vs. groceries is essentially "ledger-making" for the sake of anxiety, not for the sake of wealth building.
+
+Look up old UI/UX teardowns of an app called Level Money (circa 2015). 
+It did exactly this: it calculated your income, subtracted fixed expenses, 
+and gave you a single "Spendable" number for the day, week, and month. 
+It was brilliant, widely loved, bought by Capital One, and then killed. 
+Many designers still cite it as the peak of budgeting UX because it entirely eliminated cognitive load.
+
+The "Guilt-Free" Movement: 
+Ramit Sethi's I Will Teach You To Be Rich advocates for automating the top-down flow so you can spend guilt-free. 
+stuf is essentially the software manifestation of this book's philosophy.
+
+
