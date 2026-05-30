@@ -105,3 +105,24 @@ type Tag struct {
 	CreatedAt string
 	UpdatedAt string
 }
+
+type Transaction struct {
+	ID         int64
+	Ref        int64
+	ParentID   sql.NullInt64
+	AccountID  int64
+	Type       string
+	CurrencyID int64
+	Date       string
+	Amount     int64
+	Scale      int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type TransactionTag struct {
+	TransactionID int64
+	TagID         int64
+	CreatedAt     string
+}

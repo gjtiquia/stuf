@@ -34,6 +34,7 @@ func testApp(t *testing.T) (App, *repo.Store) {
 		BudgetCategories:  service.BudgetCategoryService{Store: s, Categories: s.BudCat, Budgets: s.Bud, History: h},
 		Budgets:           service.BudgetService{Store: s, Budgets: s.Bud, Categories: s.BudCat, Currency: s.Cur, Allocations: s.Alloc, History: h, AppCurrency: "HKD"},
 		BudgetAllocations: service.BudgetAllocationService{Store: s, Budgets: s.Bud, Allocations: s.Alloc, History: h},
+		Transactions:      service.TransactionService{Store: s, Transactions: s.Txn, Accounts: s.Acct, Currency: s.Cur, Tags: s.Tag, History: h},
 		Dashboard:         service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		Reports:           service.ReportService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		History:           h,
@@ -51,7 +52,7 @@ func appWithNav(app App, frames ...navFrame) App {
 func TestDashboardRendersEmptyStateAndTODOs(t *testing.T) {
 	app, _ := testApp(t)
 	view := app.View()
-	for _, want := range []string{"# stuf", "as-of       : none [!]", "total       : HKD 0.00", "on-budget net changes", "on-budget high to lows", "on-budget lows", "transactions (TODO)"} {
+	for _, want := range []string{"# stuf", "as-of       : none [!]", "total       : HKD 0.00", "on-budget net changes", "on-budget high to lows", "on-budget lows", "transactions"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("view missing %q:\n%s", want, view)
 		}
@@ -258,6 +259,72 @@ func TestBudgetHappyPathThroughUIAndServices(t *testing.T) {
 	assertViewContains(t, app.View(), "budgeted  : HKD 2,000.00", "available : HKD     0.00")
 }
 
+func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	amex, _, err := app.Svc.Accounts.Create(ctx, "amex", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app = pressRunes(app, "2")
+	if app.Path != routeTransactionList {
+		t.Fatalf("transactions list route = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "/transactions/list/", "> filter : (type anything...)", "  date | type | amount | account | tags | notes")
+
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != routeTransactionAdd {
+		t.Fatalf("transaction add route = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "2) type", "expense", "3) amount", "5) account", "6) tags")
+	app.Form["account"] = "amex"
+	app.Form["amount"] = "10000.00"
+	app.Form["date"] = "2026-05-28"
+	app.Form["tags"] = "credit-card"
+	app.Form["notes"] = "statement payment"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != routeTransactionList || app.Error != "" {
+		t.Fatalf("transaction add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "> 2026-05-28", "expense", "HKD 10,000.00", "amex", "[credit-card]", "statement payment")
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/transactions/tx-000001/" {
+		t.Fatalf("transaction detail path = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "> 1) children", "  2) edit transaction", "  3) add child transaction")
+	app = press(app, tea.KeyEnter)
+	if app.Path != "/transactions/tx-000001/children/list/" {
+		t.Fatalf("children list path = %s", app.Path)
+	}
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != "/transactions/tx-000001/children/add/" {
+		t.Fatalf("child add path = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "account  : amex (locked to parent)", "type     : expense")
+	app.Form["amount"] = "1200.00"
+	app.Form["date"] = "2026-05-28"
+	app.Form["tags"] = "groceries"
+	app.Form["notes"] = "supermarket"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != "/transactions/tx-000001/children/list/" || app.Error != "" {
+		t.Fatalf("child add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "> 2026-05-28", "HKD 1,200.00", "[groceries]", "supermarket")
+
+	app = appWithNav(app, navFrame{Path: routeRoot}, navFrame{Path: accountPath("amex"), Menu: 2})
+	app = press(app, tea.KeyEnter)
+	if app.Path != accountTransactionsPath("amex") {
+		t.Fatalf("account transactions path = %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "account : amex", "statement payment", "supermarket")
+	app.Form[formKeyFilter] = "tag:groceries"
+	assertViewContains(t, app.View(), "supermarket")
+	assertNotContains(t, app.View(), "statement payment")
+	_ = amex
+}
+
 func TestBudgetCategoryFieldSelectsExistingCategory(t *testing.T) {
 	app, _ := testApp(t)
 	ctx := context.Background()
@@ -321,7 +388,7 @@ func TestMenuNavigationMovesVisibleSelection(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	view := app.View()
-	if !strings.Contains(view, "> 2) transactions (TODO)") {
+	if !strings.Contains(view, "> 2) transactions") {
 		t.Fatalf("down did not move dashboard marker:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
@@ -1362,7 +1429,7 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 		"lows",
 		"> 1) balances",
 		"  2) child accounts",
-		"  3) transactions (TODO)",
+		"  3) transactions",
 		"  4) edit account",
 		"  5) hide account",
 		"  6) delete account",
@@ -1379,7 +1446,7 @@ func TestAccountDetailVisibleAndHiddenReadmeShape(t *testing.T) {
 	app.Path = "/accounts/cash/"
 	app.Menu = 0
 	view = app.View()
-	for _, want := range []string{"hidden    : true", "> 1) balances", "  2) child accounts", "  3) transactions (TODO)", "  4) edit account", "  5) show account", "  6) delete account"} {
+	for _, want := range []string{"hidden    : true", "> 1) balances", "  2) child accounts", "  3) transactions", "  4) edit account", "  5) show account", "  6) delete account"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("hidden account detail missing %q:\n%s", want, view)
 		}
@@ -2904,7 +2971,7 @@ func TestManualAccountAndBalanceFlow(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	app = m.(App)
-	if app.Path != "/accounts/cash/transactions/" {
+	if app.Path != "/accounts/cash/transactions/list/" {
 		t.Fatalf("transactions TODO path = %s", app.Path)
 	}
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/list/", Menu: 0}, navFrame{Path: "/accounts/cash/", Menu: 0})
@@ -2978,7 +3045,7 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 	app = m.(App)
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if app.Path != "/accounts/cash/transactions/" {
+	if app.Path != "/accounts/cash/transactions/list/" {
 		t.Fatalf("expected transactions route, got %s", app.Path)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -2986,7 +3053,7 @@ func TestMenuCursorRestoresOnBackFromAccountDetailChild(t *testing.T) {
 	if app.Path != "/accounts/cash/" {
 		t.Fatalf("expected account detail, got %s", app.Path)
 	}
-	if view := app.View(); !strings.Contains(view, "> 3) transactions (TODO)") || strings.Contains(view, "> 1) balances") {
+	if view := app.View(); !strings.Contains(view, "> 3) transactions") || strings.Contains(view, "> 1) balances") {
 		t.Fatalf("expected transactions cursor restored on account detail:\n%s", view)
 	}
 }
@@ -3139,12 +3206,12 @@ func TestTabNavigatesMenus(t *testing.T) {
 	app, _ := testApp(t)
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 2) transactions (TODO)") || strings.Contains(view, "> 1) accounts") {
+	if view := app.View(); !strings.Contains(view, "> 2) transactions") || strings.Contains(view, "> 1) accounts") {
 		t.Fatalf("tab should move home menu cursor down:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	app = m.(App)
-	if view := app.View(); !strings.Contains(view, "> 1) accounts") || strings.Contains(view, "> 2) transactions (TODO)") {
+	if view := app.View(); !strings.Contains(view, "> 1) accounts") || strings.Contains(view, "> 2) transactions") {
 		t.Fatalf("shift-tab should move home menu cursor up:\n%s", view)
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})

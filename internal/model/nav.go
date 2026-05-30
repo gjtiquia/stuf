@@ -59,6 +59,8 @@ func (a App) menuCountFor(path string) int {
 		return len(rows)
 	case routeBudgetList:
 		return a.budgetListRowCount()
+	case routeTransactionList:
+		return a.transactionListRowCount(0)
 	case routeBudgetCatList:
 		rows, err := a.filteredBudgetCategories()
 		if err != nil {
@@ -91,6 +93,23 @@ func (a App) menuCountFor(path string) int {
 			return len(rows)
 		}
 		if _, ok := accountDetailName(path); ok {
+			return 4
+		}
+		if name, ok := accountTransactionListName(path); ok {
+			acct, err := a.Svc.Accounts.GetByName(a.ctx, name)
+			if err != nil {
+				return 0
+			}
+			return a.transactionListRowCount(acct.ID)
+		}
+		if ref, ok := transactionChildrenListRef(path); ok {
+			tx, err := a.transactionByRefString(ref)
+			if err != nil {
+				return 0
+			}
+			return a.transactionChildrenRowCount(tx.ID)
+		}
+		if _, ok := transactionRef(path); ok {
 			return 4
 		}
 		if _, ok := budgetDetailName(path); ok {

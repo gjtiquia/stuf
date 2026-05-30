@@ -17,6 +17,7 @@ type Services struct {
 	BudgetCategories  service.BudgetCategoryService
 	Budgets           service.BudgetService
 	BudgetAllocations service.BudgetAllocationService
+	Transactions      service.TransactionService
 	Dashboard         service.DashboardService
 	Reports           service.ReportService
 	History           service.HistoryService
@@ -141,7 +142,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch a.Path {
 	case routeRoot:
-		a = a.menuKey(s, []string{routeAccountList, "/transactions/", routeBudgetList, "/owed/", routeReports, routeSettings, routeBackup})
+		a = a.menuKey(s, []string{routeAccountList, routeTransactionList, routeBudgetList, "/owed/", routeReports, routeSettings, routeBackup})
+	case routeTransactionList:
+		a = a.transactionListKey(s, 0)
+	case routeTransactionAdd:
+		a = a.transactionAddKey(s, nil, 0)
 	case routeAccountList:
 		a = a.accountListKey(s)
 	case routeAccountCreate:
@@ -184,6 +189,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.balanceDetailKey(s, name, date)
 		} else if name, ok := balanceListName(a.Path); ok {
 			a = a.balanceListTableKey(s, name)
+		} else if name, ok := accountTransactionListName(a.Path); ok {
+			a = a.accountTransactionListKey(s, name)
+		} else if name, ok := accountTransactionAddName(a.Path); ok {
+			a = a.accountTransactionAddKey(s, name)
+		} else if ref, ok := transactionRef(a.Path); ok {
+			a = a.transactionDetailKey(s, ref)
+		} else if ref, ok := transactionEditRef(a.Path); ok {
+			a = a.transactionEditKey(s, ref)
+		} else if ref, ok := transactionChildrenListRef(a.Path); ok {
+			a = a.transactionChildrenListKey(s, ref)
+		} else if ref, ok := transactionChildAddRef(a.Path); ok {
+			a = a.transactionChildAddKey(s, ref)
 		} else if name, ok := accountEditName(a.Path); ok {
 			a = a.accountEditKey(s, name)
 		} else if name, ok := tagEditName(a.Path); ok {
@@ -373,6 +390,10 @@ func (a App) screen() screen {
 		return a.budgetListScreen()
 	case a.Path == routeBudgetCreate:
 		return a.budgetCreateScreen()
+	case a.Path == routeTransactionList:
+		return a.transactionListScreen(0)
+	case a.Path == routeTransactionAdd:
+		return a.transactionAddScreen(nil, 0)
 	case a.Path == routeBudgetCatList:
 		return a.budgetCategoryListScreen()
 	case a.Path == routeBudgetCatCreate:
@@ -401,7 +422,7 @@ func (a App) screen() screen {
 	}():
 		month, _ := reportMonthlyDetailMonth(a.Path)
 		return a.reportMonthlyDetailScreen(month)
-	case strings.Contains(a.Path, "transactions") || strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
+	case strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
 		return screen{Path: a.Path, Body: "(TODO)\n"}
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
@@ -424,6 +445,24 @@ func (a App) screen() screen {
 				Body:    a.balanceListBody(name),
 				Help:    tableListHelp(),
 			}
+		}
+		if name, ok := accountTransactionListName(a.Path); ok {
+			return a.accountTransactionListScreen(name)
+		}
+		if name, ok := accountTransactionAddName(a.Path); ok {
+			return a.accountTransactionAddScreen(name)
+		}
+		if ref, ok := transactionRef(a.Path); ok {
+			return a.transactionDetailScreen(ref)
+		}
+		if ref, ok := transactionEditRef(a.Path); ok {
+			return a.transactionEditScreen(ref)
+		}
+		if ref, ok := transactionChildrenListRef(a.Path); ok {
+			return a.transactionChildrenListScreen(ref)
+		}
+		if ref, ok := transactionChildAddRef(a.Path); ok {
+			return a.transactionChildAddScreen(ref)
 		}
 		if name, ok := balanceAddName(a.Path); ok {
 			return a.balanceAddScreen(name)

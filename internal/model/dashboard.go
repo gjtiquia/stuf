@@ -217,6 +217,6 @@ func (a App) dashboardScreen() screen {
 	return screen{
 		Path:    "/",
 		Context: context,
-		Actions: []string{"accounts", "transactions (TODO)", "budgets", "owed (TODO)", "reports", "settings", "backup"},
+		Actions: []string{"accounts", "transactions", "budgets", "owed (TODO)", "reports", "settings", "backup"},
 	}
 }

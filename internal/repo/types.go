@@ -69,6 +69,23 @@ type BudgetAllocation struct {
 	UpdatedAt string
 }
 
+type Transaction struct {
+	ID            int64
+	Ref           int64
+	ParentID      *int64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int
+	Date          string
+	Amount        money.Money
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
 type TagDuplicateNameError struct {
 	Name string
 }

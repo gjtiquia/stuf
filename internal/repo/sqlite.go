@@ -35,6 +35,7 @@ type Store struct {
 	BudCat *BudgetCategoryRepo
 	Bud    *BudgetRepo
 	Alloc  *BudgetAllocationRepo
+	Txn    *TransactionRepo
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
@@ -61,6 +62,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	store.BudCat = &BudgetCategoryRepo{store: store}
 	store.Bud = &BudgetRepo{store: store}
 	store.Alloc = &BudgetAllocationRepo{store: store}
+	store.Txn = &TransactionRepo{store: store}
 	if existed {
 		var n int
 		if err := sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master").Scan(&n); err != nil {
@@ -130,6 +132,7 @@ func (s *Store) withQueries(q *db.Queries) *Store {
 	txStore.BudCat = &BudgetCategoryRepo{store: txStore}
 	txStore.Bud = &BudgetRepo{store: txStore}
 	txStore.Alloc = &BudgetAllocationRepo{store: txStore}
+	txStore.Txn = &TransactionRepo{store: txStore}
 	return txStore
 }
 
@@ -186,7 +189,7 @@ func (s *Store) verifyStuf(ctx context.Context) error {
 }
 
 func (s *Store) validateSchema(ctx context.Context) error {
-	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history", "tags", "account_tags", "budget_categories", "budgets", "budget_allocations"} {
+	for _, table := range []string{"app_meta", "currencies", "currency_rates", "accounts", "balances", "history", "tags", "account_tags", "budget_categories", "budgets", "budget_allocations", "transactions", "transaction_tags"} {
 		var name string
 		err := s.DB.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
 		if err != nil {

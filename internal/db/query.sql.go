@@ -26,6 +26,22 @@ func (q *Queries) AddAccountTag(ctx context.Context, arg AddAccountTagParams) er
 	return err
 }
 
+const addTransactionTag = `-- name: AddTransactionTag :exec
+INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id, created_at)
+VALUES (?, ?, ?)
+`
+
+type AddTransactionTagParams struct {
+	TransactionID int64
+	TagID         int64
+	CreatedAt     string
+}
+
+func (q *Queries) AddTransactionTag(ctx context.Context, arg AddTransactionTagParams) error {
+	_, err := q.db.ExecContext(ctx, addTransactionTag, arg.TransactionID, arg.TagID, arg.CreatedAt)
+	return err
+}
+
 const countAccountTagsByTagID = `-- name: CountAccountTagsByTagID :one
 SELECT count(*)
 FROM account_tags
@@ -78,6 +94,30 @@ SELECT count(*) FROM accounts WHERE parent_id = ?
 
 func (q *Queries) CountChildrenByAccountID(ctx context.Context, parentID sql.NullInt64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countChildrenByAccountID, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTransactionTagsByTagID = `-- name: CountTransactionTagsByTagID :one
+SELECT count(*)
+FROM transaction_tags
+WHERE tag_id = ?
+`
+
+func (q *Queries) CountTransactionTagsByTagID(ctx context.Context, tagID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTransactionTagsByTagID, tagID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTransactionsByParentID = `-- name: CountTransactionsByParentID :one
+SELECT count(*) FROM transactions WHERE parent_id = ?
+`
+
+func (q *Queries) CountTransactionsByParentID(ctx context.Context, parentID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTransactionsByParentID, parentID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -272,6 +312,41 @@ func (q *Queries) CreateTag(ctx context.Context, arg CreateTagParams) (sql.Resul
 	)
 }
 
+const createTransaction = `-- name: CreateTransaction :execresult
+INSERT INTO transactions (ref, parent_id, account_id, type, currency_id, date, amount, scale, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateTransactionParams struct {
+	Ref        int64
+	ParentID   sql.NullInt64
+	AccountID  int64
+	Type       string
+	CurrencyID int64
+	Date       string
+	Amount     int64
+	Scale      int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) CreateTransaction(ctx context.Context, arg CreateTransactionParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createTransaction,
+		arg.Ref,
+		arg.ParentID,
+		arg.AccountID,
+		arg.Type,
+		arg.CurrencyID,
+		arg.Date,
+		arg.Amount,
+		arg.Scale,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
 const deleteAccount = `-- name: DeleteAccount :exec
 DELETE FROM accounts WHERE id = ?
 `
@@ -341,6 +416,24 @@ DELETE FROM tags WHERE id = ?
 
 func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteTag, id)
+	return err
+}
+
+const deleteTransaction = `-- name: DeleteTransaction :exec
+DELETE FROM transactions WHERE id = ?
+`
+
+func (q *Queries) DeleteTransaction(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTransaction, id)
+	return err
+}
+
+const deleteTransactionTagsByTransactionID = `-- name: DeleteTransactionTagsByTransactionID :exec
+DELETE FROM transaction_tags WHERE transaction_id = ?
+`
+
+func (q *Queries) DeleteTransactionTagsByTransactionID(ctx context.Context, transactionID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTransactionTagsByTransactionID, transactionID)
 	return err
 }
 
@@ -818,6 +911,134 @@ func (q *Queries) GetTagByName(ctx context.Context, name string) (Tag, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTransactionByID = `-- name: GetTransactionByID :one
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.id = ?
+`
+
+type GetTransactionByIDRow struct {
+	ID            int64
+	Ref           int64
+	ParentID      sql.NullInt64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int64
+	Date          string
+	Amount        int64
+	Scale         int64
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+func (q *Queries) GetTransactionByID(ctx context.Context, id int64) (GetTransactionByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getTransactionByID, id)
+	var i GetTransactionByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Ref,
+		&i.ParentID,
+		&i.AccountID,
+		&i.AccountName,
+		&i.Type,
+		&i.CurrencyID,
+		&i.Code,
+		&i.CurrencyScale,
+		&i.Date,
+		&i.Amount,
+		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTransactionByRef = `-- name: GetTransactionByRef :one
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.ref = ?
+`
+
+type GetTransactionByRefRow struct {
+	ID            int64
+	Ref           int64
+	ParentID      sql.NullInt64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int64
+	Date          string
+	Amount        int64
+	Scale         int64
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+func (q *Queries) GetTransactionByRef(ctx context.Context, ref int64) (GetTransactionByRefRow, error) {
+	row := q.db.QueryRowContext(ctx, getTransactionByRef, ref)
+	var i GetTransactionByRefRow
+	err := row.Scan(
+		&i.ID,
+		&i.Ref,
+		&i.ParentID,
+		&i.AccountID,
+		&i.AccountName,
+		&i.Type,
+		&i.CurrencyID,
+		&i.Code,
+		&i.CurrencyScale,
+		&i.Date,
+		&i.Amount,
+		&i.Scale,
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1649,6 +1870,285 @@ func (q *Queries) ListTagsByAccountID(ctx context.Context, accountID int64) ([]T
 	return items, nil
 }
 
+const listTagsByTransactionID = `-- name: ListTagsByTransactionID :many
+SELECT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN transaction_tags tt ON tt.tag_id = t.id
+WHERE tt.transaction_id = ?
+ORDER BY t.name
+`
+
+func (q *Queries) ListTagsByTransactionID(ctx context.Context, transactionID int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listTagsByTransactionID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Tag
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTransactions = `-- name: ListTransactions :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC
+`
+
+type ListTransactionsRow struct {
+	ID            int64
+	Ref           int64
+	ParentID      sql.NullInt64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int64
+	Date          string
+	Amount        int64
+	Scale         int64
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+func (q *Queries) ListTransactions(ctx context.Context) ([]ListTransactionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTransactions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTransactionsRow
+	for rows.Next() {
+		var i ListTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ref,
+			&i.ParentID,
+			&i.AccountID,
+			&i.AccountName,
+			&i.Type,
+			&i.CurrencyID,
+			&i.Code,
+			&i.CurrencyScale,
+			&i.Date,
+			&i.Amount,
+			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTransactionsByAccount = `-- name: ListTransactionsByAccount :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.account_id = ?
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC
+`
+
+type ListTransactionsByAccountRow struct {
+	ID            int64
+	Ref           int64
+	ParentID      sql.NullInt64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int64
+	Date          string
+	Amount        int64
+	Scale         int64
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+func (q *Queries) ListTransactionsByAccount(ctx context.Context, accountID int64) ([]ListTransactionsByAccountRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTransactionsByAccount, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTransactionsByAccountRow
+	for rows.Next() {
+		var i ListTransactionsByAccountRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ref,
+			&i.ParentID,
+			&i.AccountID,
+			&i.AccountName,
+			&i.Type,
+			&i.CurrencyID,
+			&i.Code,
+			&i.CurrencyScale,
+			&i.Date,
+			&i.Amount,
+			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTransactionsByParent = `-- name: ListTransactionsByParent :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.parent_id = ?
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC
+`
+
+type ListTransactionsByParentRow struct {
+	ID            int64
+	Ref           int64
+	ParentID      sql.NullInt64
+	AccountID     int64
+	AccountName   string
+	Type          string
+	CurrencyID    int64
+	Code          string
+	CurrencyScale int64
+	Date          string
+	Amount        int64
+	Scale         int64
+	Notes         string
+	CreatedAt     string
+	UpdatedAt     string
+}
+
+func (q *Queries) ListTransactionsByParent(ctx context.Context, parentID sql.NullInt64) ([]ListTransactionsByParentRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTransactionsByParent, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTransactionsByParentRow
+	for rows.Next() {
+		var i ListTransactionsByParentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Ref,
+			&i.ParentID,
+			&i.AccountID,
+			&i.AccountName,
+			&i.Type,
+			&i.CurrencyID,
+			&i.Code,
+			&i.CurrencyScale,
+			&i.Date,
+			&i.Amount,
+			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVisibleAccounts = `-- name: ListVisibleAccounts :many
 SELECT
   a.id,
@@ -1922,6 +2422,19 @@ func (q *Queries) ListVisibleRootAccounts(ctx context.Context) ([]ListVisibleRoo
 	return items, nil
 }
 
+const nextTransactionRef = `-- name: NextTransactionRef :one
+
+SELECT COALESCE(MAX(ref), 0) + 1 FROM transactions
+`
+
+// Transactions
+func (q *Queries) NextTransactionRef(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, nextTransactionRef)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET name = ?, currency_id = ?, on_budget = ?, hidden = ?, notes = ?, parent_id = ?, updated_at = ?
@@ -2075,6 +2588,41 @@ type UpdateTagParams struct {
 func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) error {
 	_, err := q.db.ExecContext(ctx, updateTag,
 		arg.Name,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateTransaction = `-- name: UpdateTransaction :exec
+UPDATE transactions
+SET parent_id = ?, account_id = ?, type = ?, currency_id = ?, date = ?, amount = ?, scale = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateTransactionParams struct {
+	ParentID   sql.NullInt64
+	AccountID  int64
+	Type       string
+	CurrencyID int64
+	Date       string
+	Amount     int64
+	Scale      int64
+	Notes      string
+	UpdatedAt  string
+	ID         int64
+}
+
+func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, updateTransaction,
+		arg.ParentID,
+		arg.AccountID,
+		arg.Type,
+		arg.CurrencyID,
+		arg.Date,
+		arg.Amount,
+		arg.Scale,
 		arg.Notes,
 		arg.UpdatedAt,
 		arg.ID,

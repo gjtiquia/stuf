@@ -48,11 +48,34 @@ func budgetServiceStack(t *testing.T) (*repo.Store, AccountService, BalanceServi
 	return s, a, bal, cat, bud, alloc, d, h
 }
 
+func transactionServiceStack(t *testing.T) (*repo.Store, AccountService, TransactionService, HistoryService) {
+	t.Helper()
+	ctx := context.Background()
+	s, err := repo.Open(ctx, filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.Clock = func() time.Time { return time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC) }
+	h := HistoryService{Repo: s.Hist, Now: s.Clock}
+	a := AccountService{Store: s, Accounts: s.Acct, Balances: s.Bal, Currency: s.Cur, Tags: s.Tag, History: h, AppCurrency: "HKD"}
+	tx := TransactionService{Store: s, Transactions: s.Txn, Accounts: s.Acct, Currency: s.Cur, Tags: s.Tag, History: h}
+	return s, a, tx, h
+}
+
 func setServiceRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
 	t.Helper()
 	if err := store.SetCurrencyRate(context.Background(), code, amount, scale); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func tagTestNames(tags []repo.Tag) []string {
+	out := make([]string, len(tags))
+	for i, tag := range tags {
+		out[i] = tag.Name
+	}
+	return out
 }
 
 func TestAccountMutationRecordsHistoryAndUndo(t *testing.T) {
@@ -138,6 +161,110 @@ func TestAccountInvalidCurrencyReturnsFriendlyError(t *testing.T) {
 		t.Fatal("expected invalid currency update error")
 	} else if got := err.Error(); got != "currency is unavailable: ZZZ" {
 		t.Fatalf("invalid currency update error = %q", got)
+	}
+}
+
+func TestTransactionMutationsTagsChildrenAndUndo(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, transactions, history := transactionServiceStack(t)
+	amex, _, err := accounts.Create(ctx, "amex", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, entry, err := transactions.Add(ctx, nil, amex.ID, "expense", "", "2026-05-28", "10000.00", "statement payment", []string{"credit-card", "person/alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent.Ref != 1 || parent.Code != "HKD" || parent.Amount.Amount != 1000000 {
+		t.Fatalf("parent = %+v", parent)
+	}
+	tags, err := s.Tag.ListByTransactionID(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(tags); strings.Join(got, ",") != "credit-card,person/alice" {
+		t.Fatalf("tags = %v", got)
+	}
+	rows, _ := s.Hist.List(ctx)
+	if len(rows) != 2 || entry.Action != "add" || entry.Path != "/transactions/tx-000001" {
+		t.Fatalf("history not recorded: rows=%+v entry=%+v", rows, entry)
+	}
+	if err := history.Undo(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Txn.GetByID(ctx, parent.ID); err == nil {
+		t.Fatal("transaction still exists after undo")
+	}
+
+	parent, _, err = transactions.Add(ctx, nil, amex.ID, "expense", "HKD", "2026-05-28", "10000.00", "statement payment", []string{"credit-card"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, _, err := transactions.Add(ctx, &parent.ID, 0, "expense", "JPY", "2026-05-28", "12000", "ramen", []string{"travel/food"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.ParentID == nil || *child.ParentID != parent.ID || child.AccountID != parent.AccountID || child.Code != "JPY" {
+		t.Fatalf("child should inherit account but keep currency: %+v", child)
+	}
+	if _, _, err := transactions.Add(ctx, &parent.ID, amex.ID, "income", "HKD", "2026-05-28", "100.00", "bad type", nil); err == nil {
+		t.Fatal("expected mixed child type to fail")
+	}
+	if _, err := transactions.Delete(ctx, parent.ID); err == nil {
+		t.Fatal("expected deleting parent with children to fail")
+	}
+	updated, _, err := transactions.Update(ctx, child.ID, "2026-05-29", "expense", "HKD", "500.00", "supermarket", []string{"groceries"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Date != "2026-05-29" || updated.Code != "HKD" || updated.Amount.Amount != 50000 {
+		t.Fatalf("updated = %+v", updated)
+	}
+	tags, err = s.Tag.ListByTransactionID(ctx, child.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(tags); strings.Join(got, ",") != "groceries" {
+		t.Fatalf("updated tags = %v", got)
+	}
+}
+
+func TestTransactionValidationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	s, accounts, transactions, _ := transactionServiceStack(t)
+	cash, _, err := accounts.Create(ctx, "cash", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name   string
+		typ    string
+		date   string
+		amount string
+	}{
+		{name: "bad type", typ: "transfer", date: "2026-05-28", amount: "1.00"},
+		{name: "bad date", typ: "expense", date: "2026-99-99", amount: "1.00"},
+		{name: "zero", typ: "expense", date: "2026-05-28", amount: "0.00"},
+		{name: "negative", typ: "expense", date: "2026-05-28", amount: "-1.00"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, _, err := transactions.Add(ctx, nil, cash.ID, tt.typ, "HKD", tt.date, tt.amount, "", nil); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := transactions.Add(ctx, nil, cash.ID, "expense", "HKD", "2026-05-28", "10.00", "should rollback", []string{"rollback-tag"}); err == nil {
+		t.Fatal("expected history failure")
+	}
+	rows, err := s.Txn.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("transaction should roll back when history fails: %+v", rows)
 	}
 }
 

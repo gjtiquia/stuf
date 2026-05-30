@@ -11,6 +11,8 @@ const (
 	routeRoot            = "/"
 	routeAccountList     = "/accounts/list/"
 	routeAccountCreate   = "/accounts/create/"
+	routeTransactionList = "/transactions/list/"
+	routeTransactionAdd  = "/transactions/add/"
 	routeTagList         = "/tags/list/"
 	routeTagCreate       = "/tags/create/"
 	routeBudgetList      = "/budgets/list/"
@@ -33,14 +35,15 @@ func accountBalanceAddPath(name string) string { return "/accounts/" + name + "/
 func accountBalanceEditPath(name, date string) string {
 	return "/accounts/" + name + "/balances/" + date + "/edit/"
 }
-func accountTransactionsPath(name string) string  { return "/accounts/" + name + "/transactions/" }
-func accountChildrenListPath(name string) string  { return "/accounts/" + name + "/children/list/" }
-func accountChildCreatePath(name string) string   { return "/accounts/" + name + "/children/create/" }
-func tagEditPathFor(name string) string           { return "/tags/" + name + "/edit/" }
-func budgetPath(name string) string               { return "/budgets/" + name + "/" }
-func budgetEditPathFor(name string) string        { return "/budgets/" + name + "/edit/" }
-func budgetAllocationListPath(name string) string { return "/budgets/" + name + "/allocations/list/" }
-func budgetAllocationAddPath(name string) string  { return "/budgets/" + name + "/allocations/add/" }
+func accountTransactionsPath(name string) string   { return "/accounts/" + name + "/transactions/list/" }
+func accountTransactionAddPath(name string) string { return "/accounts/" + name + "/transactions/add/" }
+func accountChildrenListPath(name string) string   { return "/accounts/" + name + "/children/list/" }
+func accountChildCreatePath(name string) string    { return "/accounts/" + name + "/children/create/" }
+func tagEditPathFor(name string) string            { return "/tags/" + name + "/edit/" }
+func budgetPath(name string) string                { return "/budgets/" + name + "/" }
+func budgetEditPathFor(name string) string         { return "/budgets/" + name + "/edit/" }
+func budgetAllocationListPath(name string) string  { return "/budgets/" + name + "/allocations/list/" }
+func budgetAllocationAddPath(name string) string   { return "/budgets/" + name + "/allocations/add/" }
 func budgetAllocationEditPath(name string, id int64) string {
 	return fmt.Sprintf("/budgets/%s/allocations/%d/edit/", name, id)
 }
@@ -55,6 +58,91 @@ func reportMonthlyAccountPath(month, name string) string {
 }
 
 func Today() string { return time.Now().Format("2006-01-02") }
+
+func transactionRefPath(ref string) string  { return "/transactions/" + ref + "/" }
+func transactionEditPath(ref string) string { return "/transactions/" + ref + "/edit/" }
+func transactionChildrenListPath(ref string) string {
+	return "/transactions/" + ref + "/children/list/"
+}
+func transactionChildAddPath(ref string) string { return "/transactions/" + ref + "/children/add/" }
+
+func transactionRef(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/transactions/tx-") || !strings.HasSuffix(path, "/") {
+		return "", false
+	}
+	rest := strings.Trim(strings.TrimPrefix(path, "/transactions/"), "/")
+	if strings.Contains(rest, "/") || len(rest) != len("tx-000001") {
+		return "", false
+	}
+	if _, err := strconv.ParseInt(strings.TrimPrefix(rest, "tx-"), 10, 64); err != nil {
+		return "", false
+	}
+	return rest, true
+}
+
+func transactionEditRef(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/transactions/tx-") || !strings.HasSuffix(path, "/edit/") {
+		return "", false
+	}
+	ref := strings.TrimSuffix(strings.TrimPrefix(path, "/transactions/"), "/edit/")
+	if strings.Contains(ref, "/") || len(ref) != len("tx-000001") {
+		return "", false
+	}
+	if _, err := strconv.ParseInt(strings.TrimPrefix(ref, "tx-"), 10, 64); err != nil {
+		return "", false
+	}
+	return ref, true
+}
+
+func transactionChildrenListRef(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/transactions/tx-") || !strings.HasSuffix(path, "/children/list/") {
+		return "", false
+	}
+	ref := strings.TrimSuffix(strings.TrimPrefix(path, "/transactions/"), "/children/list/")
+	if strings.Contains(ref, "/") || len(ref) != len("tx-000001") {
+		return "", false
+	}
+	if _, err := strconv.ParseInt(strings.TrimPrefix(ref, "tx-"), 10, 64); err != nil {
+		return "", false
+	}
+	return ref, true
+}
+
+func transactionChildAddRef(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/transactions/tx-") || !strings.HasSuffix(path, "/children/add/") {
+		return "", false
+	}
+	ref := strings.TrimSuffix(strings.TrimPrefix(path, "/transactions/"), "/children/add/")
+	if strings.Contains(ref, "/") || len(ref) != len("tx-000001") {
+		return "", false
+	}
+	if _, err := strconv.ParseInt(strings.TrimPrefix(ref, "tx-"), 10, 64); err != nil {
+		return "", false
+	}
+	return ref, true
+}
+
+func accountTransactionListName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/transactions/list/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/transactions/list/")
+	if name == "" || strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, true
+}
+
+func accountTransactionAddName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/accounts/") || !strings.HasSuffix(path, "/transactions/add/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/accounts/"), "/transactions/add/")
+	if name == "" || strings.Contains(name, "/") {
+		return "", false
+	}
+	return name, true
+}
 
 func reportMonthlyDetailMonth(path string) (string, bool) {
 	if !strings.HasPrefix(path, "/reports/monthly/") || !strings.HasSuffix(path, "/") {

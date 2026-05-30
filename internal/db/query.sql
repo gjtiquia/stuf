@@ -480,6 +480,157 @@ WHERE id = ?;
 -- name: DeleteBudgetAllocation :exec
 DELETE FROM budget_allocations WHERE id = ?;
 
+-- Transactions
+
+-- name: NextTransactionRef :one
+SELECT COALESCE(MAX(ref), 0) + 1 FROM transactions;
+
+-- name: CreateTransaction :execresult
+INSERT INTO transactions (ref, parent_id, account_id, type, currency_id, date, amount, scale, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetTransactionByID :one
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.id = ?;
+
+-- name: GetTransactionByRef :one
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.ref = ?;
+
+-- name: ListTransactions :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC;
+
+-- name: ListTransactionsByAccount :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.account_id = ?
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC;
+
+-- name: ListTransactionsByParent :many
+SELECT
+  t.id,
+  t.ref,
+  t.parent_id,
+  t.account_id,
+  a.name AS account_name,
+  t.type,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.date,
+  t.amount,
+  t.scale,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM transactions t
+JOIN accounts a ON a.id = t.account_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.parent_id = ?
+ORDER BY t.date DESC, t.created_at DESC, t.id DESC;
+
+-- name: UpdateTransaction :exec
+UPDATE transactions
+SET parent_id = ?, account_id = ?, type = ?, currency_id = ?, date = ?, amount = ?, scale = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteTransaction :exec
+DELETE FROM transactions WHERE id = ?;
+
+-- name: CountTransactionsByParentID :one
+SELECT count(*) FROM transactions WHERE parent_id = ?;
+
+-- name: DeleteTransactionTagsByTransactionID :exec
+DELETE FROM transaction_tags WHERE transaction_id = ?;
+
+-- name: AddTransactionTag :exec
+INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id, created_at)
+VALUES (?, ?, ?);
+
+-- name: ListTagsByTransactionID :many
+SELECT t.id, t.name, t.notes, t.created_at, t.updated_at
+FROM tags t
+JOIN transaction_tags tt ON tt.tag_id = t.id
+WHERE tt.transaction_id = ?
+ORDER BY t.name;
+
+-- name: CountTransactionTagsByTagID :one
+SELECT count(*)
+FROM transaction_tags
+WHERE tag_id = ?;
+
 -- Balances
 
 -- name: CreateBalance :execresult

@@ -52,6 +52,7 @@ func main() {
 	budgetCategories := service.BudgetCategoryService{Store: store, Categories: store.BudCat, Budgets: store.Bud, History: history}
 	budgets := service.BudgetService{Store: store, Budgets: store.Bud, Categories: store.BudCat, Currency: store.Cur, Allocations: store.Alloc, History: history, AppCurrency: loaded.Config.Currency}
 	allocations := service.BudgetAllocationService{Store: store, Budgets: store.Bud, Allocations: store.Alloc, History: history}
+	transactions := service.TransactionService{Store: store, Transactions: store.Txn, Accounts: store.Acct, Currency: store.Cur, Tags: store.Tag, History: history}
 	dashboard := service.DashboardService{Accounts: store.Acct, Balances: store.Bal, Budgets: store.Bud, Allocations: store.Alloc, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 	reports := service.ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: loaded.Config.Currency}
 
@@ -63,6 +64,7 @@ func main() {
 		BudgetCategories:  budgetCategories,
 		Budgets:           budgets,
 		BudgetAllocations: allocations,
+		Transactions:      transactions,
 		Dashboard:         dashboard,
 		Reports:           reports,
 		History:           history,

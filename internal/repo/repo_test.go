@@ -40,7 +40,7 @@ func TestFreshDBMigrationsAndSeeding(t *testing.T) {
 	if err := s.SeedCurrencies(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"tags", "account_tags"} {
+	for _, table := range []string{"tags", "account_tags", "transactions", "transaction_tags"} {
 		var count int
 		if err := s.DB.QueryRowContext(context.Background(), "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -48,6 +48,102 @@ func TestFreshDBMigrationsAndSeeding(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("missing table %s", table)
 		}
+	}
+}
+
+func TestTransactionRepoRefsTagsAndParentChildren(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	jpy, _ := s.Cur.GetByCode(ctx, "JPY")
+	acct, err := s.Acct.Create(ctx, AccountCreate{Name: "amex", CurrencyID: hkd.ID, OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, err := s.Txn.Create(ctx, TransactionCreate{
+		AccountID:  acct.ID,
+		Type:       "expense",
+		CurrencyID: hkd.ID,
+		Date:       "2026-05-28",
+		Amount:     money.Money{Amount: 1000000, Scale: 2},
+		Notes:      "statement payment",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent.Ref != 1 || parent.AccountName != "amex" || parent.Code != "HKD" || parent.Amount.Amount != 1000000 {
+		t.Fatalf("parent transaction = %+v", parent)
+	}
+	tag, err := s.Tag.Create(ctx, "credit-card", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Tag.SetTransactionTags(ctx, parent.ID, []int64{tag.ID}); err != nil {
+		t.Fatal(err)
+	}
+	tags, err := s.Tag.ListByTransactionID(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tagTestNames(tags); strings.Join(got, ",") != "credit-card" {
+		t.Fatalf("transaction tags = %v", got)
+	}
+	child, err := s.Txn.Create(ctx, TransactionCreate{
+		ParentID:   &parent.ID,
+		AccountID:  acct.ID,
+		Type:       "expense",
+		CurrencyID: jpy.ID,
+		Date:       "2026-05-28",
+		Amount:     money.Money{Amount: 12000, Scale: 0},
+		Notes:      "ramen",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if child.Ref != 2 || child.ParentID == nil || *child.ParentID != parent.ID || child.Code != "JPY" {
+		t.Fatalf("child transaction = %+v", child)
+	}
+	children, err := s.Txn.ListByParent(ctx, parent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(children) != 1 || children[0].ID != child.ID {
+		t.Fatalf("children = %+v", children)
+	}
+	fetched, err := s.Txn.GetByRef(ctx, parent.Ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fetched.ID != parent.ID {
+		t.Fatalf("get by ref = %+v want id %d", fetched, parent.ID)
+	}
+}
+
+func TestTransactionRepoConstraints(t *testing.T) {
+	ctx := context.Background()
+	s := testStore(t)
+	hkd, _ := s.Cur.GetByCode(ctx, "HKD")
+	acct, err := s.Acct.Create(ctx, AccountCreate{Name: "cash", CurrencyID: hkd.ID, OnBudget: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Txn.Create(ctx, TransactionCreate{
+		AccountID:  acct.ID,
+		Type:       "transfer",
+		CurrencyID: hkd.ID,
+		Date:       "2026-05-28",
+		Amount:     money.Money{Amount: 100, Scale: 2},
+	}); err == nil {
+		t.Fatal("expected invalid transaction type to fail")
+	}
+	if _, err := s.Txn.Create(ctx, TransactionCreate{
+		AccountID:  acct.ID,
+		Type:       "expense",
+		CurrencyID: hkd.ID,
+		Date:       "2026-05-28",
+		Amount:     money.Money{Amount: -100, Scale: 2},
+	}); err == nil {
+		t.Fatal("expected negative transaction amount to fail")
 	}
 }
 

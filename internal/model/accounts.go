@@ -884,9 +884,9 @@ func (a App) accountDetailScreen(name string) screen {
 	if err != nil {
 		return screen{Path: a.Path, Body: "error: " + err.Error() + "\n"}
 	}
-	actions := []string{"balances", "child accounts", "transactions (TODO)", "edit account", "hide account"}
+	actions := []string{"balances", "child accounts", "transactions", "edit account", "hide account"}
 	if acct.Hidden {
-		actions = []string{"balances", "child accounts", "transactions (TODO)", "edit account", "show account"}
+		actions = []string{"balances", "child accounts", "transactions", "edit account", "show account"}
 	}
 	if empty, err := a.Svc.Accounts.IsEmpty(a.ctx, acct.ID); err == nil && empty {
 		actions = append(actions, "delete account")

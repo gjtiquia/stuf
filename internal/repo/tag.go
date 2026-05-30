@@ -77,6 +77,13 @@ func (r *TagRepo) DeleteIfUnused(ctx context.Context, id int64) error {
 	if count > 0 {
 		return nil
 	}
+	count, err = r.store.Q.CountTransactionTagsByTagID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
 	return r.Delete(ctx, id)
 }
 
@@ -116,6 +123,36 @@ func (r *TagRepo) SetAccountTags(ctx context.Context, accountID int64, tagIDs []
 		}
 		seen[tagID] = true
 		if err := r.store.Q.AddAccountTag(ctx, db.AddAccountTagParams{AccountID: accountID, TagID: tagID, CreatedAt: now}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *TagRepo) ListByTransactionID(ctx context.Context, transactionID int64) ([]Tag, error) {
+	rows, err := r.store.Q.ListTagsByTransactionID(ctx, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Tag, len(rows))
+	for i, row := range rows {
+		out[i] = tagFromDB(row)
+	}
+	return out, nil
+}
+
+func (r *TagRepo) SetTransactionTags(ctx context.Context, transactionID int64, tagIDs []int64) error {
+	if err := r.store.Q.DeleteTransactionTagsByTransactionID(ctx, transactionID); err != nil {
+		return err
+	}
+	now := r.store.Clock().UTC().Format(time.RFC3339)
+	seen := map[int64]bool{}
+	for _, tagID := range tagIDs {
+		if seen[tagID] {
+			continue
+		}
+		seen[tagID] = true
+		if err := r.store.Q.AddTransactionTag(ctx, db.AddTransactionTagParams{TransactionID: transactionID, TagID: tagID, CreatedAt: now}); err != nil {
 			return err
 		}
 	}

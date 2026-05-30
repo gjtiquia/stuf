@@ -257,6 +257,52 @@ func budgetAllocationFromDB(a db.BudgetAllocation) BudgetAllocation {
 	}
 }
 
+func transactionFromFields(id, ref int64, parentID sql.NullInt64, accountID int64, accountName, typ string, currencyID int64, code string, currencyScale int64, date string, amount int64, scale int64, notes, createdAt, updatedAt string) Transaction {
+	return Transaction{
+		ID:            id,
+		Ref:           ref,
+		ParentID:      ptrFromNullInt64(parentID),
+		AccountID:     accountID,
+		AccountName:   accountName,
+		Type:          typ,
+		CurrencyID:    currencyID,
+		Code:          code,
+		CurrencyScale: int(currencyScale),
+		Date:          date,
+		Amount:        money.Money{Amount: amount, Scale: int(scale)},
+		Notes:         notes,
+		CreatedAt:     createdAt,
+		UpdatedAt:     updatedAt,
+	}
+}
+
+func transactionFromGetRow(row db.GetTransactionByIDRow) Transaction {
+	return transactionFromFields(row.ID, row.Ref, row.ParentID, row.AccountID, row.AccountName, row.Type, row.CurrencyID, row.Code, row.CurrencyScale, row.Date, row.Amount, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func transactionFromRefRow(row db.GetTransactionByRefRow) Transaction {
+	return transactionFromFields(row.ID, row.Ref, row.ParentID, row.AccountID, row.AccountName, row.Type, row.CurrencyID, row.Code, row.CurrencyScale, row.Date, row.Amount, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func transactionFromListRow(row db.ListTransactionsRow) Transaction {
+	return transactionFromFields(row.ID, row.Ref, row.ParentID, row.AccountID, row.AccountName, row.Type, row.CurrencyID, row.Code, row.CurrencyScale, row.Date, row.Amount, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func transactionFromAccountRow(row db.ListTransactionsByAccountRow) Transaction {
+	return transactionFromFields(row.ID, row.Ref, row.ParentID, row.AccountID, row.AccountName, row.Type, row.CurrencyID, row.Code, row.CurrencyScale, row.Date, row.Amount, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func transactionFromParentRow(row db.ListTransactionsByParentRow) Transaction {
+	return transactionFromFields(row.ID, row.Ref, row.ParentID, row.AccountID, row.AccountName, row.Type, row.CurrencyID, row.Code, row.CurrencyScale, row.Date, row.Amount, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func mapTransactionErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("transaction not found")
+	}
+	return err
+}
+
 func mapBudgetAllocationErr(err error) error {
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("budget allocation not found")
