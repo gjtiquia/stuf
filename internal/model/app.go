@@ -516,7 +516,9 @@ func (a App) render(s screen) string {
 		b.WriteString(menuItems(s.Actions, a.Menu))
 	}
 	b.WriteString("\n---\n")
-	b.WriteString(strings.Join(a.helpLines(s), "\n"))
+	if !a.notesFocused() {
+		b.WriteString("? : help")
+	}
 	b.WriteString("\n")
 	return b.String()
 }

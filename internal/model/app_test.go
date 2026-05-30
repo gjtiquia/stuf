@@ -136,6 +136,17 @@ func TestURLRendersImmediatelyAboveActions(t *testing.T) {
 	assertOrdered(t, view, "on-budget lows", "\n/accounts/list/\n\n")
 }
 
+func TestDefaultFooterOnlyShowsHelpHint(t *testing.T) {
+	app, _ := testApp(t)
+	view := app.View()
+	assertViewContains(t, view, "\n---\n? : help\n")
+	assertNotContains(t, view, "ctrl-z        : undo")
+
+	app = pressRunes(app, "?")
+	view = app.View()
+	assertViewContains(t, view, "help\n", "ctrl-z        : undo")
+}
+
 func TestAccountListRenderOrder(t *testing.T) {
 	app, _ := testApp(t)
 	app.Path = routeAccountList
@@ -695,7 +706,10 @@ func TestEmptyChildAccountListIsFilterableListNotActionMenu(t *testing.T) {
 		navFrame{Path: "/accounts/investment/children/list/", Menu: 0},
 	)
 	view := app.View()
-	assertViewContains(t, view, "parent", "investment", "> filter : (type anything...)", "  name | balance | notes", "  (no child accounts yet)", "ctrl+n        : new")
+	assertViewContains(t, view, "parent", "investment", "> filter : (type anything...)", "  name | balance | notes", "  (no child accounts yet)")
+	app.Help = true
+	assertViewContains(t, app.View(), "ctrl+n        : new")
+	app.Help = false
 	if strings.Contains(view, "1) add child account") || strings.Contains(view, "ctrl+d") {
 		t.Fatalf("child list should not render an add/delete action menu:\n%s", view)
 	}
@@ -1422,19 +1436,29 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	m, _ := app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]", "type       : filter", "left/right : next/prev page", "ctrl+s     : submit"} {
+	for _, want := range []string{"> 2) currency", "   > filter  : (type anything...)", "     > HKD", "       AUD", "       BRL", "       CAD", "     [01/30]"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("currency select missing %q:\n%s", want, view)
 		}
 	}
+	app.Help = true
+	for _, want := range []string{"type       : filter", "left/right : next/prev page", "ctrl+s     : submit"} {
+		if !strings.Contains(app.View(), want) {
+			t.Fatalf("currency select help missing %q:\n%s", want, app.View())
+		}
+	}
+	app.Help = false
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyTab})
 	app = m.(App)
 	view = app.View()
-	for _, want := range []string{"> 3) on-budget", "     > true", "false", "ctrl+s  : submit"} {
+	for _, want := range []string{"> 3) on-budget", "     > true", "false"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("on-budget select missing %q:\n%s", want, view)
 		}
 	}
+	app.Help = true
+	assertViewContains(t, app.View(), "ctrl+s  : submit")
+	app.Help = false
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyDown})
 	app = m.(App)
 	if view = app.View(); !strings.Contains(view, "on-budget: false") || !strings.Contains(view, "     > false") {
@@ -1449,9 +1473,14 @@ func TestAccountCreateSelectFocusAndConfirm(t *testing.T) {
 	}
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
-	if view = app.View(); !strings.Contains(view, "> [confirm]") || !strings.Contains(view, "shift-tab : navigate") || !strings.Contains(view, "ctrl+s    : submit") {
-		t.Fatalf("confirm focus/footer missing:\n%s", view)
+	if view = app.View(); !strings.Contains(view, "> [confirm]") {
+		t.Fatalf("confirm focus missing:\n%s", view)
 	}
+	app.Help = true
+	if view = app.View(); !strings.Contains(view, "shift-tab : navigate") || !strings.Contains(view, "ctrl+s    : submit") {
+		t.Fatalf("confirm help missing:\n%s", view)
+	}
+	app.Help = false
 	app.Form["name"] = "off-budget-cash"
 	m, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	app = m.(App)
@@ -2555,6 +2584,7 @@ func TestBalanceFormHelpEnterSemantics(t *testing.T) {
 	app.Path = "/accounts/cash/balances/add/"
 	app.Form = map[string]string{"date": "2026-05-24"}
 	app.Field = 0
+	app.Help = true
 	view := app.View()
 	if !strings.Contains(view, "enter   : next field") || !strings.Contains(view, "ctrl+s  : submit") {
 		t.Fatalf("date field help should say enter advances:\n%s", view)
@@ -2748,7 +2778,7 @@ func TestEscHelpAndBackup(t *testing.T) {
 		"quit stuf?",
 		"> 1) no",
 		"  2) yes",
-		"up/down/j/k   : navigate",
+		"? : help",
 	} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("exit confirmation missing %q:\n%s", want, view)
@@ -3264,6 +3294,7 @@ func TestBalanceDetailPrevNextNavigation(t *testing.T) {
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
 	)
+	app.Help = true
 	view := app.View()
 	if !strings.Contains(view, "left/h      : older") || strings.Contains(view, "right/l     : newer") {
 		t.Fatalf("newest balance detail help should show older only:\n%s", view)
@@ -3607,7 +3638,9 @@ func TestCtrlTFromAccountListOpensTagList(t *testing.T) {
 	if app.Path != routeTagList {
 		t.Fatalf("ctrl+t on account list should open tag list, got %s", app.Path)
 	}
-	assertViewContains(t, app.View(), "/tags/list/", "name | notes", "(no tags yet)", "ctrl+n")
+	assertViewContains(t, app.View(), "/tags/list/", "name | notes", "(no tags yet)")
+	app.Help = true
+	assertViewContains(t, app.View(), "ctrl+n")
 }
 
 func TestTagRoutesCreateEditAndListSelection(t *testing.T) {
@@ -3921,9 +3954,11 @@ func TestSettingsHorizontalBack(t *testing.T) {
 
 func TestNavigationHelpFooters(t *testing.T) {
 	app, _ := testApp(t)
+	app.Help = true
 	assertViewContains(t, app.View(), "left/h        : back", "right/l       : open")
 
 	app = pressRunes(app, "1")
+	app.Help = true
 	assertViewContains(t, app.View(), "h/l           : type in filter", "left/right    : back/open", "ctrl+n        : new")
 
 	ctx := context.Background()
@@ -3942,6 +3977,7 @@ func TestNavigationHelpFooters(t *testing.T) {
 		navFrame{Path: "/accounts/cash/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 	)
+	app.Help = true
 	assertViewContains(t, app.View(), "left/right    : back/open", "ctrl+n        : new")
 
 	app = appWithNav(app,
@@ -3949,6 +3985,7 @@ func TestNavigationHelpFooters(t *testing.T) {
 		navFrame{Path: "/accounts/cash/balances/list/", Menu: 0},
 		navFrame{Path: "/accounts/cash/balances/2026-06-01/", Menu: 0},
 	)
+	app.Help = true
 	assertViewContains(t, app.View(), "left/h      : older")
 }
 
@@ -3983,6 +4020,7 @@ func TestAccountCreateCurrencyHelpShowsHLFilterHint(t *testing.T) {
 	app, _ := testApp(t)
 	app = appWithNav(app, navFrame{Path: "/", Menu: 0}, navFrame{Path: "/accounts/create/", Menu: 0})
 	app.Field = 1
+	app.Help = true
 	assertViewContains(t, app.View(), "h/l        : type in filter", "left/right : next/prev page")
 }
 
