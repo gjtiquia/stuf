@@ -34,11 +34,16 @@
 ## critical bug fix TODOs
 
 ### budgets
-- budgets currency should only be relavant for the /budgets/list and the parenthesis, but allocations should allow multi currency!
+- budgets currency should only be relevant for the /budgets/list and the parenthesis, but allocations should allow multi currency!
 
 ---
 
 ## feature TODOs
+
+### owe
+- should implement soon, such that the available balance is accurate
+    - tho its mainly the money i owe others that should deduct from available (kinda like a credit card)
+    - for those that owe me, doesnt contribute really, i should be budgeting the full amount im paying, and the amount they owe me does not add to available, its more of tracking what money that is not yet returned
 
 ### keyboard hints
 - taking up quite a lot of real estate, but i dont often look at it, should simply show a ? help
