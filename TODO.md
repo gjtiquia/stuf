@@ -20,6 +20,7 @@
 
 - an edge case i eventually need to handle is... when im with my wife, i should be doing our finances tgt. 
 - when back to long D, i need to be able to manage my own (while somewhat keeping track of hers)
+- likely solved with some queries and tags and filtering...
 
 ---
 
@@ -28,10 +29,22 @@
 - rename to steph
 - design the help popup UI
 
+---
+
+## critical bug fix TODOs
+
+### budgets
+- budgets currency should only be relavant for the /budgets/list and the parenthesis, but allocations should allow multi currency!
 
 ---
 
 ## feature TODOs
+
+### keyboard hints
+- taking up quite a lot of real estate, but i dont often look at it, should simply show a ? help
+
+### currencies
+- the more i think about it... starting to make sense to have historical currencies... but mainly useful for past analysis only
 
 ---
 
@@ -40,6 +53,9 @@
 ### budgets
 - definitely useful to see the available money in the dashboard, feeling like doing mental math and, seeing "total" on the very top is kind of a lie
 - entering on a budget should directly go to... allocation list..? tho accounts goes to account details first... hmmm...
+- no need to show table header on each category, becomes repetitive under the limited screen space
+- should show total, budgeted, and available when doing allocations
+- other that "set total", "add", "remove", should also have an "allocate all available"
 
 ### reports
 - reports should add month start/end, so can calculate the cashflow for that month
