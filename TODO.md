@@ -5,18 +5,29 @@
 ## what i feel like doing
 
 - just got my salary, feels like a great time to see what i need minimally, prioritize how i plan my month
-
-- im leaning to transactions. 
-- at least, inputting income to know inferred expenses.
-- then expand the dashboards and reports from there.
-- and then parent child expenses next.
-- or budgets.... cuz expenses are not directly linked to budgets...??
-
-- yeah budgets, budgets are forward facing
-- whereas transactions are for past analysis in making better future decisions
-- but its ultimately past analysis
-- seeing the allocation diffs of budgets is also a good indicator of whether i allocated enough
-- cuz i can somewhat anticipate
+- did budgets, experience was well (see below)! forward facing, instead of transactions which analyzes the past
+- but came across the oweing money part and its conflicts with budgeting
+- comes in two flavors
+    - you owe ppl
+        - should deduct available money for budgeting
+        - but at the same time... especially for recurring expenses, should be part of the budgets
+        - stuff that i pay first fully and is paid back later, i should budget the full amount
+        - stuff that others pay fully and i pay back later, i should budget my share to pay back
+        - hence two questions
+            - how to track when ppl pay me back?
+                - see "ppl owe you" overhaul below
+            - how to track when i paid others?
+                - reflected in account snapshots, but i cant see the actual "row", hard to check if the account snapshots actually includes my payment
+                - see transactions below
+    - ppl owe you
+        - overhauled the original model, and used "ledgers" and transactions to represent ppl oweing and ppl returning money
+        - decoupled from everything else, really serves as just a "reminder" for keeping track of where money is.
+        - not a priority now because, the item i pay first is budgeted anyways, so its documented, i can always add this tracking information back later on
+- transactions
+    - transactions explains account balances
+    - hence, transactions are a good place to document when and how did i pay back others
+    - especially with tags and queries and such
+    - would be great to start dealing with transactions!
 
 - an edge case i eventually need to handle is... when im with my wife, i should be doing our finances tgt. 
 - when back to long D, i need to be able to manage my own (while somewhat keeping track of hers)
