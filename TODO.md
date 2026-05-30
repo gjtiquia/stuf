@@ -28,6 +28,7 @@
     - hence, transactions are a good place to document when and how did i pay back others
     - especially with tags and queries and such
     - would be great to start dealing with transactions!
+    - then can try doing the inferred expenses, which makes reports much more interesting
 
 - an edge case i eventually need to handle is... when im with my wife, i should be doing our finances tgt. 
 - when back to long D, i need to be able to manage my own (while somewhat keeping track of hers)
