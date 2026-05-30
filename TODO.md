@@ -97,6 +97,7 @@
     - tried automating inputting bank statements, eh, PDFs are complex, and still cant answer my questions
     - also... moving around back and forth, wedding, lots of sudden events, analyzing the past becomes somewhat meaningless as there's no reliable spending pattern
     - hence a lot of common budgeting tools sort of... break down, as the assumptions they had for building those kind of broke down as well
+    - also "explaining" past expenses seems to "justify"... and that doesnt drive better actions. the "explanation" should serve to make better future decisions, not make myself feel better
 
 - onboarding
     - start with accounts
@@ -137,6 +138,11 @@
         - advanced: goals and default allocations
     - further: money owed
         - like budgets, this also affects the money you actually have for spending
+    - do try to resist the urge to explain everything in the past
+        - its only helpful if it helps with future actions
+        - be ok with "explained enough", know "enough" to act and plan
+        - the less u explain the past, the less ur future self will be pressured into analyzing EVERYTHING
+        - reduce friction for managing ur expenses
 
 - usecase:
     - reuse existing aggregations (bank/octopus spending summaries and categories)
@@ -181,5 +187,15 @@ Many designers still cite it as the peak of budgeting UX because it entirely eli
 The "Guilt-Free" Movement: 
 Ramit Sethi's I Will Teach You To Be Rich advocates for automating the top-down flow so you can spend guilt-free. 
 stuf is essentially the software manifestation of this book's philosophy.
+
+---
+
+## my personal thoughts
+
+- after entering accounts balances, then the OHLC from reports, it gave a very "good enough" view of the current state of my finances
+- after entering budgets, i have a pretty good idea of how much i should be able to "save" per month, how to lift up the monthly "low"
+- and this is all before entering a single transaction!
+- will test run for a month and see how it goes!
+
 
 
