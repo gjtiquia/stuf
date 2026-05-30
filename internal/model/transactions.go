@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -551,14 +552,11 @@ func (a App) transactionRows(accountID int64, parentID *int64) ([]transactionLis
 	if err != nil {
 		return nil, err
 	}
-	depths := map[int64]int{}
-	for _, txn := range txns {
-		depths[txn.ID] = a.transactionDepth(txn)
-	}
+	txns = treeOrderedTransactions(txns)
 	filter := parseTransactionFilter(a.listFilter())
 	var out []transactionListRow
 	for _, txn := range txns {
-		row, err := a.transactionRow(txn, depths[txn.ID])
+		row, err := a.transactionRow(txn, transactionDepthFromSet(txn, txns))
 		if err != nil {
 			return nil, err
 		}
@@ -568,6 +566,69 @@ func (a App) transactionRows(accountID int64, parentID *int64) ([]transactionLis
 		out = append(out, row)
 	}
 	return out, nil
+}
+
+func treeOrderedTransactions(txns []repo.Transaction) []repo.Transaction {
+	byID := map[int64]repo.Transaction{}
+	children := map[int64][]repo.Transaction{}
+	var roots []repo.Transaction
+	for _, txn := range txns {
+		byID[txn.ID] = txn
+	}
+	for _, txn := range txns {
+		if txn.ParentID != nil {
+			if _, ok := byID[*txn.ParentID]; ok {
+				children[*txn.ParentID] = append(children[*txn.ParentID], txn)
+				continue
+			}
+		}
+		roots = append(roots, txn)
+	}
+	sortTransactionSiblings(roots)
+	for parentID := range children {
+		sortTransactionSiblings(children[parentID])
+	}
+	var out []repo.Transaction
+	var appendTree func(repo.Transaction)
+	appendTree = func(txn repo.Transaction) {
+		out = append(out, txn)
+		for _, child := range children[txn.ID] {
+			appendTree(child)
+		}
+	}
+	for _, root := range roots {
+		appendTree(root)
+	}
+	return out
+}
+
+func sortTransactionSiblings(txns []repo.Transaction) {
+	sort.SliceStable(txns, func(i, j int) bool {
+		if txns[i].Date != txns[j].Date {
+			return txns[i].Date > txns[j].Date
+		}
+		if txns[i].CreatedAt != txns[j].CreatedAt {
+			return txns[i].CreatedAt > txns[j].CreatedAt
+		}
+		return txns[i].ID > txns[j].ID
+	})
+}
+
+func transactionDepthFromSet(txn repo.Transaction, txns []repo.Transaction) int {
+	byID := map[int64]repo.Transaction{}
+	for _, row := range txns {
+		byID[row.ID] = row
+	}
+	depth := 0
+	for txn.ParentID != nil {
+		parent, ok := byID[*txn.ParentID]
+		if !ok {
+			break
+		}
+		depth++
+		txn = parent
+	}
+	return depth
 }
 
 func (a App) transactionRow(txn repo.Transaction, depth int) (transactionListRow, error) {

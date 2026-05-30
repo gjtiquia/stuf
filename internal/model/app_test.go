@@ -311,7 +311,7 @@ func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {
 	if app.Path != "/transactions/tx-000001/children/list/" || app.Error != "" {
 		t.Fatalf("child add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
 	}
-	assertViewContains(t, app.View(), ">   2026-05-28", "HKD 1,200.00", "[groceries]", "supermarket")
+	assertViewContains(t, app.View(), "> 2026-05-28", "HKD 1,200.00", "[groceries]", "supermarket")
 
 	app = appWithNav(app, navFrame{Path: routeRoot}, navFrame{Path: accountPath("amex"), Menu: 2})
 	app = press(app, tea.KeyEnter)
@@ -351,6 +351,29 @@ func TestTransactionAccountFieldSelectsExistingAccount(t *testing.T) {
 		t.Fatalf("transaction create with selected account failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
 	}
 	assertViewContains(t, app.View(), "amex", "HKD 100.00")
+}
+
+func TestTransactionListKeepsParentsAboveChildrenNewestFirst(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	amex, _, err := app.Svc.Accounts.Create(ctx, "amex", "HKD", true, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent, _, err := app.Svc.Transactions.Add(ctx, nil, amex.ID, "expense", "HKD", "2026-05-01", "1000.00", "older parent", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Transactions.Add(ctx, &parent.ID, amex.ID, "expense", "HKD", "2026-05-30", "100.00", "newer child", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Transactions.Add(ctx, nil, amex.ID, "expense", "HKD", "2026-05-29", "200.00", "newer root", nil); err != nil {
+		t.Fatal(err)
+	}
+	app.Path = routeTransactionList
+	view := app.View()
+	assertRenderOrder(t, view, "newer root", "older parent", "newer child")
+	assertViewContains(t, view, "  2026-05-30", "newer child")
 }
 
 func TestBudgetCategoryFieldSelectsExistingCategory(t *testing.T) {

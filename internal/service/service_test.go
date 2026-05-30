@@ -371,11 +371,14 @@ func TestBudgetAllocationActionsAndSameDateOrdering(t *testing.T) {
 		t.Fatalf("rows = %d", len(rows))
 	}
 	got := []int64{rows[0].Balance.Amount, rows[1].Balance.Amount, rows[2].Balance.Amount}
-	want := []int64{10000, 7500, 5000}
+	want := []int64{5000, 7500, 10000}
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("running balance[%d] = %d want %d; rows=%+v", i, got[i], want[i], rows)
 		}
+	}
+	if got := []string{rows[0].Allocation.Notes, rows[1].Allocation.Notes, rows[2].Allocation.Notes}; strings.Join(got, ",") != "set,second,first" {
+		t.Fatalf("allocation display order = %v", got)
 	}
 }
 
