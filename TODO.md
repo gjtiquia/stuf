@@ -42,7 +42,7 @@
 
 ### dashboard
 - definitely useful to see the available money in the dashboard, feeling like doing mental math and, seeing "total" on the very top is kind of a lie
-- high-loe
+- would be useful to have some sort of high level multi-line notes, anchoring on like, the current plan for the month, or the current situation, and seeing the history of these notes would be valuable as well
 
 ### owe
 - should implement soon, such that the available balance is accurate
