@@ -70,7 +70,9 @@
 ### budgets
 - entering on a budget should directly go to... allocation list..? tho accounts goes to account details first... hmmm...
 - should show total, budgeted, and available when doing allocations
-- other that "set total", "add", "remove", should also have an "allocate all available"
+- other that "set total", "add", "remove", should also have
+    - allocate all available
+    - reconcile available (makes negative available zero)
 
 ---
 
@@ -86,6 +88,7 @@
 
 ### budgets
 - category input super buggy
+- sorting should be from newest on top
 
 ---
 
