@@ -168,9 +168,9 @@ dashboard net change
 lazy reconciliation
 - balance snapshots anchor everything
 - detailed records can be incomplete without ruining macro analysis
-- transactions, budgets, owed items, and settlements explain or plan around balances
+- transactions, budgets, owed ledgers, and owed transactions explain or plan around balances
 - transactions do not update balances
-- settlements do not update balances
+- owed transactions do not update balances
 - budget allocations do not update balances
 - if things get messy, enter fresh balances and continue
 - the app should feel guilt-free, not like bookkeeping homework
@@ -180,14 +180,14 @@ account / transaction analogy
 - transactions explain account balance movement
 - budgets behave like proxy accounts for on-budget money
 - allocations and budget-linked transactions explain budget movement
-- owed items behave like proxy accounts for money between people
-- settlements explain owed item movement
+- owed ledgers behave like lightweight virtual accounts for money people owe you
+- owed transactions explain owed ledger movement
 - account currency is the balance anchor currency
 - budget currency is the proxy account anchor currency
-- owed item currency is the proxy account anchor currency
+- owed ledger currency is the proxy account anchor currency
 - transaction currency is the event currency
-- settlement currency is the payment event currency
-- child transactions and settlements convert into their parent/proxy anchor currency for remaining/balance math
+- owed transaction currency is the event currency
+- child transactions and owed transactions convert into their parent/proxy anchor currency for remaining/balance math
 
 ## the implementation 
 
@@ -269,7 +269,7 @@ resource route shape
     - `/` accounts opens `/accounts/list/`
     - `/accounts/{account}/` balances opens `/accounts/{account}/balances/list/`
     - `/budgets/{budget}/allocations/list/` uses ctrl+n or a domain shortcut to allocate
-    - `/owed/{owed-ref}/settlements/list/` uses ctrl+n to add settlement
+    - `/owed/ledgers/{ledger}/transactions/list/` uses ctrl+n to add an owed transaction
 
 session action history / undo support
 - everytime a mutation occurs (create account / edit something), we log it above
@@ -444,7 +444,7 @@ historical conversion rationale
 - converted totals are present-day approximations for analysis
 - old detailed records can be fragmented without corrupting balance-derived growth
 - latest seeded/cached rates are enough for v1 current views
-- if exact historical fx matters later, add per-transaction/per-settlement rate snapshots
+- if exact historical fx matters later, add per-transaction/per-owed-transaction rate snapshots
 
 cross-cutting data rules
 - notes are plain text
@@ -526,16 +526,16 @@ v1 edge rules before schema
 - accounts use account_tags for v1
 - transactions use transaction_tags when transactions land
 - future taggable records can add their own join tables
-- each owed item has exactly one currency
-- different owed items can use different currencies
-- owed item currency defaults to app currency
-- dashboard owed totals convert open owed remaining amounts to app currency
-- each settlement has exactly one currency
-- settlement currency defaults to owed item currency
-- settlement currency is editable in create/edit forms
-- settlement amount is entered in settlement currency
-- settlement amount converts into owed item currency to reduce remaining
-- missing settlement conversion blocks confirm
+- each owed ledger has exactly one viewing/anchor currency
+- different owed ledgers can use different currencies
+- owed ledger currency defaults to app currency
+- each owed transaction has exactly one currency
+- owed transaction currency defaults to owed ledger currency
+- owed transaction currency is editable in create/edit forms
+- owed transaction amount is entered in owed transaction currency
+- owed transaction amount converts into owed ledger currency for running balance
+- dashboard `ppl owe you` converts ledger balances to app currency
+- missing owed transaction conversion blocks confirm
 - if no config exists, try location-based app currency
 - if location detection fails, use USD
 - if USD fallback is used, warn user that app currency defaulted to USD and can be changed in config
@@ -579,7 +579,6 @@ on-budget lows
 2026-04     : HKD   4,378.55
 2026-03     : HKD   4,378.55
 
-you owe ppl : HKD       0.00
 ppl owe you : HKD       0.00
 
 /
@@ -627,7 +626,6 @@ growth
 on-budget   : HKD 0.00
 total       : HKD 0.00
 
-you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
 
 /
@@ -660,7 +658,6 @@ growth
 on-budget   : HKD 0.00
 total       : HKD 0.00
 
-you owe ppl : HKD 0.00
 ppl owe you : HKD 0.00
 
 /
@@ -701,7 +698,6 @@ growth
 on-budget   : HKD   5,200.00
 total       : HKD  36,200.00
 
-you owe ppl : HKD      23.00
 ppl owe you : HKD     456.00
 
 /accounts/list/
@@ -1076,7 +1072,6 @@ growth
 on-budget   : HKD   5,200.00
 total       : HKD  36,200.00
 
-you owe ppl : HKD      23.00
 ppl owe you : HKD     456.00
 
 /accounts/list/
@@ -1915,10 +1910,10 @@ deferred tags
 - creating a budget is separate from allocating money to it
 - budgeted = sum of budget balances converted to app currency
 - available = on-budget balance - budgeted
-- once owed tracking exists, available also subtracts open you-owe remaining
 - available can be negative
-- negative available means money has been spent/allocated/owed beyond current on-budget money
-- money ppl owe you does not increase available until it appears in on-budget balances
+- negative available means money has been spent or allocated beyond current on-budget money
+- `ppl owe you` does not increase available
+- owed money only becomes real when it appears in on-budget account balances
 - budget names are strict slugs
 - budget names are globally unique
 - budgets have exactly one currency
@@ -3534,36 +3529,49 @@ deferred saving goals
 
 ### owed money tracking
 
-- product language uses people/person/ppl
-- internal data model can use party
-- owed items track obligations and receivables
-- owed items are independent records
-- each owed item has exactly one currency
-- different owed items can use different currencies
-- owed item currency defaults to app currency
-- dashboard owed totals convert open owed remaining amounts to app currency
-- money you owe ppl reduces available while open
-- money ppl owe you does not increase available while open
-- money ppl owe you only increases available once it appears in on-budget balances
-- settlements reduce owed remaining
-- settlements do not update balances
-- each settlement has exactly one currency
-- settlement currency defaults to owed item currency
-- settlement currency is editable in create/edit forms
-- settlement amount is entered in settlement currency
-- settlement amount converts into owed item currency to reduce remaining
-- if settlement currency differs from owed item currency and conversion is missing, confirm is blocked
-- settlement records are independent from transactions for v1
+- product menu uses `owed`
+- dashboard uses `ppl owe you`
+- app logic uses owed ledgers
+- `owed` tracks money you are owed, not money you owe other people
+- money you owe other people should be handled by budgets and normal account/transaction context
+- owed ledgers behave like lightweight virtual accounts
+- each owed ledger has a currency used as its viewing/anchor currency
+- different owed ledgers can use different currencies
+- owed ledger currency defaults to app currency
+- owed ledger balance is the sum of its owed transactions converted into the ledger currency
+- owed ledgers can have positive, zero, or negative balances
+- positive ledger balance means unrealized money someone owes you
+- negative ledger balance means prepayment, overpayment, or offset
+- dashboard `ppl owe you` is the net sum of all owed ledger balances converted to app currency
+- `/owed/list/` shows the truth by ledger, even when the dashboard net total is small or zero
+- `ppl owe you` does not increase available while open
+- owed money only increases available once it appears in on-budget account balances
+- owed ledgers do not update account balances
+- owed transactions do not update account balances
+- owed ledgers are intentionally separate from accounts because they are reminders to collect unrealized money
+- real account snapshots remain the source of truth
+- if things get messy, enter fresh balances and keep going
+
+owed transactions
+- each owed transaction belongs to exactly one owed ledger
+- owed transactions are independent records
+- each owed transaction has exactly one currency
+- owed transaction currency defaults to the owed ledger currency
+- owed transaction currency is editable in create/edit forms
+- owed transaction amount is entered in owed transaction currency
+- positive owed transaction amount means someone owes you more
+- negative owed transaction amount means someone paid, prepaid, or offset money
+- owed transaction amount converts into owed ledger currency for running balance
+- if owed transaction currency differs from owed ledger currency and conversion is missing, confirm is blocked
+- owed transactions are not linked to budgets or account transactions for v1
 - related transaction links are deferred/context only
-- settled items are hidden from open lists, not deleted
-- status is inferred from remaining amount
 
 owed amount formulas
-- owed amount can be a plain amount or formula
+- owed transaction amount can be a plain signed amount or formula
 - formulas start with =
 - v1 formulas support numbers, decimals, +, -, *, /, parentheses
 - no percentages, variables, functions, or cell refs for v1
-- if formula exists, computed amount is used for totals
+- if formula exists, computed amount is used for ledger balances and dashboard totals
 - formula is self-documenting input, not separate notes
 - formula fields show raw input while focused
 - formula fields show computed amount when not focused
@@ -3571,102 +3579,73 @@ owed amount formulas
 - if amount was entered manually, show only formatted amount when not focused
 - invalid formulas show a recoverable validation error
 
-settlements
-- settlements support partial settlement
-- settlement amount reduces remaining
-- settlement fields are date, amount, currency, notes for v1
-- settlement date defaults to today
-- settlements do not have tags for v1
-
 ```
 # stuf
 
-you owe ppl : HKD 500.00
-ppl owe you : HKD 300.00
-
-/owed/
-
-> 1) list
-  2) people
-  3) add money you owe ppl
-  4) add money ppl owe you
-  5) settled
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-# stuf
+ppl owe you : HKD 600.00
 
 /owed/list/
 
 > filter : (type anything...)
 
-  you owe ppl
-  person | remaining    | notes
-> alex   | HKD   500.00 | netflix yearly
-
-  ppl owe you
-  person | remaining    | notes
-  ben    | HKD   300.00 | dinner split
+  ledger         | balance                    | notes
+> alex           | HKD   500.00               | roommate
+  ben            | HKD  (200.00)              | prepaid dinner
+  cara           | HKD   300.00               | subscriptions
+  japan-trip     | HKD 2,150.00 (JPY 40,000)  | trip shares
 
 ---
 up/down : navigate
-enter   : confirm
+enter   : open ledger
+ctrl+n  : new ledger
+ctrl+e  : edit ledger
 esc     : back
 ?       : help
 ```
 
-- person names are strict slugs
-- people can represent humans or org-like entities
-- global owed item creation is canonical
-- person-scoped owed item creation is a convenience shortcut
-- person-scoped forms pre-fill person
-- pre-filled person remains editable
-- both flows write to the same owed item table
-- people have immutable internal party ids
-- person slug is user-facing and can change
-- owed items link to internal party id
-- renaming person updates related owed item displays
+- ledger names are strict slugs
+- ledgers can represent humans, groups, trips, subscriptions, or any useful collection target
+- ledger names are user-facing and can change
+- ledgers have immutable internal ids
+- owed transactions link to internal ledger ids
+- renaming a ledger updates related owed transaction displays
+- pressing enter on a ledger opens ledger detail
 
 ```
 # stuf
 
-/owed/people/list/
+/owed/ledgers/create/
 
-> filter : (type anything...)
+> 1) name     : alex
 
-  person | notes
+  2) currency : HKD
+
+  3) notes    : roommate
+
+  [confirm]
 
 ---
-up/down : navigate
+type    : enter text
+tab     : navigate
 enter   : confirm
-ctrl+n  : new
-esc     : back
+esc     : discard
 ?       : help
 ```
 
-- pressing enter on a person opens person detail
+- after ledger create success, goes to the ledger detail page
 
 ```
 # stuf
 
 name     : alex
-you owe  : HKD 500.00
-owes you : HKD 300.00
+currency : HKD
+balance  : HKD 500.00
 notes    : roommate
 
-/owed/people/alex/
+/owed/ledgers/alex/
 
-> 1) owed items
-  2) settled
-  3) add money you owe this person
-  4) add money this person owes you
-  5) edit person
+> 1) transactions
+  2) edit ledger
 
 ---
 up/down : navigate
@@ -3675,31 +3654,27 @@ esc     : back
 ?       : help
 ```
 
-- pressing 1 (owed items) opens a person-scoped owed item list
-- pressing 2 (settled) opens a person-scoped settled owed item list
+- pressing 1 (transactions) opens the ledger's owed transaction list
 
 ```
 # stuf
 
-name     : alex
-you owe  : HKD 500.00
-owes you : HKD 300.00
+ledger   : alex
+currency : HKD
+balance  : HKD 500.00
 
-/owed/people/alex/owed/
+/owed/ledgers/alex/transactions/list/
 
-> filter : (type anything...)
-
-  you owe
-  remaining    | notes
-> HKD 500.00   | netflix yearly
-
-  owes you
-  remaining    | notes
-  HKD 300.00   | dinner split
+  date       | currency | amount       | balance      | notes
+  2026-05-01 | HKD      | HKD  500.00  | HKD  500.00 | netflix yearly half
+  2026-05-10 | HKD      | HKD (200.00) | HKD  300.00 | partial payback
+> 2026-05-28 | HKD      | HKD  200.00  | HKD  500.00 | dinner split
 
 ---
 up/down : navigate
-enter   : confirm
+ctrl+n  : add transaction
+ctrl+e  : edit
+ctrl+d  : delete
 esc     : back
 ?       : help
 ```
@@ -3707,330 +3682,43 @@ esc     : back
 ```
 # stuf
 
-name     : alex
-you owe  : HKD 0.00
-owes you : HKD 0.00
+ledger   : japan-trip
+currency : JPY
+balance  : JPY 40,000
 
-/owed/people/alex/settled/
+/owed/ledgers/japan-trip/transactions/list/
 
-> filter : (type anything...)
-
-  settled
-  direction   | amount      | notes
-> you owe ppl | HKD 500.00  | netflix yearly
-  owes you    | HKD 300.00  | dinner split
+  date       | currency | amount          | balance    | notes
+> 2026-05-01 | JPY      | JPY  50,000     | JPY 50,000 | hotel split
+  2026-05-03 | HKD      | HKD    (500.00) | JPY 40,000 | paid me back in hkd
 
 ---
 up/down : navigate
-enter   : confirm
+ctrl+n  : add transaction
+ctrl+e  : edit
+ctrl+d  : delete
 esc     : back
 ?       : help
 ```
 
-- person-scoped add flows use the same forms as global add flows
-- person field is pre-filled but still editable
-- owed item currency defaults to app currency
-- owed item currency is editable in create/edit forms
-- settlement currency defaults to owed item currency
-- settlement currency is editable in create/edit forms
-- settlement amount converts into owed item currency to reduce remaining
+- transaction add only exists from a ledger-scoped transaction list for v1
+- `/owed/list/` ctrl+n creates a ledger
+- `/owed/ledgers/{ledger}/transactions/list/` ctrl+n adds a transaction for that ledger
+- scoped transaction add forms omit the ledger field because the route already supplies it
 
 ```
 # stuf
 
-/owed/people/alex/add-you-owe/
+ledger  : alex
+current : HKD 500.00
+
+/owed/ledgers/alex/transactions/add/
 
   1) date     : 2026-05-21
 
-  2) person   : alex
+  2) currency : HKD
 
 > 3) amount   : =1000/2
-
-  4) currency : HKD
-
-  5) notes    :
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-  1) date     : 2026-05-21
-
-  2) person   : alex
-
-  3) amount   : HKD 500.00 (=1000/2)
-
-  4) currency : HKD
-
-> 5) notes    : netflix yearly
-```
-
-```
-# stuf
-
-/owed/people/alex/add-owes-you/
-
-> 1) date     : 2026-05-21
-
-  2) person   : alex
-
-  3) amount   : (type amount or =formula...)
-
-  4) currency : HKD
-
-  5) notes    :
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-- edit person is pre-filled with existing person data
-- person name is required
-- person name must remain unique
-- duplicate person name is rejected
-- keeping the same name while editing is allowed
-- after edit success, goes to the updated person detail page
-
-```
-history (ctrl-z to undo)
-- 2026-05-17 17:40 edit /owed/people/alex-wong
-
-# stuf
-
-/owed/people/alex/edit/
-
-> 1) name  : alex
-
-  2) notes : roommate
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-# stuf
-
-/owed/people/create/
-
-> 1) name  : (type anything...)
-
-  2) notes :
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-- after person create success, goes to the person detail page
-
-```
-# stuf
-
-/owed/people/list/
-
-> filter : (type anything...)
-
-  name           | notes
-> alex           | roommate
-  netflix-family | shared subscription
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-# stuf
-
-/owed/add-you-owe/
-
-> 1) date     : 2026-05-21
-
-  2) person   : alex
-
-  3) amount   : (type amount or =formula...)
-
-  4) currency : HKD
-
-  5) notes    :
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-# stuf
-
-/owed/add-ppl-owe-you/
-
-> 1) date     : 2026-05-21
-
-  2) person   : ben
-
-  3) amount   : (type amount or =formula...)
-
-  4) currency : HKD
-
-  5) notes    :
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-- after confirm success, goes to /owed/list/ automatically
-- history uses the owed ref path
-- owed item refs are sequential, stable, and must not be reused after deletes
-
-```
-history (ctrl-z to undo)
-- 2026-05-17 17:35 add /owed/owed-000001
-
-# stuf
-
-direction : you owe ppl
-person    : alex
-amount    : HKD 500.00
-currency  : HKD
-settled   : HKD   0.00
-remaining : HKD 500.00
-formula   : =1000/2
-notes     : netflix yearly
-
-/owed/owed-000001/
-
-> 1) settlements
-  2) add settlement
-  3) edit owed item
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-- only show formula if amount was entered as formula
-- edit owed item reuses the add owed item form/input components
-- edit owed item is pre-filled with existing owed item data
-- person remains editable
-- editing formula recomputes amount
-- if amount is manually edited, formula is cleared
-- after edit success, goes to owed item detail
-
-```
-# stuf
-
-/owed/owed-000001/edit/
-
-> 1) date     : 2026-05-21
-
-  2) person   : alex
-
-  3) amount   : =1000/2
-
-  4) currency : HKD
-
-  5) notes    : netflix yearly
-
-  [confirm]
-
----
-type    : enter text
-tab     : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-```
-# stuf
-
-/owed/owed-000001/settlements/list/
-
-  date       | amount     | notes
-> 2026-05-21 | HKD 100.00 | partial
-
----
-up/down : navigate
-enter   : confirm
-ctrl+n  : new
-esc     : back
-?       : help
-```
-
-```
-# stuf
-
-/owed/owed-000001/settlements/list/
-
-  date       | amount       | notes
-> 2026-05-21 | HKD 200.00   | paid by fps
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
-```
-
-- settlement add defaults amount to remaining
-- settlement currency defaults to owed item currency
-- settlement amount converts into owed item currency to reduce remaining
-- settlements have refs like set-000001
-- settlement refs are sequential, stable, and must not be reused after deletes
-- settlement refs are shown in URL/history, not detail fields
-- pressing enter on a settlement opens settlement detail
-
-```
-# stuf
-
-remaining     : HKD 300.00
-
-/owed/owed-000001/settlements/add/
-
-> 1) date     : 2026-05-21
-
-  2) amount   : HKD 300.00
-
-  3) currency : HKD
 
   4) notes    :
 
@@ -4045,37 +3733,30 @@ esc     : back
 ```
 
 ```
-# stuf
+  1) date     : 2026-05-21
 
-date     : 2026-05-21
-amount   : HKD 200.00
-currency : HKD
-notes    : paid by fps
+  2) currency : HKD
 
-/owed/owed-000001/settlements/set-000001/
+  3) amount   : HKD 500.00 (=1000/2)
 
-> 1) edit settlement
-  2) delete settlement
-
----
-up/down : navigate
-enter   : confirm
-esc     : back
-?       : help
+> 4) notes    : netflix yearly half
 ```
 
 ```
 # stuf
 
-/owed/owed-000001/settlements/set-000001/edit/
+ledger  : alex
+current : HKD 500.00
+
+/owed/ledgers/alex/transactions/add/
 
 > 1) date     : 2026-05-21
 
-  2) amount   : HKD 200.00
+  2) currency : HKD
 
-  3) currency : HKD
+  3) amount   : (type amount or =formula...)
 
-  4) notes    : paid by fps
+  4) notes    :
 
   [confirm]
 
@@ -4087,16 +3768,147 @@ esc     : back
 ?       : help
 ```
 
-- delete settlement happens immediately
-- no confirmation screen for delete settlement in v1
-- deleting settlement increases owed remaining again
-- after edit/delete success, returns to /owed/owed-000001/settlements/list/
+- ledger edit is pre-filled with existing ledger data
+- ledger name is required
+- ledger name must remain unique
+- duplicate ledger name is rejected
+- keeping the same name while editing is allowed
+- ledger currency follows account-like rules
+- changing ledger currency recalculates converted running balances with latest rates
+- after ledger edit success, goes to the updated ledger detail page
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:40 edit /owed/ledgers/alex-wong
+
+# stuf
+
+/owed/ledgers/alex/edit/
+
+> 1) name     : alex
+
+  2) currency : HKD
+
+  3) notes    : roommate
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+```
+# stuf
+
+/owed/ledgers/create/
+
+> 1) name     : (type anything...)
+
+  2) currency : HKD
+
+  3) notes    :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after ledger create success, goes to the ledger detail page
+
+```
+# stuf
+
+/owed/list/
+
+> filter : (type anything...)
+
+  ledger         | balance       | notes
+> alex           | HKD 500.00    | roommate
+  netflix-family | HKD 300.00    | shared subscription
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- after confirm success, goes to the ledger transaction list automatically
+- history uses the owed transaction path
+- owed transaction refs are sequential, stable, and must not be reused after deletes
+
+```
+history (ctrl-z to undo)
+- 2026-05-17 17:35 add /owed/ledgers/alex/transactions/txn-000001
+
+# stuf
+
+date     : 2026-05-21
+ledger   : alex
+currency : HKD
+amount   : HKD 500.00
+formula  : =1000/2
+balance  : HKD 500.00
+notes    : netflix yearly half
+
+/owed/ledgers/alex/transactions/txn-000001/
+
+> 1) edit transaction
+  2) delete transaction
+
+---
+up/down : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- only show formula if amount was entered as formula
+- edit transaction reuses the add transaction form/input components
+- edit transaction is pre-filled with existing transaction data
+- editing formula recomputes amount
+- if amount is manually edited, formula is cleared
+- after edit success, goes to transaction detail
+
+```
+# stuf
+
+/owed/ledgers/alex/transactions/txn-000001/edit/
+
+> 1) date     : 2026-05-21
+
+  2) currency : HKD
+
+  3) amount   : =1000/2
+
+  4) notes    : netflix yearly half
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- delete transaction happens immediately
+- no confirmation screen for delete transaction in v1
+- deleting a transaction removes it from the ledger running balance
+- after edit/delete success, returns to `/owed/ledgers/{ledger}/transactions/list/`
 
 deferred owed
 - related transaction UX
-- transaction-to-settlement shortcuts
-- settlement-to-transaction shortcuts
-- settlement tags
 - report integration
 - recursive transaction/owed drilldown
 
