@@ -205,6 +205,19 @@ The "Guilt-Free" Movement:
 Ramit Sethi's I Will Teach You To Be Rich advocates for automating the top-down flow so you can spend guilt-free. 
 stuf is essentially the software manifestation of this book's philosophy.
 
+Thaler — Mental Accounting
+Thaler defines mental accounting as how individuals and households organize, evaluate, and keep track of financial activities. 
+This is directly relevant to your budgets-as-proxy-accounts idea: users naturally create mental buckets anyway.
+
+Galperti — A Theory of Personal Budgeting
+Galperti analyzes budgeting as a tool for self-control, balancing commitment with flexibility under uncertainty. 
+This is very relevant because your product is almost a “flexible commitment” system: enough structure to guide action, not so much structure that life breaks it.
+
+Antonides et al. — Mental Budgeting and Household Finance
+This research found mental budgeting is common and associated with having an overview of expenses/current accounts and household financial management. 
+This supports the idea that budgeting is not just math; it is a cognitive organization tool.
+
+
 ---
 
 ## my personal thoughts
