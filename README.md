@@ -131,7 +131,7 @@ basic top down flow
 - monthly bank statement balances -> net change / growth context
 - monthly income -> net cash flow in/out
 - lump sum (eg. credit card payment) -> cash flow out sources, percentage of expense, tagging
-- transactions -> tagging and deeper analysis; should link to lump sum to prevent "double counting"
+- transactions -> tagging and deeper analysis; parent-child transaction trees explain lump sums without double counting
 
 dashboard net change
 - use net change, not net growth, for the current month dashboard number
@@ -170,6 +170,7 @@ lazy reconciliation
 - detailed records can be incomplete without ruining macro analysis
 - transactions, budgets, owed ledgers, and owed transactions explain or plan around balances
 - transactions do not update balances
+- transactions do not update budgets
 - owed transactions do not update balances
 - budget allocations do not update balances
 - if things get messy, enter fresh balances and continue
@@ -179,7 +180,8 @@ account / transaction analogy
 - accounts are balance anchors
 - transactions explain account balance movement
 - budgets behave like proxy accounts for on-budget money
-- allocations and budget-linked transactions explain budget movement
+- budget allocations explain budget movement
+- budgets are intentionally decoupled from transactions
 - owed ledgers behave like lightweight virtual accounts for money people owe you
 - owed transactions explain owed ledger movement
 - account currency is the balance anchor currency
@@ -466,18 +468,24 @@ cross-cutting data rules
 - effective account tags are direct account tags plus inherited parent account tags
 - account tag inheritance has no per-child exclusion for v1
 - transaction tags do not inherit account tags by default
+- transactions support income and expense types for v1
+- transfers are not supported as transactions for v1
+- transaction amount is stored as a non-negative integer plus scale
+- transaction type determines direction/sign in reports and summaries
+- budgets are intentionally decoupled from transactions
+- transactions have no budget link in the v1 data model or UI
 - transaction parent is nullable
 - any transaction can have a parent transaction
 - transaction tree depth is unlimited conceptually
 - transaction trees explain larger transactions, but do not update balances
-- reports and budget spent must avoid double counting transaction trees
+- reports must avoid double counting transaction trees
 - if a transaction has children, reports count child transactions plus parent remaining, not parent plus children
 - parent amount = converted children total + remaining
-- child transaction forms default to parent date/account when useful, but defaults stay editable
-- transaction budget link is nullable in the data model
-- v1 UI only allows budget links for expense transactions
-- one transaction links to at most one budget for v1
-- child expense transactions can link to different budgets
+- child transaction forms default to parent date/account when useful
+- child transaction account must match parent transaction account for v1
+- child transaction date stays editable
+- parent and child transactions can have different currencies
+- child transaction amounts convert into parent transaction currency for explained/remaining math
 - common currencies are seeded from app data
 - conversion rates are seeded from app data relative to USD
 - conversion data lives in the repo and updates with app releases for v1
@@ -493,6 +501,10 @@ v1 edge rules before schema
 - transaction currency = event/explanation currency
 - app currency = dashboard/report display currency
 - parent transaction currency = explanation anchor currency for child totals
+- transactions support exactly income and expense types for v1
+- transfers are not supported as transactions for v1
+- transaction amount is stored as a non-negative integer plus scale
+- transaction type determines whether the amount contributes as income or expense
 - each transaction has exactly one currency
 - transaction currency defaults to selected account currency
 - transaction currency is editable in create/edit forms
@@ -518,6 +530,7 @@ v1 edge rules before schema
 - mixed-type children are blocked in v1 UI
 - expense parents can only have expense children in v1 UI
 - income parents can only have income children in v1 UI
+- child transaction account must match parent transaction account for v1
 - deleting a transaction with children is blocked in v1
 - user must delete children before deleting the parent transaction
 - tags are shared metadata across accounts and transactions
@@ -1335,11 +1348,9 @@ esc     : back
 
   4) account : hsbc-one
 
-  5) budget  : (none)
+  5) tags    : []
 
-  6) tags    : []
-
-  7) notes   :
+  6) notes   :
 
   [confirm]
 
@@ -2448,25 +2459,13 @@ esc     : back
 - allocation action options are set total, add money, remove money
 - after confirm success, goes to /budgets/groceries/allocations/list/ automatically
 
-expense transactions reducing budgets
-- transaction budget link is nullable in the data model
-- v1 UI only allows expense transactions to link to a budget
-- one transaction links to at most one budget for v1
-- linked expenses reduce budget balance
-- linked expenses contribute to spent
-- unlinked expenses do not reduce budgets
-- budget linkage is optional
-- this allows users to track only budgets they care about
-- child expense transactions can link to different budgets
-- parent transactions may be unbudgeted while children split across budgets
-- budget spent uses the transaction tree explained/remaining model
-
-transaction tree budget behavior
-- parent-child transaction trees support deeper budget drilldown
-- transaction tree depth can be unlimited conceptually
-- budget impact must avoid double counting
-- if a parent transaction has children, budget spent counts child expenses plus any budget-linked parent remaining
-- budget spent never counts parent plus children together
+budget and transaction separation
+- budgets are intentionally decoupled from transactions
+- transactions do not reduce budget balances
+- transactions do not contribute to budget spent for v1
+- budget balances move through budget allocations only
+- transaction tags can still use the same vocabulary as budgets when useful
+- reports may compare budget plans and transaction explanations later, but neither mutates the other
 
 ```
 # stuf
@@ -2560,18 +2559,21 @@ deferred budgets
 - transaction currency is editable in create/edit forms
 - transaction amount is entered in transaction currency
 - transaction currency can differ from account currency
-- explicit transfer transactions are not needed for v1
+- explicit transfer transactions are not supported for v1
 - users can often skip transfer entry entirely because balance snapshots anchor growth
 - balance snapshots capture the result of transfers
 - users do not need to manually input two transactions for a transfer
 - fresh balances lazy-reconcile messy transfer details
-- explicit transfer support can be added later if transfer-specific reporting becomes useful
 - global transaction creation is canonical
 - account-scoped transaction creation exists as a convenience shortcut
 - account-scoped forms pre-fill account
-- pre-filled account should still be editable
+- pre-filled account should still be editable for root transactions
 - global and account-scoped flows write to the same transaction table
 - account detail exposes transactions as an automatically filtered shortcut to global transactions
+- credit card statements/payments are the first parent transaction happy path
+- put the parent expense under the credit card account when that account exists
+- children explain portions of that parent expense with manually assigned tags
+- paying back money owed to others is a normal expense transaction with manually assigned arbitrary tags
 
 transaction trees
 - transactions can form parent-child trees
@@ -2590,15 +2592,16 @@ transaction trees
 - changing parent transaction currency does not change child transaction currencies
 - changing parent transaction currency recalculates explained/remaining with latest rates
 - child transaction forms default to parent date/account
-- child transaction date/account defaults remain editable
+- child transaction date remains editable
+- child transaction account is locked to the parent transaction account for v1
 - child transactions use the same income/expense transaction form components
-- child expense transactions can link to budgets
 - mixed-type children are blocked in v1 UI
+- expense parents can only have expense children in v1 UI
+- income parents can only have income children in v1 UI
 - deleting a transaction with children is blocked in v1
 
 transaction tree double counting
 - reports count child transactions plus parent remaining, not parent plus children
-- budget spent uses the same double-count-safe tree logic
 - if a parent has no children, reports count the parent transaction normally
 - if a parent has children, reports count the children and the unexplained parent remaining
 - if a child has children, apply the same rule recursively
@@ -2675,6 +2678,8 @@ esc     : back
 - transaction lists show original transaction amount first
 - if transaction currency differs from app currency, show app-currency conversion in parentheses
 - if conversion is missing, show original currency and a warning marker instead of silently converting
+- transaction filters reuse the account filter style where possible
+- transaction filters support text, `tag:`, `currency:`, `type:`, negation, comma OR, and repeated-term AND
 
 ```
 # stuf
@@ -2716,11 +2721,9 @@ esc     : back
 
   4) account : hsbc-one
 
-  5) budget  : (none)
+  5) tags    : []
 
-  6) tags    : []
-
-  7) notes   :
+  6) notes   :
 
   [confirm]
 
@@ -2732,10 +2735,18 @@ esc     : back
 ?       : help
 ```
 
+- transaction filters reuse the account filter style where possible
+- transaction text filters search account, currency, tags, and notes
+- `tag:person/alice` matches exact transaction tags
+- `currency:HKD` matches transaction currency
+- `type:income` and `type:expense` match transaction type
+- `-tag:repayment` negates a term
+- `tag:food,travel` means OR inside the same term
+- repeated terms are AND, for example `type:expense tag:person/alice`
+
 - after add success, goes to /transactions/list/ automatically
 - history uses the transaction ref path
-- budget field is shown only for expense transactions in v1 UI
-- budget is optional
+- transactions have no budget field in v1 UI
 
 transaction tag input
 - tags input is a select input component
@@ -2775,9 +2786,7 @@ transaction tag input
 
   4) account : hsbc-one
 
-  5) budget  : groceries
-
-> 6) tags    : []
+> 5) tags    : []
 
    > filter  : (type anything...)
 
@@ -2792,7 +2801,7 @@ transaction tag input
 
      [08/12]
 
-  7) notes   :
+  6) notes   :
 
   [confirm]
 
@@ -2808,7 +2817,7 @@ esc        : back
 ```
 
 ```
-> 6) tags    : []
+> 5) tags    : []
 
    > filter  : groc
 
@@ -2819,7 +2828,7 @@ esc        : back
 ```
 
 ```
-> 6) tags    : [groc*]
+> 5) tags    : [groc*]
 
    > filter  : (type anything...)
 
@@ -2847,7 +2856,7 @@ esc        : back
 ```
 
 ```
-> 6) tags    : [groc*]
+> 5) tags    : [groc*]
 
    > filter  : groceries
 
@@ -2858,7 +2867,7 @@ esc        : back
 ```
 
 ```
-> 6) tags    : [groc*, groceries]
+> 5) tags    : [groc*, groceries]
 
    > filter  : (type anything...)
 
@@ -2917,7 +2926,6 @@ type      : expense
 amount    : HKD 10,000.00
 currency  : HKD
 account   : hsbc-one
-budget    : (none)
 children  : HKD  3,500.00
 remaining : HKD  6,500.00
 tags      : [bank]
@@ -2945,7 +2953,6 @@ date      : 2026-05-16
 amount    : HKD 10,000.00
 currency  : HKD
 account   : hsbc-one
-budget    : (none)
 tags      : [bank, credit-card]
 notes     : credit card payment
 explained : HKD  3,500.00
@@ -2953,9 +2960,9 @@ remaining : HKD  6,500.00
 
 /transactions/tx-000002/children/
 
-  date       | type    | amount        | account  | budget      | notes
-> 2026-05-16 | expense | HKD 1,200.00  | hsbc-one | groceries   | supermarket
-  2026-05-16 | expense | HKD 2,300.00  | hsbc-one | restaurants | dinner
+  date       | type    | amount        | account  | notes
+> 2026-05-16 | expense | HKD 1,200.00  | hsbc-one | supermarket
+  2026-05-16 | expense | HKD 2,300.00  | hsbc-one | dinner
 
   1) add child expense
 
@@ -2974,7 +2981,6 @@ date         : 2026-05-16
 amount       : HKD 10,000.00
 currency     : HKD
 account      : hsbc-one
-budget       : (none)
 tags         : [bank, credit-card]
 notes        : credit card payment
 remaining    : HKD  6,500.00
@@ -2987,13 +2993,11 @@ remaining    : HKD  6,500.00
 
   3) currency: HKD
 
-  4) account : hsbc-one
+  4) account : hsbc-one (locked to parent)
 
-  5) budget  : groceries
+  5) tags    : []
 
-  6) tags    : []
-
-  7) notes   :
+  6) notes   :
 
   [confirm]
 
@@ -3007,6 +3011,7 @@ esc     : back
 
 - larger expense context is shown above child lists/forms, not as editable form fields
 - remaining is advisory and does not block entry for v1
+- child transaction account is locked to the parent transaction account for v1
 - child add success goes to /transactions/tx-000002/children/ automatically
 
 ```
@@ -3055,13 +3060,11 @@ transaction validation
 - currency defaults to selected account currency
 - transaction currency is editable
 - account is required
-- budget is optional
-- budget can only be selected for expense transactions in v1 UI
+- child transaction account must match parent transaction account for v1
 - tags are optional
 - notes are optional
 
 deferred transactions
-- explicit transfer transaction support
 - report-to-input shortcuts
 - parent-child tree visualizations beyond list/detail screens
 
@@ -3132,7 +3135,6 @@ effective transaction rows
 - parent remaining rows are virtual/read-only
 - parent remaining rows have no transaction ref
 - parent remaining rows keep the parent date/account/type/tags/notes
-- parent remaining rows use the parent budget link if present
 - report content should not show transaction refs or implementation details
 - transaction refs can stay visible in URLs/history only
 - opening original transaction from report detail is deferred for v1
@@ -3305,10 +3307,10 @@ unexplained : HKD 17,000.00
 
 > filter    : (type anything...)
 
-  date       | amount        | budget      | notes
-> 2026-05-16 | HKD 1,200.00  | groceries   | supermarket
-  2026-05-16 | HKD 2,300.00  | restaurants | dinner
-  2026-05-16 | HKD 6,500.00  | (none)      | unexplained part of credit card payment
+  date       | amount        | tags          | notes
+> 2026-05-16 | HKD 1,200.00  | [groceries]   | supermarket
+  2026-05-16 | HKD 2,300.00  | [restaurants] | dinner
+  2026-05-16 | HKD 6,500.00  | [bank]        | unexplained part of credit card payment
 
 ---
 up/down       : navigate
@@ -3332,8 +3334,7 @@ esc           : back
 date    : 2026-05-16
 amount  : HKD 1,200.00
 account : hsbc-one
-budget  : groceries
-tags    : []
+tags    : [groceries]
 notes   : supermarket
 
 /reports/monthly/2026-05/expenses/tx-000003/
@@ -3358,7 +3359,6 @@ esc     : back
 date      : 2026-05-16
 amount    : HKD  6,500.00
 account   : hsbc-one
-budget    : (none)
 tags      : [bank]
 notes     : credit card payment
 
@@ -3370,9 +3370,9 @@ explained : HKD  3,500.00
 remaining : HKD  6,500.00
 
 explained by
-date       | amount        | budget      | notes
-2026-05-16 | HKD 1,200.00  | groceries   | supermarket
-2026-05-16 | HKD 2,300.00  | restaurants | dinner
+date       | amount        | tags          | notes
+2026-05-16 | HKD 1,200.00  | [groceries]   | supermarket
+2026-05-16 | HKD 2,300.00  | [restaurants] | dinner
 
 /reports/monthly/2026-05/expenses/tx-000002/remainder/
 
