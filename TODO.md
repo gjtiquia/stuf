@@ -43,7 +43,6 @@
 
 ## critical bug fix TODOs
 
-- clipping when text is above the terminal size!
 
 ### budgets
 - budgets currency should only be relevant for the /budgets/list and the parenthesis, but allocations should allow multi currency!
@@ -87,6 +86,14 @@
 
 ### budgets
 - category input super buggy
+
+---
+
+## discarded TODOs
+
+- clipping when text is above the terminal size!
+    - discarded because the alternative is managing scolling within the TUI which would be complex
+    - better deal with it via better pagination
 
 ---
 
