@@ -277,7 +277,7 @@ func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {
 	if app.Path != routeTransactionAdd {
 		t.Fatalf("transaction add route = %s", app.Path)
 	}
-	assertViewContains(t, app.View(), "2) type", "expense", "3) amount", "5) account", "6) tags")
+	assertViewContains(t, app.View(), "2) type", "expense", "3) currency", "4) amount", "5) account", "6) tags")
 	app.Form["account"] = "amex"
 	app.Form["amount"] = "10000.00"
 	app.Form["date"] = "2026-05-28"
@@ -311,7 +311,7 @@ func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {
 	if app.Path != "/transactions/tx-000001/children/list/" || app.Error != "" {
 		t.Fatalf("child add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
 	}
-	assertViewContains(t, app.View(), "> 2026-05-28", "HKD 1,200.00", "[groceries]", "supermarket")
+	assertViewContains(t, app.View(), ">   2026-05-28", "HKD 1,200.00", "[groceries]", "supermarket")
 
 	app = appWithNav(app, navFrame{Path: routeRoot}, navFrame{Path: accountPath("amex"), Menu: 2})
 	app = press(app, tea.KeyEnter)
@@ -323,6 +323,34 @@ func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {
 	assertViewContains(t, app.View(), "supermarket")
 	assertNotContains(t, app.View(), "statement payment")
 	_ = amex
+}
+
+func TestTransactionAccountFieldSelectsExistingAccount(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Accounts.Create(ctx, "amex", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Accounts.Create(ctx, "hsbc-one", "HKD", true, ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: routeRoot}, navFrame{Path: routeTransactionList}, navFrame{Path: routeTransactionAdd})
+	app.Form = map[string]string{"date": "2026-05-30", "type": "expense", "currency": "HKD"}
+	app.Field = 4
+	app = pressRunes(app, "ame")
+	view := app.View()
+	assertViewContains(t, view, "> 5) account", "> filter  : ame", "> amex")
+	assertNotContains(t, view, "hsbc-one")
+	app = press(app, tea.KeyEnter)
+	if app.Form["account"] != "amex" {
+		t.Fatalf("account selection = %q", app.Form["account"])
+	}
+	app.Form["amount"] = "100.00"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != routeTransactionList || app.Error != "" {
+		t.Fatalf("transaction create with selected account failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "amex", "HKD 100.00")
 }
 
 func TestBudgetCategoryFieldSelectsExistingCategory(t *testing.T) {

@@ -280,7 +280,7 @@ func (a App) submitTransactionAdd(parentID *int64, fallbackAccountID int64) App 
 }
 
 func (a App) transactionFormKey(s string, locked map[string]bool) (App, bool) {
-	fields := []string{"date", "type", "amount", "currency", "account", "tags", "notes"}
+	fields := []string{"date", "type", "currency", "amount", "account", "tags", "notes"}
 	if a.Form["type"] == "" {
 		a.Form["type"] = service.TransactionTypeExpense
 	}
@@ -297,7 +297,7 @@ func (a App) transactionFormKey(s string, locked map[string]bool) (App, bool) {
 	if a.Field == 1 {
 		return a.selectFieldKey(s, "type", []string{service.TransactionTypeExpense, service.TransactionTypeIncome}, fields)
 	}
-	if a.Field == 3 {
+	if a.Field == 2 {
 		return a.currencyFieldKey(s, fields)
 	}
 	if a.Field == 4 && locked != nil && locked["account"] {
@@ -309,6 +309,9 @@ func (a App) transactionFormKey(s string, locked map[string]bool) (App, bool) {
 		}
 		return a, false
 	}
+	if a.Field == 4 {
+		return a.transactionAccountFieldKey(s, fields)
+	}
 	if a.Field == 5 {
 		return a.tagFieldKey(s, fields)
 	}
@@ -316,13 +319,112 @@ func (a App) transactionFormKey(s string, locked map[string]bool) (App, bool) {
 }
 
 func (a App) transactionFormView(locked map[string]string) string {
-	fields := []string{"date", "type", "amount", "currency", "account", "tags", "notes"}
+	fields := []string{"date", "type", "currency", "amount", "account", "tags", "notes"}
 	options := map[string][]string{"currency": a.currencyOptions(), "type": []string{service.TransactionTypeExpense, service.TransactionTypeIncome}}
-	prefixes := map[string]string{"amount": a.Form["currency"]}
-	if prefixes["amount"] == "" {
-		prefixes["amount"] = a.Config.Config.Currency
+	return a.formViewWithOptions(fields, locked, options, nil)
+}
+
+func (a App) transactionAccountOptions() []string {
+	accounts, err := a.Svc.Accounts.List(a.ctx, true)
+	if err != nil {
+		return nil
 	}
-	return a.formViewWithOptions(fields, locked, options, prefixes)
+	out := make([]string, len(accounts))
+	for i, account := range accounts {
+		out[i] = account.Name
+	}
+	return out
+}
+
+func (a App) currentTransactionAccountOptions() []tagOption {
+	filter := a.accountFilter()
+	var opts []tagOption
+	for _, name := range a.transactionAccountOptions() {
+		if filter != "" && !strings.Contains(name, filter) {
+			continue
+		}
+		opts = append(opts, tagOption{Name: name})
+	}
+	return opts
+}
+
+func (a App) transactionAccountFieldKey(s string, fields []string) (App, bool) {
+	options := a.currentTransactionAccountOptions()
+	cursor := clampCursor(parseFormInt(a.Form[accountCursorKey]), len(options))
+	a.setAccountSelectCursor(cursor)
+	switch s {
+	case "down":
+		if len(options) > 0 {
+			a.setAccountSelectCursor((cursor + 1) % len(options))
+		}
+	case "up":
+		if len(options) > 0 {
+			a.setAccountSelectCursor((cursor - 1 + len(options)) % len(options))
+		}
+	case "right":
+		if len(options) > 0 {
+			page := min(a.accountSelectPage()+1, tagPageCount(len(options))-1)
+			a.setAccountSelectPage(page)
+			a.setAccountSelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "left":
+		if len(options) > 0 {
+			page := max(a.accountSelectPage()-1, 0)
+			a.setAccountSelectPage(page)
+			a.setAccountSelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "backspace":
+		if a.accountFilter() == "" {
+			a.Form["account"] = ""
+			return a, false
+		}
+		a.setAccountFilter(trimLastRune(a.accountFilter()))
+		a.resetAccountSelectCursor()
+	case "tab":
+		a.clearAccountSelectState()
+		a.Field = min(a.Field+1, len(fields))
+	case "shift+tab":
+		a.clearAccountSelectState()
+		a.Field = max(a.Field-1, 0)
+	case "enter":
+		if len(options) == 0 {
+			a.clearAccountSelectState()
+			a.Field = min(a.Field+1, len(fields))
+			return a, false
+		}
+		a.Form["account"] = options[cursor].Name
+		a.clearAccountSelectState()
+	default:
+		input := newFilteredListInput(a.accountFilter(), sanitizeSlug)
+		if updated, handled := input.handleKey(s); handled {
+			a.setAccountFilter(updated.value())
+			a.resetAccountSelectCursor()
+		}
+	}
+	return a, false
+}
+
+func (a App) transactionAccountSelectLines() []string {
+	filter := a.accountFilter()
+	options := a.currentTransactionAccountOptions()
+	cursor := clampCursor(parseFormInt(a.Form[accountCursorKey]), len(options))
+	page := min(a.accountSelectPage(), tagPageCount(len(options))-1)
+	start := page * tagPageSize
+	end := min(start+tagPageSize, len(options))
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
+	if len(options) == 0 {
+		lines = append(lines, "     (no matching accounts)", "", "     [00/00]")
+		return lines
+	}
+	for i, option := range options[start:end] {
+		prefix := "       "
+		if start+i == cursor {
+			prefix = "     > "
+		}
+		lines = append(lines, prefix+option.Name)
+	}
+	lines = append(lines, "", fmt.Sprintf("     [%02d/%02d]", cursor+1, len(options)))
+	return lines
 }
 
 func (a App) transactionListScreen(accountID int64) screen {
@@ -409,12 +511,12 @@ func (a App) transactionListBody(accountID int64, parentID *int64) string {
 	headers := []string{"date", "type", "amount", "account", "tags", "notes"}
 	tableRows := make([][]component.Cell, 0, len(rows))
 	for _, row := range rows {
-		name := strings.Repeat(" ", row.Depth) + row.Account
+		date := strings.Repeat("  ", row.Depth) + row.Date
 		tableRows = append(tableRows, []component.Cell{
-			component.TextCell(row.Date),
+			component.TextCell(date),
 			component.TextCell(row.Type),
 			component.TextCell(row.Amount),
-			component.TextCell(name),
+			component.TextCell(row.Account),
 			component.TextCell(formatTags(row.Tags, nil)),
 			component.TextCell(row.Notes),
 		})

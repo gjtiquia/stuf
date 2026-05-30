@@ -16,6 +16,9 @@ const (
 	categoryFilterKey   = "_category_filter"
 	categoryCursorKey   = "_category_cursor"
 	categoryPageKey     = "_category_page"
+	accountFilterKey    = "_account_filter"
+	accountCursorKey    = "_account_cursor"
+	accountPageKey      = "_account_page"
 	newTagsKey          = "_new_tags"
 	textCursorKeyPrefix = "_cursor:"
 )
@@ -68,6 +71,16 @@ func (a App) clearCategorySelectState() {
 	delete(a.Form, categoryPageKey)
 }
 
+func (a App) accountFilter() string { return a.Form[accountFilterKey] }
+
+func (a App) setAccountFilter(value string) { a.Form[accountFilterKey] = sanitizeSlug(value) }
+
+func (a App) clearAccountSelectState() {
+	delete(a.Form, accountFilterKey)
+	delete(a.Form, accountCursorKey)
+	delete(a.Form, accountPageKey)
+}
+
 func (a App) setTagSelectCursor(cursor int) {
 	a.Form[tagCursorKey] = strconv.Itoa(cursor)
 	a.Form[tagPageKey] = strconv.Itoa(cursor / currencyPageSize)
@@ -100,6 +113,23 @@ func (a App) categorySelectPage() int {
 
 func (a App) setCategorySelectPage(page int) {
 	a.Form[categoryPageKey] = strconv.Itoa(page)
+}
+
+func (a App) setAccountSelectCursor(cursor int) {
+	a.Form[accountCursorKey] = strconv.Itoa(cursor)
+	a.Form[accountPageKey] = strconv.Itoa(cursor / tagPageSize)
+}
+
+func (a App) resetAccountSelectCursor() {
+	a.setAccountSelectCursor(0)
+}
+
+func (a App) accountSelectPage() int {
+	return parseFormInt(a.Form[accountPageKey])
+}
+
+func (a App) setAccountSelectPage(page int) {
+	a.Form[accountPageKey] = strconv.Itoa(page)
 }
 
 func (a App) currencySelectCursor() int {
