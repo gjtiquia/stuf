@@ -43,6 +43,8 @@
 
 ## critical bug fix TODOs
 
+- clipping when text is above the terminal size!
+
 ### budgets
 - budgets currency should only be relevant for the /budgets/list and the parenthesis, but allocations should allow multi currency!
 
