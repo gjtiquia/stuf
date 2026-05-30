@@ -40,6 +40,10 @@
 
 ## feature TODOs
 
+### dashboard
+- definitely useful to see the available money in the dashboard, feeling like doing mental math and, seeing "total" on the very top is kind of a lie
+- high-loe
+
 ### owe
 - should implement soon, such that the available balance is accurate
     - tho its mainly the money i owe others that should deduct from available (kinda like a credit card)
@@ -56,7 +60,6 @@
 ## enhancement TODOs
 
 ### budgets
-- definitely useful to see the available money in the dashboard, feeling like doing mental math and, seeing "total" on the very top is kind of a lie
 - entering on a budget should directly go to... allocation list..? tho accounts goes to account details first... hmmm...
 - no need to show table header on each category, becomes repetitive under the limited screen space
 - should show total, budgeted, and available when doing allocations
@@ -74,6 +77,9 @@
 - edit account name insertion typing, cursor keeps going to the end... super annoying in mass renaming
 - edit balance amount cannot move cursor to insert
 - edit negative balance amount, type "-" should not immediately add 0 at the end
+
+### reports
+- should not scroll left/right further than what snapshots are available
 
 ### budgets
 - category input super buggy
