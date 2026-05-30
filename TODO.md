@@ -24,6 +24,16 @@
 
 ---
 
+## priotity
+
+### keyboard hints
+- taking up quite a lot of real estate, but i dont often look at it, should simply show a ? help
+
+### budgets
+- no need to show table header on each category, becomes repetitive under the limited screen space
+
+---
+
 ## design TODOs
 
 - rename to steph
@@ -49,9 +59,6 @@
     - tho its mainly the money i owe others that should deduct from available (kinda like a credit card)
     - for those that owe me, doesnt contribute really, i should be budgeting the full amount im paying, and the amount they owe me does not add to available, its more of tracking what money that is not yet returned
 
-### keyboard hints
-- taking up quite a lot of real estate, but i dont often look at it, should simply show a ? help
-
 ### currencies
 - the more i think about it... starting to make sense to have historical currencies... but mainly useful for past analysis only
 
@@ -61,13 +68,8 @@
 
 ### budgets
 - entering on a budget should directly go to... allocation list..? tho accounts goes to account details first... hmmm...
-- no need to show table header on each category, becomes repetitive under the limited screen space
 - should show total, budgeted, and available when doing allocations
 - other that "set total", "add", "remove", should also have an "allocate all available"
-
-### reports
-- reports should add month start/end, so can calculate the cashflow for that month
-- reports should include these trends but for longer duration too, for a more holistic view, probably in lists form
 
 ---
 
