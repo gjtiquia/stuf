@@ -74,6 +74,9 @@
     - allocate all available
     - reconcile available (makes negative available zero)
 
+### formulas
+- once formulas are implemented in owed amounts, they should be... widely available wherever you can input amounts?
+
 ---
 
 ## non-critical bug fix TODOs
