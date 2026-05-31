@@ -19,6 +19,8 @@ const (
 	routeBudgetCreate    = "/budgets/create/"
 	routeBudgetCatList   = "/budgets/categories/list/"
 	routeBudgetCatCreate = "/budgets/categories/create/"
+	routeOwedList        = "/owed/list/"
+	routeOwedCreate      = "/owed/ledgers/create/"
 	routeBackup          = "/backup/"
 	routeSettings        = "/settings/"
 	routeReports         = "/reports/"
@@ -46,6 +48,17 @@ func budgetAllocationListPath(name string) string  { return "/budgets/" + name +
 func budgetAllocationAddPath(name string) string   { return "/budgets/" + name + "/allocations/add/" }
 func budgetAllocationEditPath(name string, id int64) string {
 	return fmt.Sprintf("/budgets/%s/allocations/%d/edit/", name, id)
+}
+func owedLedgerPath(name string) string        { return "/owed/ledgers/" + name + "/" }
+func owedLedgerEditPathFor(name string) string { return "/owed/ledgers/" + name + "/edit/" }
+func owedTransactionListPath(name string) string {
+	return "/owed/ledgers/" + name + "/transactions/list/"
+}
+func owedTransactionAddPath(name string) string {
+	return "/owed/ledgers/" + name + "/transactions/add/"
+}
+func owedTransactionEditPath(name string, id int64) string {
+	return fmt.Sprintf("/owed/ledgers/%s/transactions/%d/edit/", name, id)
 }
 func budgetCategoryPath(name string) string        { return "/budgets/categories/" + name + "/" }
 func budgetCategoryEditPathFor(name string) string { return "/budgets/categories/" + name + "/edit/" }
@@ -306,6 +319,80 @@ func budgetAllocationEditName(path string) (string, int64, bool) {
 	}
 	id, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil || parts[0] == "" {
+		return "", 0, false
+	}
+	return parts[0], id, true
+}
+
+func owedLedgerDetailName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/") {
+		return "", false
+	}
+	rest := strings.Trim(strings.TrimPrefix(path, "/owed/ledgers/"), "/")
+	if rest == "" || rest == "create" || strings.Contains(rest, "/") {
+		return "", false
+	}
+	return rest, true
+}
+
+func owedLedgerEditName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/edit/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/owed/ledgers/"), "/edit/")
+	if name == "" || strings.Contains(name, "/") || name == "create" {
+		return "", false
+	}
+	return name, true
+}
+
+func owedTransactionListName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/transactions/list/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/owed/ledgers/"), "/transactions/list/")
+	if name == "" || strings.Contains(name, "/") || name == "create" {
+		return "", false
+	}
+	return name, true
+}
+
+func owedTransactionAddName(path string) (string, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/transactions/add/") {
+		return "", false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "/owed/ledgers/"), "/transactions/add/")
+	if name == "" || strings.Contains(name, "/") || name == "create" {
+		return "", false
+	}
+	return name, true
+}
+
+func owedTransactionEditName(path string) (string, int64, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/edit/") {
+		return "", 0, false
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/owed/ledgers/"), "/"), "/")
+	if len(parts) != 4 || parts[1] != "transactions" || parts[3] != "edit" {
+		return "", 0, false
+	}
+	id, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || parts[0] == "" || parts[0] == "create" {
+		return "", 0, false
+	}
+	return parts[0], id, true
+}
+
+func owedTransactionRefName(path string) (string, int64, bool) {
+	if !strings.HasPrefix(path, "/owed/ledgers/") || !strings.HasSuffix(path, "/") {
+		return "", 0, false
+	}
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/owed/ledgers/"), "/"), "/")
+	if len(parts) != 3 || parts[1] != "transactions" || !strings.HasPrefix(parts[2], "txn-") {
+		return "", 0, false
+	}
+	id, err := strconv.ParseInt(strings.TrimPrefix(parts[2], "txn-"), 10, 64)
+	if err != nil || parts[0] == "" || parts[0] == "create" {
 		return "", 0, false
 	}
 	return parts[0], id, true

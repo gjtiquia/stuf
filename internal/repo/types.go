@@ -69,6 +69,35 @@ type BudgetAllocation struct {
 	UpdatedAt string
 }
 
+type OwedLedger struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	Code       string
+	Scale      int
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type OwedTransaction struct {
+	ID               int64
+	LedgerID         int64
+	LedgerName       string
+	LedgerCurrencyID int64
+	LedgerCode       string
+	LedgerScale      int
+	Date             string
+	CurrencyID       int64
+	Code             string
+	CurrencyScale    int
+	Amount           money.Money
+	Formula          string
+	Notes            string
+	CreatedAt        string
+	UpdatedAt        string
+}
+
 type Transaction struct {
 	ID            int64
 	Ref           int64
@@ -117,6 +146,17 @@ func (e *BudgetDuplicateNameError) Error() string {
 		return "budget already exists; choose another name"
 	}
 	return fmt.Sprintf("budget already exists: %s; choose another name", e.Name)
+}
+
+type OwedLedgerDuplicateNameError struct {
+	Name string
+}
+
+func (e *OwedLedgerDuplicateNameError) Error() string {
+	if e.Name == "" {
+		return "owed ledger already exists; choose another name"
+	}
+	return fmt.Sprintf("owed ledger already exists: %s; choose another name", e.Name)
 }
 
 type AccountDuplicateNameError struct {

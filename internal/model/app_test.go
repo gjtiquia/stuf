@@ -35,7 +35,9 @@ func testApp(t *testing.T) (App, *repo.Store) {
 		Budgets:           service.BudgetService{Store: s, Budgets: s.Bud, Categories: s.BudCat, Currency: s.Cur, Allocations: s.Alloc, History: h, AppCurrency: "HKD"},
 		BudgetAllocations: service.BudgetAllocationService{Store: s, Budgets: s.Bud, Allocations: s.Alloc, History: h},
 		Transactions:      service.TransactionService{Store: s, Transactions: s.Txn, Accounts: s.Acct, Currency: s.Cur, Tags: s.Tag, History: h},
-		Dashboard:         service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
+		OwedLedgers:       service.OwedLedgerService{Store: s, Ledgers: s.Owed, Transactions: s.OwedTx, Currency: s.Cur, History: h, AppCurrency: "HKD"},
+		OwedTransactions:  service.OwedTransactionService{Store: s, Ledgers: s.Owed, Transactions: s.OwedTx, Currency: s.Cur, History: h},
+		Dashboard:         service.DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, OwedLedgers: s.Owed, OwedTxns: s.OwedTx, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		Reports:           service.ReportService{Accounts: s.Acct, Balances: s.Bal, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock},
 		History:           h,
 		Backup: func(context.Context) (string, error) {
@@ -257,6 +259,59 @@ func TestBudgetHappyPathThroughUIAndServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertViewContains(t, app.View(), "budgeted  : HKD 2,000.00", "available : HKD     0.00")
+}
+
+func TestOwedLedgerHappyPathThroughUIAndServices(t *testing.T) {
+	app, _ := testApp(t)
+
+	app = pressRunes(app, "4")
+	if app.Path != routeOwedList {
+		t.Fatalf("owed should open list route, got %s", app.Path)
+	}
+	assertViewContains(t, app.View(), "/owed/list/", "ppl owe you : HKD 0.00")
+
+	app = press(app, tea.KeyCtrlN)
+	if app.Path != routeOwedCreate {
+		t.Fatalf("owed ledger create route = %s", app.Path)
+	}
+	app.Form["name"] = "alex"
+	app.Form["currency"] = "HKD"
+	app.Form["notes"] = "roommate"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != owedLedgerPath("alex") || app.Error != "" {
+		t.Fatalf("ledger create failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "balance  : HKD 0.00", "roommate")
+
+	app = press(app, tea.KeyEnter)
+	if app.Path != owedTransactionListPath("alex") {
+		t.Fatalf("transaction list route = %s", app.Path)
+	}
+	app = press(app, tea.KeyCtrlN)
+	app.Form["date"] = "2026-05-21"
+	app.Form["currency"] = "HKD"
+	app.Form["amount"] = "=1000/2"
+	app.Form["notes"] = "netflix yearly half"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != owedTransactionListPath("alex") || app.Error != "" {
+		t.Fatalf("transaction add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "HKD 500.00", "netflix yearly half")
+
+	app = press(app, tea.KeyCtrlN)
+	app.Form["date"] = "2026-05-22"
+	app.Form["currency"] = "HKD"
+	app.Form["amount"] = "-200"
+	app.Form["notes"] = "partial payback"
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != owedTransactionListPath("alex") || app.Error != "" {
+		t.Fatalf("negative transaction add failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	assertViewContains(t, app.View(), "HKD (200.00)", "HKD 300.00")
+
+	app = appWithNav(app, navFrame{Path: "/", Menu: 0})
+	assertViewContains(t, app.View(), "ppl owe you : HKD 300.00")
+	assertNotContains(t, app.View(), "available : HKD (300.00)")
 }
 
 func TestTransactionHappyPathThroughUIAndServices(t *testing.T) {

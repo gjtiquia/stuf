@@ -17,6 +17,7 @@ type Dashboard struct {
 	Total                          money.Money
 	Budgeted                       money.Money
 	Available                      money.Money
+	PplOweYou                      money.Money
 	NetChangeFromMonthStart        money.Money
 	NetChangeFromMonthHigh         money.Money
 	NetChangeFromPreviousMonthHigh money.Money
@@ -69,6 +70,8 @@ type DashboardService struct {
 	Balances    *repo.BalanceRepo
 	Budgets     *repo.BudgetRepo
 	Allocations *repo.BudgetAllocationRepo
+	OwedLedgers *repo.OwedLedgerRepo
+	OwedTxns    *repo.OwedTransactionRepo
 	Currencies  *repo.CurrencyRepo
 	AppCurrency string
 	Now         func() time.Time
@@ -125,6 +128,21 @@ func (s DashboardService) Summary(ctx context.Context) (Dashboard, error) {
 		out.Budgeted = money.Money{Scale: appCur.Scale}
 		out.Available = out.Total
 	}
+	out.PplOweYou = money.Money{Scale: appCur.Scale}
+	if s.OwedLedgers != nil && s.OwedTxns != nil {
+		owedSvc := OwedTransactionService{Ledgers: s.OwedLedgers, Transactions: s.OwedTxns, Currency: s.Currencies}
+		owedTotal, owedWarnings, err := owedSvc.NetTotal(ctx, s.AppCurrency)
+		if err != nil {
+			return Dashboard{}, err
+		}
+		out.PplOweYou = owedTotal
+		for _, warning := range owedWarnings {
+			if !warned[warning] {
+				warnings = append(warnings, warning)
+				warned[warning] = true
+			}
+		}
+	}
 	out.Warnings = warnings
 	return out, nil
 }
@@ -170,6 +188,7 @@ func (s DashboardService) SummaryForAccounts(ctx context.Context, accountIDs []i
 	out := dashboardFromHistories(today, money.Money{Scale: appCur.Scale}, histories)
 	out.Budgeted = money.Money{Scale: appCur.Scale}
 	out.Available = out.Total
+	out.PplOweYou = money.Money{Scale: appCur.Scale}
 	out.Warnings = warnings
 	return out, nil
 }
@@ -191,6 +210,7 @@ func (s DashboardService) AccountSummary(ctx context.Context, accountID int64) (
 	out := dashboardFromHistories(today, money.Money{Scale: cur.Scale}, histories)
 	out.Budgeted = money.Money{Scale: cur.Scale}
 	out.Available = out.Total
+	out.PplOweYou = money.Money{Scale: cur.Scale}
 	out.Warnings = warnings
 	return out, nil
 }

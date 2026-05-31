@@ -98,6 +98,28 @@ type History struct {
 	NewData   sql.NullString
 }
 
+type OwedLedger struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+type OwedTransaction struct {
+	ID         int64
+	LedgerID   int64
+	Date       string
+	CurrencyID int64
+	Amount     int64
+	Scale      int64
+	Formula    string
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
 type Tag struct {
 	ID        int64
 	Name      string

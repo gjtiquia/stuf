@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"stuf/internal/component"
-	"stuf/internal/money"
 	"stuf/internal/service"
 )
 
@@ -61,13 +60,11 @@ budgeted    : %s
 %s`, dashboardAsOf(d), values[0], values[1], dashboardSectionsWithValues(d, "on-budget ", values[2:11]))
 	if includeOwed {
 		owed := alignedMoneyValues(
-			component.MoneyCell(money.Money{Scale: 2}, cur),
-			component.MoneyCell(money.Money{Scale: 2}, cur),
+			component.MoneyCell(d.PplOweYou, cur),
 		)
 		body += fmt.Sprintf(`
 
-you owe ppl : %s
-ppl owe you : %s`, owed[0], owed[1])
+ppl owe you : %s`, owed[0])
 	}
 	body += "\n" + warnings
 	return strings.TrimRight(body, "\n")
@@ -217,6 +214,6 @@ func (a App) dashboardScreen() screen {
 	return screen{
 		Path:    "/",
 		Context: context,
-		Actions: []string{"accounts", "transactions", "budgets", "owed (TODO)", "reports", "settings", "backup"},
+		Actions: []string{"accounts", "transactions", "budgets", "owed", "reports", "settings", "backup"},
 	}
 }

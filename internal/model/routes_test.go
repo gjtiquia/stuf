@@ -61,6 +61,25 @@ func TestRouteBuildersAndParsers(t *testing.T) {
 	if gotName, gotID, ok := budgetAllocationEditName(budgetAllocationEditPath(budget, 42)); !ok || gotName != budget || gotID != 42 {
 		t.Fatalf("budgetAllocationEditName = %q %d, %v", gotName, gotID, ok)
 	}
+	ledger := "alex"
+	if got, ok := owedLedgerDetailName(owedLedgerPath(ledger)); !ok || got != ledger {
+		t.Fatalf("owedLedgerDetailName = %q, %v", got, ok)
+	}
+	if got, ok := owedLedgerEditName(owedLedgerEditPathFor(ledger)); !ok || got != ledger {
+		t.Fatalf("owedLedgerEditName = %q, %v", got, ok)
+	}
+	if got, ok := owedTransactionListName(owedTransactionListPath(ledger)); !ok || got != ledger {
+		t.Fatalf("owedTransactionListName = %q, %v", got, ok)
+	}
+	if got, ok := owedTransactionAddName(owedTransactionAddPath(ledger)); !ok || got != ledger {
+		t.Fatalf("owedTransactionAddName = %q, %v", got, ok)
+	}
+	if gotName, gotID, ok := owedTransactionEditName(owedTransactionEditPath(ledger, 42)); !ok || gotName != ledger || gotID != 42 {
+		t.Fatalf("owedTransactionEditName = %q %d, %v", gotName, gotID, ok)
+	}
+	if gotName, gotID, ok := owedTransactionRefName(owedTransactionDetailPathFor(ledger, 42)); !ok || gotName != ledger || gotID != 42 {
+		t.Fatalf("owedTransactionRefName = %q %d, %v", gotName, gotID, ok)
+	}
 	category := "daily"
 	if got, ok := budgetCategoryDetailName(budgetCategoryPath(category)); !ok || got != category {
 		t.Fatalf("budgetCategoryDetailName = %q, %v", got, ok)

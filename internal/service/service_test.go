@@ -63,6 +63,22 @@ func transactionServiceStack(t *testing.T) (*repo.Store, AccountService, Transac
 	return s, a, tx, h
 }
 
+func owedServiceStack(t *testing.T) (*repo.Store, OwedLedgerService, OwedTransactionService, DashboardService, HistoryService) {
+	t.Helper()
+	ctx := context.Background()
+	s, err := repo.Open(ctx, filepath.Join(t.TempDir(), "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	s.Clock = func() time.Time { return time.Date(2026, 5, 24, 12, 0, 0, 0, time.UTC) }
+	h := HistoryService{Repo: s.Hist, Now: s.Clock}
+	ledgers := OwedLedgerService{Store: s, Ledgers: s.Owed, Transactions: s.OwedTx, Currency: s.Cur, History: h, AppCurrency: "HKD"}
+	txns := OwedTransactionService{Store: s, Ledgers: s.Owed, Transactions: s.OwedTx, Currency: s.Cur, History: h}
+	d := DashboardService{Accounts: s.Acct, Balances: s.Bal, Budgets: s.Bud, Allocations: s.Alloc, OwedLedgers: s.Owed, OwedTxns: s.OwedTx, Currencies: s.Cur, AppCurrency: "HKD", Now: s.Clock}
+	return s, ledgers, txns, d, h
+}
+
 func setServiceRate(t *testing.T, store *repo.Store, code string, amount int64, scale int) {
 	t.Helper()
 	if err := store.SetCurrencyRate(context.Background(), code, amount, scale); err != nil {
@@ -76,6 +92,57 @@ func tagTestNames(tags []repo.Tag) []string {
 		out[i] = tag.Name
 	}
 	return out
+}
+
+func TestOwedLedgerTransactionsBalancesFormulasAndUndo(t *testing.T) {
+	ctx := context.Background()
+	_, ledgers, txns, dashboard, history := owedServiceStack(t)
+
+	ledger, _, err := ledgers.Create(ctx, "alex", "HKD", "roommate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ledgers.Create(ctx, "alex", "HKD", "duplicate"); err == nil {
+		t.Fatal("expected duplicate ledger name to fail")
+	}
+	first, _, err := txns.Add(ctx, ledger.ID, "2026-05-21", "HKD", "=1000/2", "netflix yearly half")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Amount.Amount != 50000 || first.Formula != "=1000/2" {
+		t.Fatalf("formula transaction = %+v", first)
+	}
+	if _, _, err := txns.Add(ctx, ledger.ID, "2026-05-22", "HKD", "-200", "partial payback"); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := txns.ListWithBalances(ctx, ledger.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[1].Balance.Amount != 30000 {
+		t.Fatalf("running balances = %+v", rows)
+	}
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.PplOweYou.Amount != 30000 {
+		t.Fatalf("dashboard owed = %s", summary.PplOweYou.Format("HKD"))
+	}
+	deleteEntry, err := txns.Delete(ctx, rows[1].Transaction.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Undo(ctx, deleteEntry); err != nil {
+		t.Fatal(err)
+	}
+	bal, err := txns.Balance(ctx, ledger.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bal.Amount != 30000 {
+		t.Fatalf("balance after undo delete = %s", bal.Format("HKD"))
+	}
 }
 
 func TestAccountMutationRecordsHistoryAndUndo(t *testing.T) {

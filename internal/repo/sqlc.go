@@ -193,6 +193,53 @@ func isBudgetDuplicateNameErr(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed: budgets.name")
 }
 
+func owedLedgerFromFields(id int64, name string, currencyID int64, code string, scale int64, notes, createdAt, updatedAt string) OwedLedger {
+	return OwedLedger{
+		ID:         id,
+		Name:       name,
+		CurrencyID: currencyID,
+		Code:       code,
+		Scale:      int(scale),
+		Notes:      notes,
+		CreatedAt:  createdAt,
+		UpdatedAt:  updatedAt,
+	}
+}
+
+func owedLedgerFromGetRow(row db.GetOwedLedgerByIDRow) OwedLedger {
+	return owedLedgerFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func owedLedgerFromNameRow(row db.GetOwedLedgerByNameRow) OwedLedger {
+	return owedLedgerFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func owedLedgerFromListRow(row db.ListOwedLedgersRow) OwedLedger {
+	return owedLedgerFromFields(row.ID, row.Name, row.CurrencyID, row.Code, row.Scale, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func mapOwedLedgerErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("owed ledger not found")
+	}
+	return err
+}
+
+func mapOwedLedgerWriteErr(err error, name string) error {
+	if isOwedLedgerDuplicateNameErr(err) {
+		return &OwedLedgerDuplicateNameError{Name: name}
+	}
+	return err
+}
+
+func isOwedLedgerDuplicateNameErr(err error) bool {
+	var sqliteErr *sqlite.Error
+	if errors.As(err, &sqliteErr) {
+		return sqliteErr.Code() == 2067 && strings.Contains(sqliteErr.Error(), "owed_ledgers.name")
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint failed: owed_ledgers.name")
+}
+
 func currencyFromFields(id int64, code, name string, scale int64, amount, rateScale sql.NullInt64, updated sql.NullString) Currency {
 	c := Currency{
 		ID:    id,
@@ -257,6 +304,34 @@ func budgetAllocationFromDB(a db.BudgetAllocation) BudgetAllocation {
 	}
 }
 
+func owedTransactionFromFields(id, ledgerID int64, ledgerName string, ledgerCurrencyID int64, ledgerCode string, ledgerScale int64, date string, currencyID int64, code string, currencyScale int64, amount, scale int64, formula, notes, createdAt, updatedAt string) OwedTransaction {
+	return OwedTransaction{
+		ID:               id,
+		LedgerID:         ledgerID,
+		LedgerName:       ledgerName,
+		LedgerCurrencyID: ledgerCurrencyID,
+		LedgerCode:       ledgerCode,
+		LedgerScale:      int(ledgerScale),
+		Date:             date,
+		CurrencyID:       currencyID,
+		Code:             code,
+		CurrencyScale:    int(currencyScale),
+		Amount:           money.Money{Amount: amount, Scale: int(scale)},
+		Formula:          formula,
+		Notes:            notes,
+		CreatedAt:        createdAt,
+		UpdatedAt:        updatedAt,
+	}
+}
+
+func owedTransactionFromGetRow(row db.GetOwedTransactionByIDRow) OwedTransaction {
+	return owedTransactionFromFields(row.ID, row.LedgerID, row.LedgerName, row.LedgerCurrencyID, row.LedgerCode, row.LedgerScale, row.Date, row.CurrencyID, row.Code, row.CurrencyScale, row.Amount, row.Scale, row.Formula, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
+func owedTransactionFromListRow(row db.ListOwedTransactionsByLedgerRow) OwedTransaction {
+	return owedTransactionFromFields(row.ID, row.LedgerID, row.LedgerName, row.LedgerCurrencyID, row.LedgerCode, row.LedgerScale, row.Date, row.CurrencyID, row.Code, row.CurrencyScale, row.Amount, row.Scale, row.Formula, row.Notes, row.CreatedAt, row.UpdatedAt)
+}
+
 func transactionFromFields(id, ref int64, parentID sql.NullInt64, accountID int64, accountName, typ string, currencyID int64, code string, currencyScale int64, date string, amount int64, scale int64, notes, createdAt, updatedAt string) Transaction {
 	return Transaction{
 		ID:            id,
@@ -306,6 +381,13 @@ func mapTransactionErr(err error) error {
 func mapBudgetAllocationErr(err error) error {
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("budget allocation not found")
+	}
+	return err
+}
+
+func mapOwedTransactionErr(err error) error {
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("owed transaction not found")
 	}
 	return err
 }

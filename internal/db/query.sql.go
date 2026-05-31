@@ -99,6 +99,17 @@ func (q *Queries) CountChildrenByAccountID(ctx context.Context, parentID sql.Nul
 	return count, err
 }
 
+const countOwedTransactionsByLedgerID = `-- name: CountOwedTransactionsByLedgerID :one
+SELECT count(*) FROM owed_transactions WHERE ledger_id = ?
+`
+
+func (q *Queries) CountOwedTransactionsByLedgerID(ctx context.Context, ledgerID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOwedTransactionsByLedgerID, ledgerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countTransactionTagsByTagID = `-- name: CountTransactionTagsByTagID :one
 SELECT count(*)
 FROM transaction_tags
@@ -289,6 +300,64 @@ func (q *Queries) CreateHistory(ctx context.Context, arg CreateHistoryParams) (s
 	)
 }
 
+const createOwedLedger = `-- name: CreateOwedLedger :execresult
+
+INSERT INTO owed_ledgers (name, currency_id, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type CreateOwedLedgerParams struct {
+	Name       string
+	CurrencyID int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+// Owed ledgers
+func (q *Queries) CreateOwedLedger(ctx context.Context, arg CreateOwedLedgerParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createOwedLedger,
+		arg.Name,
+		arg.CurrencyID,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
+const createOwedTransaction = `-- name: CreateOwedTransaction :execresult
+
+INSERT INTO owed_transactions (ledger_id, date, currency_id, amount, scale, formula, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type CreateOwedTransactionParams struct {
+	LedgerID   int64
+	Date       string
+	CurrencyID int64
+	Amount     int64
+	Scale      int64
+	Formula    string
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+// Owed transactions
+func (q *Queries) CreateOwedTransaction(ctx context.Context, arg CreateOwedTransactionParams) (sql.Result, error) {
+	return q.db.ExecContext(ctx, createOwedTransaction,
+		arg.LedgerID,
+		arg.Date,
+		arg.CurrencyID,
+		arg.Amount,
+		arg.Scale,
+		arg.Formula,
+		arg.Notes,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+}
+
 const createTag = `-- name: CreateTag :execresult
 
 INSERT INTO tags (name, notes, created_at, updated_at)
@@ -407,6 +476,24 @@ DELETE FROM history WHERE id = ?
 
 func (q *Queries) DeleteHistory(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, deleteHistory, id)
+	return err
+}
+
+const deleteOwedLedger = `-- name: DeleteOwedLedger :exec
+DELETE FROM owed_ledgers WHERE id = ?
+`
+
+func (q *Queries) DeleteOwedLedger(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteOwedLedger, id)
+	return err
+}
+
+const deleteOwedTransaction = `-- name: DeleteOwedTransaction :exec
+DELETE FROM owed_transactions WHERE id = ?
+`
+
+func (q *Queries) DeleteOwedTransaction(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteOwedTransaction, id)
 	return err
 }
 
@@ -873,6 +960,158 @@ func (q *Queries) GetLatestBalanceByAccount(ctx context.Context, accountID int64
 		&i.Date,
 		&i.Amount,
 		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwedLedgerByID = `-- name: GetOwedLedgerByID :one
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+WHERE l.id = ?
+`
+
+type GetOwedLedgerByIDRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	Code       string
+	Scale      int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) GetOwedLedgerByID(ctx context.Context, id int64) (GetOwedLedgerByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getOwedLedgerByID, id)
+	var i GetOwedLedgerByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrencyID,
+		&i.Code,
+		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwedLedgerByName = `-- name: GetOwedLedgerByName :one
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+WHERE l.name = ?
+`
+
+type GetOwedLedgerByNameRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	Code       string
+	Scale      int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) GetOwedLedgerByName(ctx context.Context, name string) (GetOwedLedgerByNameRow, error) {
+	row := q.db.QueryRowContext(ctx, getOwedLedgerByName, name)
+	var i GetOwedLedgerByNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.CurrencyID,
+		&i.Code,
+		&i.Scale,
+		&i.Notes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getOwedTransactionByID = `-- name: GetOwedTransactionByID :one
+SELECT
+  t.id,
+  t.ledger_id,
+  l.name AS ledger_name,
+  l.currency_id AS ledger_currency_id,
+  lc.code AS ledger_code,
+  lc.scale AS ledger_scale,
+  t.date,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.amount,
+  t.scale,
+  t.formula,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM owed_transactions t
+JOIN owed_ledgers l ON l.id = t.ledger_id
+JOIN currencies lc ON lc.id = l.currency_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.id = ?
+`
+
+type GetOwedTransactionByIDRow struct {
+	ID               int64
+	LedgerID         int64
+	LedgerName       string
+	LedgerCurrencyID int64
+	LedgerCode       string
+	LedgerScale      int64
+	Date             string
+	CurrencyID       int64
+	Code             string
+	CurrencyScale    int64
+	Amount           int64
+	Scale            int64
+	Formula          string
+	Notes            string
+	CreatedAt        string
+	UpdatedAt        string
+}
+
+func (q *Queries) GetOwedTransactionByID(ctx context.Context, id int64) (GetOwedTransactionByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getOwedTransactionByID, id)
+	var i GetOwedTransactionByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.LedgerID,
+		&i.LedgerName,
+		&i.LedgerCurrencyID,
+		&i.LedgerCode,
+		&i.LedgerScale,
+		&i.Date,
+		&i.CurrencyID,
+		&i.Code,
+		&i.CurrencyScale,
+		&i.Amount,
+		&i.Scale,
+		&i.Formula,
 		&i.Notes,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -1730,6 +1969,149 @@ func (q *Queries) ListHistory(ctx context.Context) ([]History, error) {
 	return items, nil
 }
 
+const listOwedLedgers = `-- name: ListOwedLedgers :many
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+ORDER BY l.name
+`
+
+type ListOwedLedgersRow struct {
+	ID         int64
+	Name       string
+	CurrencyID int64
+	Code       string
+	Scale      int64
+	Notes      string
+	CreatedAt  string
+	UpdatedAt  string
+}
+
+func (q *Queries) ListOwedLedgers(ctx context.Context) ([]ListOwedLedgersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOwedLedgers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwedLedgersRow
+	for rows.Next() {
+		var i ListOwedLedgersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.CurrencyID,
+			&i.Code,
+			&i.Scale,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwedTransactionsByLedger = `-- name: ListOwedTransactionsByLedger :many
+SELECT
+  t.id,
+  t.ledger_id,
+  l.name AS ledger_name,
+  l.currency_id AS ledger_currency_id,
+  lc.code AS ledger_code,
+  lc.scale AS ledger_scale,
+  t.date,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.amount,
+  t.scale,
+  t.formula,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM owed_transactions t
+JOIN owed_ledgers l ON l.id = t.ledger_id
+JOIN currencies lc ON lc.id = l.currency_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.ledger_id = ?
+ORDER BY t.date, t.created_at, t.id
+`
+
+type ListOwedTransactionsByLedgerRow struct {
+	ID               int64
+	LedgerID         int64
+	LedgerName       string
+	LedgerCurrencyID int64
+	LedgerCode       string
+	LedgerScale      int64
+	Date             string
+	CurrencyID       int64
+	Code             string
+	CurrencyScale    int64
+	Amount           int64
+	Scale            int64
+	Formula          string
+	Notes            string
+	CreatedAt        string
+	UpdatedAt        string
+}
+
+func (q *Queries) ListOwedTransactionsByLedger(ctx context.Context, ledgerID int64) ([]ListOwedTransactionsByLedgerRow, error) {
+	rows, err := q.db.QueryContext(ctx, listOwedTransactionsByLedger, ledgerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwedTransactionsByLedgerRow
+	for rows.Next() {
+		var i ListOwedTransactionsByLedgerRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.LedgerID,
+			&i.LedgerName,
+			&i.LedgerCurrencyID,
+			&i.LedgerCode,
+			&i.LedgerScale,
+			&i.Date,
+			&i.CurrencyID,
+			&i.Code,
+			&i.CurrencyScale,
+			&i.Amount,
+			&i.Scale,
+			&i.Formula,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRootAccounts = `-- name: ListRootAccounts :many
 SELECT
   a.id,
@@ -2565,6 +2947,62 @@ type UpdateBudgetCategoryParams struct {
 func (q *Queries) UpdateBudgetCategory(ctx context.Context, arg UpdateBudgetCategoryParams) error {
 	_, err := q.db.ExecContext(ctx, updateBudgetCategory,
 		arg.Name,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateOwedLedger = `-- name: UpdateOwedLedger :exec
+UPDATE owed_ledgers
+SET name = ?, currency_id = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateOwedLedgerParams struct {
+	Name       string
+	CurrencyID int64
+	Notes      string
+	UpdatedAt  string
+	ID         int64
+}
+
+func (q *Queries) UpdateOwedLedger(ctx context.Context, arg UpdateOwedLedgerParams) error {
+	_, err := q.db.ExecContext(ctx, updateOwedLedger,
+		arg.Name,
+		arg.CurrencyID,
+		arg.Notes,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateOwedTransaction = `-- name: UpdateOwedTransaction :exec
+UPDATE owed_transactions
+SET date = ?, currency_id = ?, amount = ?, scale = ?, formula = ?, notes = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateOwedTransactionParams struct {
+	Date       string
+	CurrencyID int64
+	Amount     int64
+	Scale      int64
+	Formula    string
+	Notes      string
+	UpdatedAt  string
+	ID         int64
+}
+
+func (q *Queries) UpdateOwedTransaction(ctx context.Context, arg UpdateOwedTransactionParams) error {
+	_, err := q.db.ExecContext(ctx, updateOwedTransaction,
+		arg.Date,
+		arg.CurrencyID,
+		arg.Amount,
+		arg.Scale,
+		arg.Formula,
 		arg.Notes,
 		arg.UpdatedAt,
 		arg.ID,

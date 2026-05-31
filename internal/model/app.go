@@ -18,6 +18,8 @@ type Services struct {
 	Budgets           service.BudgetService
 	BudgetAllocations service.BudgetAllocationService
 	Transactions      service.TransactionService
+	OwedLedgers       service.OwedLedgerService
+	OwedTransactions  service.OwedTransactionService
 	Dashboard         service.DashboardService
 	Reports           service.ReportService
 	History           service.HistoryService
@@ -101,6 +103,23 @@ func (a App) notesFocused() bool {
 		return ok
 	}():
 		return a.Field == 2
+	case a.Path == routeOwedCreate:
+		return a.Field == 2
+	case func() bool {
+		_, ok := owedLedgerEditName(a.Path)
+		return ok
+	}():
+		return a.Field == 2
+	case func() bool {
+		_, ok := owedTransactionAddName(a.Path)
+		return ok
+	}():
+		return a.Field == 3
+	case func() bool {
+		_, _, ok := owedTransactionEditName(a.Path)
+		return ok
+	}():
+		return a.Field == 3
 	default:
 		return false
 	}
@@ -142,7 +161,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch a.Path {
 	case routeRoot:
-		a = a.menuKey(s, []string{routeAccountList, routeTransactionList, routeBudgetList, "/owed/", routeReports, routeSettings, routeBackup})
+		a = a.menuKey(s, []string{routeAccountList, routeTransactionList, routeBudgetList, routeOwedList, routeReports, routeSettings, routeBackup})
 	case routeTransactionList:
 		a = a.transactionListKey(s, 0)
 	case routeTransactionAdd:
@@ -163,6 +182,10 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a = a.budgetCategoryListKey(s)
 	case routeBudgetCatCreate:
 		a = a.budgetCategoryCreateKey(s)
+	case routeOwedList:
+		a = a.owedLedgerListKey(s)
+	case routeOwedCreate:
+		a = a.owedLedgerCreateKey(s)
 	case routeBackup:
 		a = a.backupKey(s)
 	case routeReports:
@@ -221,6 +244,18 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a = a.budgetCategoryEditKey(s, name)
 		} else if name, ok := budgetCategoryBudgetCreateName(a.Path); ok {
 			a = a.budgetCategoryBudgetCreateKey(s, name)
+		} else if name, ok := owedLedgerDetailName(a.Path); ok {
+			a = a.owedLedgerDetailKey(s, name)
+		} else if name, ok := owedLedgerEditName(a.Path); ok {
+			a = a.owedLedgerEditKey(s, name)
+		} else if name, ok := owedTransactionListName(a.Path); ok {
+			a = a.owedTransactionListKey(s, name)
+		} else if name, ok := owedTransactionAddName(a.Path); ok {
+			a = a.owedTransactionAddKey(s, name)
+		} else if name, id, ok := owedTransactionEditName(a.Path); ok {
+			a = a.owedTransactionEditKey(s, name, id)
+		} else if name, id, ok := owedTransactionRefName(a.Path); ok {
+			a = a.owedTransactionDetailKey(s, name, id)
 		} else if month, name, ok := reportMonthlyAccount(a.Path); ok {
 			a = a.reportMonthlyAccountKey(s, month, name)
 		} else if month, ok := reportMonthlyDetailMonth(a.Path); ok {
@@ -398,6 +433,10 @@ func (a App) screen() screen {
 		return a.budgetCategoryListScreen()
 	case a.Path == routeBudgetCatCreate:
 		return a.budgetCategoryCreateScreen()
+	case a.Path == routeOwedList:
+		return a.owedLedgerListScreen()
+	case a.Path == routeOwedCreate:
+		return a.owedLedgerCreateScreen()
 	case a.Path == routeSettings:
 		return screen{Path: routeSettings, Body: fmt.Sprintf("config   : %s\ncurrency : %s\n", a.Config.Path, a.Config.Config.Currency)}
 	case a.Path == routeBackup:
@@ -422,7 +461,7 @@ func (a App) screen() screen {
 	}():
 		month, _ := reportMonthlyDetailMonth(a.Path)
 		return a.reportMonthlyDetailScreen(month)
-	case strings.Contains(a.Path, "owed") || strings.Contains(a.Path, "reports"):
+	case strings.Contains(a.Path, "reports"):
 		return screen{Path: a.Path, Body: "(TODO)\n"}
 	default:
 		if name, ok := accountDetailName(a.Path); ok {
@@ -502,6 +541,24 @@ func (a App) screen() screen {
 		}
 		if name, ok := budgetCategoryBudgetCreateName(a.Path); ok {
 			return a.budgetCategoryBudgetCreateScreen(name)
+		}
+		if name, ok := owedLedgerDetailName(a.Path); ok {
+			return a.owedLedgerDetailScreen(name)
+		}
+		if name, ok := owedLedgerEditName(a.Path); ok {
+			return a.owedLedgerEditScreen(name)
+		}
+		if name, ok := owedTransactionListName(a.Path); ok {
+			return a.owedTransactionListScreen(name)
+		}
+		if name, ok := owedTransactionAddName(a.Path); ok {
+			return a.owedTransactionAddScreen(name)
+		}
+		if name, id, ok := owedTransactionEditName(a.Path); ok {
+			return a.owedTransactionEditScreen(name, id)
+		}
+		if name, id, ok := owedTransactionRefName(a.Path); ok {
+			return a.owedTransactionDetailScreen(name, id)
 		}
 		return screen{Path: a.Path}
 	}

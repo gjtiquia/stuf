@@ -480,6 +480,128 @@ WHERE id = ?;
 -- name: DeleteBudgetAllocation :exec
 DELETE FROM budget_allocations WHERE id = ?;
 
+-- Owed ledgers
+
+-- name: CreateOwedLedger :execresult
+INSERT INTO owed_ledgers (name, currency_id, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: GetOwedLedgerByID :one
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+WHERE l.id = ?;
+
+-- name: GetOwedLedgerByName :one
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+WHERE l.name = ?;
+
+-- name: ListOwedLedgers :many
+SELECT
+  l.id,
+  l.name,
+  l.currency_id,
+  c.code,
+  c.scale,
+  l.notes,
+  l.created_at,
+  l.updated_at
+FROM owed_ledgers l
+JOIN currencies c ON c.id = l.currency_id
+ORDER BY l.name;
+
+-- name: UpdateOwedLedger :exec
+UPDATE owed_ledgers
+SET name = ?, currency_id = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteOwedLedger :exec
+DELETE FROM owed_ledgers WHERE id = ?;
+
+-- name: CountOwedTransactionsByLedgerID :one
+SELECT count(*) FROM owed_transactions WHERE ledger_id = ?;
+
+-- Owed transactions
+
+-- name: CreateOwedTransaction :execresult
+INSERT INTO owed_transactions (ledger_id, date, currency_id, amount, scale, formula, notes, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetOwedTransactionByID :one
+SELECT
+  t.id,
+  t.ledger_id,
+  l.name AS ledger_name,
+  l.currency_id AS ledger_currency_id,
+  lc.code AS ledger_code,
+  lc.scale AS ledger_scale,
+  t.date,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.amount,
+  t.scale,
+  t.formula,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM owed_transactions t
+JOIN owed_ledgers l ON l.id = t.ledger_id
+JOIN currencies lc ON lc.id = l.currency_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.id = ?;
+
+-- name: ListOwedTransactionsByLedger :many
+SELECT
+  t.id,
+  t.ledger_id,
+  l.name AS ledger_name,
+  l.currency_id AS ledger_currency_id,
+  lc.code AS ledger_code,
+  lc.scale AS ledger_scale,
+  t.date,
+  t.currency_id,
+  c.code,
+  c.scale AS currency_scale,
+  t.amount,
+  t.scale,
+  t.formula,
+  t.notes,
+  t.created_at,
+  t.updated_at
+FROM owed_transactions t
+JOIN owed_ledgers l ON l.id = t.ledger_id
+JOIN currencies lc ON lc.id = l.currency_id
+JOIN currencies c ON c.id = t.currency_id
+WHERE t.ledger_id = ?
+ORDER BY t.date, t.created_at, t.id;
+
+-- name: UpdateOwedTransaction :exec
+UPDATE owed_transactions
+SET date = ?, currency_id = ?, amount = ?, scale = ?, formula = ?, notes = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteOwedTransaction :exec
+DELETE FROM owed_transactions WHERE id = ?;
+
 -- Transactions
 
 -- name: NextTransactionRef :one

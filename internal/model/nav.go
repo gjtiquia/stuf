@@ -59,6 +59,12 @@ func (a App) menuCountFor(path string) int {
 		return len(rows)
 	case routeBudgetList:
 		return a.budgetListRowCount()
+	case routeOwedList:
+		rows, err := a.filteredOwedLedgerRows()
+		if err != nil {
+			return 0
+		}
+		return len(rows)
 	case routeTransactionList:
 		return a.transactionListRowCount(0)
 	case routeBudgetCatList:
@@ -114,6 +120,19 @@ func (a App) menuCountFor(path string) int {
 		}
 		if _, ok := budgetDetailName(path); ok {
 			return 3
+		}
+		if _, ok := owedLedgerDetailName(path); ok {
+			return 2
+		}
+		if name, ok := owedTransactionListName(path); ok {
+			rows, err := a.owedTransactionRows(name)
+			if err != nil {
+				return 0
+			}
+			return len(rows)
+		}
+		if _, _, ok := owedTransactionRefName(path); ok {
+			return 2
 		}
 		if name, ok := budgetAllocationListName(path); ok {
 			rows, err := a.budgetAllocationRows(name)
