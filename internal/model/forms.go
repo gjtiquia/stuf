@@ -298,6 +298,10 @@ func (a App) formViewWithOptions(fields []string, locked map[string]string, opti
 			lines = append(lines, a.transactionAccountSelectLines()...)
 			continue
 		}
+		if i == a.Field && field == "to" && (locked == nil || locked[field] == "") {
+			lines = append(lines, a.budgetTransferToSelectLines()...)
+			continue
+		}
 		if i == a.Field && options != nil && len(options[field]) > 0 && (locked == nil || locked[field] == "") {
 			selected := value
 			fieldOptions := options[field]

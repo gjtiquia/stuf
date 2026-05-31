@@ -13,6 +13,7 @@ const (
 	AllocationActionSetTotal    = "set total"
 	AllocationActionAddMoney    = "add money"
 	AllocationActionRemoveMoney = "remove money"
+	AllocationActionTransferTo  = "transfer to"
 )
 
 type BudgetAllocationService struct {
@@ -29,6 +30,11 @@ type BudgetAllocationRow struct {
 
 type budgetAllocationMutationData struct {
 	Allocation repo.BudgetAllocation
+}
+
+type budgetAllocationTransferMutationData struct {
+	Source repo.BudgetAllocation
+	Target repo.BudgetAllocation
 }
 
 func (s BudgetAllocationService) Add(ctx context.Context, budgetID int64, action, amountText, date, notes string) (repo.BudgetAllocation, SessionEntry, error) {
@@ -62,6 +68,63 @@ func (s BudgetAllocationService) Add(ctx context.Context, budgetID int64, action
 		return nil
 	})
 	return out, entry, err
+}
+
+func (s BudgetAllocationService) TransferTo(ctx context.Context, sourceBudgetID int64, targetBudgetName, amountText, date, notes string) (repo.BudgetAllocation, repo.BudgetAllocation, SessionEntry, error) {
+	sourceBudget, err := s.Budgets.GetByID(ctx, sourceBudgetID)
+	if err != nil {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, err
+	}
+	targetBudget, err := s.Budgets.GetByName(ctx, targetBudgetName)
+	if err != nil {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, err
+	}
+	if targetBudget.ID == sourceBudget.ID {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, errors.New("target budget must be different from source budget")
+	}
+	sourceAmount, err := parseAllocationAmount(date, amountText, sourceBudget.Scale)
+	if err != nil {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, err
+	}
+	if !sourceAmount.IsPositive() {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, errors.New("amount must be positive")
+	}
+	targetAmount, err := sourceAmount.ConvertToScale(targetBudget.Scale)
+	if err != nil {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, err
+	}
+	if !targetAmount.IsPositive() {
+		return repo.BudgetAllocation{}, repo.BudgetAllocation{}, SessionEntry{}, errors.New("amount must be positive")
+	}
+	targetNotes := "transfer from " + sourceBudget.Name
+	var sourceOut repo.BudgetAllocation
+	var targetOut repo.BudgetAllocation
+	var entry SessionEntry
+	err = s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+		sourceAlloc, err := tx.Alloc.Create(ctx, repo.BudgetAllocationCreate{BudgetID: sourceBudget.ID, Date: date, Amount: sourceAmount.Negate(), Notes: notes})
+		if err != nil {
+			return err
+		}
+		targetAlloc, err := tx.Alloc.Create(ctx, repo.BudgetAllocationCreate{BudgetID: targetBudget.ID, Date: date, Amount: targetAmount, Notes: targetNotes})
+		if err != nil {
+			return err
+		}
+		history := HistoryService{Repo: tx.Hist, Now: s.History.Now}
+		e, err := history.Record(ctx, "add", "/budgets/"+sourceBudget.Name+"/allocations/"+sourceAlloc.Date, nil, budgetAllocationTransferMutationData{Source: sourceAlloc, Target: targetAlloc}, func(ctx context.Context) error {
+			return s.Store.WithWriteTx(ctx, func(tx *repo.Store) error {
+				if err := tx.Alloc.Delete(ctx, sourceAlloc.ID); err != nil {
+					return err
+				}
+				return tx.Alloc.Delete(ctx, targetAlloc.ID)
+			})
+		})
+		if err != nil {
+			return err
+		}
+		sourceOut, targetOut, entry = sourceAlloc, targetAlloc, e
+		return nil
+	})
+	return sourceOut, targetOut, entry, err
 }
 
 func (s BudgetAllocationService) Update(ctx context.Context, id int64, amountText, date, notes string) (repo.BudgetAllocation, SessionEntry, error) {

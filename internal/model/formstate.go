@@ -19,6 +19,9 @@ const (
 	accountFilterKey    = "_account_filter"
 	accountCursorKey    = "_account_cursor"
 	accountPageKey      = "_account_page"
+	budgetFilterKey     = "_budget_filter"
+	budgetCursorKey     = "_budget_cursor"
+	budgetPageKey       = "_budget_page"
 	newTagsKey          = "_new_tags"
 	textCursorKeyPrefix = "_cursor:"
 )
@@ -81,6 +84,16 @@ func (a App) clearAccountSelectState() {
 	delete(a.Form, accountPageKey)
 }
 
+func (a App) budgetFilter() string { return a.Form[budgetFilterKey] }
+
+func (a App) setBudgetFilter(value string) { a.Form[budgetFilterKey] = sanitizeSlug(value) }
+
+func (a App) clearBudgetSelectState() {
+	delete(a.Form, budgetFilterKey)
+	delete(a.Form, budgetCursorKey)
+	delete(a.Form, budgetPageKey)
+}
+
 func (a App) setTagSelectCursor(cursor int) {
 	a.Form[tagCursorKey] = strconv.Itoa(cursor)
 	a.Form[tagPageKey] = strconv.Itoa(cursor / currencyPageSize)
@@ -130,6 +143,23 @@ func (a App) accountSelectPage() int {
 
 func (a App) setAccountSelectPage(page int) {
 	a.Form[accountPageKey] = strconv.Itoa(page)
+}
+
+func (a App) setBudgetSelectCursor(cursor int) {
+	a.Form[budgetCursorKey] = strconv.Itoa(cursor)
+	a.Form[budgetPageKey] = strconv.Itoa(cursor / tagPageSize)
+}
+
+func (a App) resetBudgetSelectCursor() {
+	a.setBudgetSelectCursor(0)
+}
+
+func (a App) budgetSelectPage() int {
+	return parseFormInt(a.Form[budgetPageKey])
+}
+
+func (a App) setBudgetSelectPage(page int) {
+	a.Form[budgetPageKey] = strconv.Itoa(page)
 }
 
 func (a App) currencySelectCursor() int {

@@ -62,12 +62,20 @@ func (a App) budgetAllocationAddKey(s, name string) App {
 	if a.Form["action"] == "" {
 		a.Form["action"] = service.AllocationActionSetTotal
 	}
-	fields := []string{"action", "amount", "date", "notes"}
-	next, submit := a.allocationFormKey(s, fields)
+	fields := allocationAddFields(a.Form["action"])
+	if a.Field > len(fields) {
+		a.Field = len(fields)
+	}
+	next, submit := a.allocationFormKey(s, name, fields)
 	if !submit {
 		return next
 	}
-	_, entry, err := next.Svc.BudgetAllocations.Add(next.ctx, b.ID, next.Form["action"], next.Form["amount"], next.Form["date"], next.Form["notes"])
+	var entry service.SessionEntry
+	if next.Form["action"] == service.AllocationActionTransferTo {
+		_, _, entry, err = next.Svc.BudgetAllocations.TransferTo(next.ctx, b.ID, next.Form["to"], next.Form["amount"], next.Form["date"], next.Form["notes"])
+	} else {
+		_, entry, err = next.Svc.BudgetAllocations.Add(next.ctx, b.ID, next.Form["action"], next.Form["amount"], next.Form["date"], next.Form["notes"])
+	}
 	if err != nil {
 		next.Error = err.Error()
 		return next
@@ -114,15 +122,31 @@ func (a App) budgetAllocationEditKey(s, name string, id int64) App {
 	return next
 }
 
-func (a App) allocationFormKey(s string, fields []string) (App, bool) {
+func (a App) allocationFormKey(s, name string, fields []string) (App, bool) {
 	if isSubmitKey(s) {
 		a.clearCurrentTextCursor(fields)
 		return a, true
 	}
-	if a.Field == 0 {
-		return a.selectFieldKey(s, "action", []string{service.AllocationActionSetTotal, service.AllocationActionAddMoney, service.AllocationActionRemoveMoney}, fields)
+	if a.Field < len(fields) {
+		switch fields[a.Field] {
+		case "action":
+			return a.selectFieldKey(s, "action", allocationActionOptions(), fields)
+		case "to":
+			return a.budgetTransferToFieldKey(s, fields, name)
+		}
 	}
 	return a.submitFormKey(s, fields)
+}
+
+func allocationActionOptions() []string {
+	return []string{service.AllocationActionSetTotal, service.AllocationActionAddMoney, service.AllocationActionRemoveMoney, service.AllocationActionTransferTo}
+}
+
+func allocationAddFields(action string) []string {
+	if action == service.AllocationActionTransferTo {
+		return []string{"action", "amount", "to", "date", "notes"}
+	}
+	return []string{"action", "amount", "date", "notes"}
 }
 
 func (a App) budgetAllocationRows(name string) ([]service.BudgetAllocationRow, error) {
@@ -131,6 +155,105 @@ func (a App) budgetAllocationRows(name string) ([]service.BudgetAllocationRow, e
 		return nil, err
 	}
 	return a.Svc.BudgetAllocations.ListWithBalances(a.ctx, b.ID)
+}
+
+func (a App) transferBudgetOptions(sourceName string) []tagOption {
+	filter := a.budgetFilter()
+	budgets, err := a.Svc.Budgets.List(a.ctx, true)
+	if err != nil {
+		return nil
+	}
+	var opts []tagOption
+	for _, budget := range budgets {
+		if budget.Name == sourceName {
+			continue
+		}
+		if filter != "" && !strings.Contains(budget.Name, filter) {
+			continue
+		}
+		opts = append(opts, tagOption{Name: budget.Name})
+	}
+	return opts
+}
+
+func (a App) budgetTransferToFieldKey(s string, fields []string, sourceName string) (App, bool) {
+	options := a.transferBudgetOptions(sourceName)
+	cursor := clampCursor(parseFormInt(a.Form[budgetCursorKey]), len(options))
+	a.setBudgetSelectCursor(cursor)
+	switch s {
+	case "down":
+		if len(options) > 0 {
+			a.setBudgetSelectCursor((cursor + 1) % len(options))
+		}
+	case "up":
+		if len(options) > 0 {
+			a.setBudgetSelectCursor((cursor - 1 + len(options)) % len(options))
+		}
+	case "right":
+		if len(options) > 0 {
+			page := min(a.budgetSelectPage()+1, tagPageCount(len(options))-1)
+			a.setBudgetSelectPage(page)
+			a.setBudgetSelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "left":
+		if len(options) > 0 {
+			page := max(a.budgetSelectPage()-1, 0)
+			a.setBudgetSelectPage(page)
+			a.setBudgetSelectCursor(min(page*tagPageSize, len(options)-1))
+		}
+	case "backspace":
+		if a.budgetFilter() == "" {
+			a.Form["to"] = ""
+			return a, false
+		}
+		a.setBudgetFilter(trimLastRune(a.budgetFilter()))
+		a.resetBudgetSelectCursor()
+	case "tab":
+		a.clearBudgetSelectState()
+		a.Field = min(a.Field+1, len(fields))
+	case "shift+tab":
+		a.clearBudgetSelectState()
+		a.Field = max(a.Field-1, 0)
+	case "enter":
+		if len(options) == 0 {
+			a.clearBudgetSelectState()
+			a.Field = min(a.Field+1, len(fields))
+			return a, false
+		}
+		a.Form["to"] = options[cursor].Name
+		a.clearBudgetSelectState()
+	default:
+		input := newFilteredListInput(a.budgetFilter(), sanitizeSlug)
+		if updated, handled := input.handleKey(s); handled {
+			a.setBudgetFilter(updated.value())
+			a.resetBudgetSelectCursor()
+		}
+	}
+	return a, false
+}
+
+func (a App) budgetTransferToSelectLines() []string {
+	sourceName, _ := budgetAllocationAddName(a.Path)
+	filter := a.budgetFilter()
+	options := a.transferBudgetOptions(sourceName)
+	cursor := clampCursor(parseFormInt(a.Form[budgetCursorKey]), len(options))
+	page := min(a.budgetSelectPage(), tagPageCount(len(options))-1)
+	start := page * tagPageSize
+	end := min(start+tagPageSize, len(options))
+	lines := []string{"", fmt.Sprintf("   > filter  : %s", placeholder(filter, "(type anything...)")), ""}
+	if len(options) == 0 {
+		lines = append(lines, "     (no matching budgets)", "", "     [00/00]")
+		return lines
+	}
+	for i, option := range options[start:end] {
+		prefix := "       "
+		if start+i == cursor {
+			prefix = "     > "
+		}
+		lines = append(lines, prefix+option.Name)
+	}
+	lines = append(lines, "", fmt.Sprintf("     [%02d/%02d]", cursor+1, len(options)))
+	return lines
 }
 
 func (a App) budgetAllocationListScreen(name string) screen {
@@ -176,8 +299,8 @@ func (a App) budgetAllocationAddScreen(name string) screen {
 		return screen{Path: budgetAllocationAddPath(name), Body: "error: " + err.Error() + "\n"}
 	}
 	context := fmt.Sprintf("current : %s", current.Format(b.Code))
-	fields := []string{"action", "amount", "date", "notes"}
-	options := map[string][]string{"action": {service.AllocationActionSetTotal, service.AllocationActionAddMoney, service.AllocationActionRemoveMoney}}
+	fields := allocationAddFields(a.Form["action"])
+	options := map[string][]string{"action": allocationActionOptions()}
 	prefixes := map[string]string{"amount": b.Code}
 	return screen{Path: budgetAllocationAddPath(name), Context: context, Options: a.formViewWithOptions(fields, nil, options, prefixes), Help: a.formHelp(fields)}
 }

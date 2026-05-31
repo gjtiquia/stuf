@@ -449,6 +449,146 @@ func TestBudgetAllocationActionsAndSameDateOrdering(t *testing.T) {
 	}
 }
 
+func TestBudgetAllocationTransferToCreatesTwoRows(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, _, budgets, allocations, _, _ := budgetServiceStack(t)
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rent, _, err := budgets.Create(ctx, "rent", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, target, entry, err := allocations.TransferTo(ctx, groceries.ID, "rent", "500.00", "2026-05-24", "rebalance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Action != "add" || entry.Path != "/budgets/groceries/allocations/2026-05-24" {
+		t.Fatalf("transfer history entry = %+v", entry)
+	}
+	if source.BudgetID != groceries.ID || source.Amount.Amount != -50000 || source.Notes != "rebalance" {
+		t.Fatalf("source allocation = %+v", source)
+	}
+	if target.BudgetID != rent.ID || target.Amount.Amount != 50000 || target.Notes != "transfer from groceries" {
+		t.Fatalf("target allocation = %+v", target)
+	}
+	sourceBal, err := allocations.Balance(ctx, groceries.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetBal, err := allocations.Balance(ctx, rent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sourceBal.Amount != -50000 || targetBal.Amount != 50000 {
+		t.Fatalf("transfer balances = source %v target %v", sourceBal, targetBal)
+	}
+}
+
+func TestBudgetAllocationTransferToMultiCurrencyUsesEachBudgetScale(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, _, budgets, allocations, _, _ := budgetServiceStack(t)
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	travel, _, err := budgets.Create(ctx, "travel", "JPY", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, target, _, err := allocations.TransferTo(ctx, groceries.ID, "travel", "500.00", "2026-05-24", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if source.Amount.Amount != -50000 || source.Amount.Scale != 2 {
+		t.Fatalf("source money should use HKD scale: %+v", source.Amount)
+	}
+	if target.BudgetID != travel.ID || target.Amount.Amount != 500 || target.Amount.Scale != 0 {
+		t.Fatalf("target money should use JPY scale without FX conversion: %+v", target.Amount)
+	}
+}
+
+func TestBudgetAllocationTransferToRejectsSameBudgetWithoutRows(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, _, budgets, allocations, _, _ := budgetServiceStack(t)
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := allocations.TransferTo(ctx, groceries.ID, "groceries", "500.00", "2026-05-24", ""); err == nil {
+		t.Fatal("expected same-budget transfer to fail")
+	}
+	rows, err := allocations.List(ctx, groceries.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("same-budget transfer should not create rows: %+v", rows)
+	}
+}
+
+func TestBudgetAllocationTransferToRollsBackWhenHistoryFails(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, budgets, allocations, _, _ := budgetServiceStack(t)
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rent, _, err := budgets.Create(ctx, "rent", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.ExecContext(ctx, "DROP TABLE history"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := allocations.TransferTo(ctx, groceries.ID, "rent", "500.00", "2026-05-24", "rebalance"); err == nil {
+		t.Fatal("expected history failure")
+	}
+	sourceRows, err := allocations.List(ctx, groceries.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetRows, err := allocations.List(ctx, rent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sourceRows) != 0 || len(targetRows) != 0 {
+		t.Fatalf("transfer rows should be rolled back on history failure: source=%+v target=%+v", sourceRows, targetRows)
+	}
+}
+
+func TestBudgetAllocationTransferToUndoRemovesBothRows(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, budgets, allocations, _, history := budgetServiceStack(t)
+	groceries, _, err := budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rent, _, err := budgets.Create(ctx, "rent", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, entry, err := allocations.TransferTo(ctx, groceries.ID, "rent", "500.00", "2026-05-24", "rebalance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := history.Undo(ctx, entry); err != nil {
+		t.Fatal(err)
+	}
+	sourceRows, err := s.Alloc.ListByBudget(ctx, groceries.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetRows, err := s.Alloc.ListByBudget(ctx, rent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sourceRows) != 0 || len(targetRows) != 0 {
+		t.Fatalf("undo should remove both transfer rows: source=%+v target=%+v", sourceRows, targetRows)
+	}
+}
+
 func TestAccountTagsCreateEditInheritanceAndUndo(t *testing.T) {
 	ctx := context.Background()
 	s, accounts, _, _, history := serviceStack(t)

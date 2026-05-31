@@ -261,6 +261,96 @@ func TestBudgetHappyPathThroughUIAndServices(t *testing.T) {
 	assertViewContains(t, app.View(), "budgeted  : HKD 2,000.00", "available : HKD     0.00")
 }
 
+func TestBudgetAllocationTransferToFieldIsConditional(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Budgets.Create(ctx, "groceries", "HKD", "uncategorized", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Budgets.Create(ctx, "rent", "HKD", "uncategorized", ""); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/"}, navFrame{Path: budgetAllocationListPath("groceries")}, navFrame{Path: budgetAllocationAddPath("groceries")})
+	app.Form = map[string]string{"action": service.AllocationActionSetTotal, "date": "2026-05-24"}
+	assertNotContains(t, app.View(), "to     :")
+
+	app.Form["action"] = service.AllocationActionTransferTo
+	assertViewContains(t, app.View(), "  3) to       :")
+}
+
+func TestBudgetAllocationTransferToBudgetPickerFiltersExistingBudgets(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	if _, _, err := app.Svc.Budgets.Create(ctx, "groceries", "HKD", "uncategorized", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Budgets.Create(ctx, "rent", "HKD", "uncategorized", ""); err != nil {
+		t.Fatal(err)
+	}
+	hidden, _, err := app.Svc.Budgets.Create(ctx, "renovation", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := app.Svc.Budgets.SetHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	app = appWithNav(app, navFrame{Path: "/"}, navFrame{Path: budgetAllocationListPath("groceries")}, navFrame{Path: budgetAllocationAddPath("groceries")})
+	app.Form = map[string]string{"action": service.AllocationActionTransferTo, "date": "2026-05-24"}
+	app.Field = 2
+	app = pressRunes(app, "reno")
+	view := app.View()
+	assertViewContains(t, view, "> 3) to", "> filter  : reno", "> renovation")
+	assertNotContains(t, view, "> groceries")
+	assertNotContains(t, view, "create new")
+	app.Form[budgetFilterKey] = ""
+	app.resetBudgetSelectCursor()
+	app = pressRunes(app, "rent")
+	view = app.View()
+	assertViewContains(t, view, "> filter  : rent", "> rent")
+	app = press(app, tea.KeyEnter)
+	if app.Form["to"] != "rent" {
+		t.Fatalf("transfer target selection = %q", app.Form["to"])
+	}
+}
+
+func TestBudgetAllocationTransferToHappyPathThroughUI(t *testing.T) {
+	app, _ := testApp(t)
+	ctx := context.Background()
+	groceries, _, err := app.Svc.Budgets.Create(ctx, "groceries", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rent, _, err := app.Svc.Budgets.Create(ctx, "rent", "HKD", "uncategorized", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app = appWithNav(app, navFrame{Path: "/"}, navFrame{Path: budgetAllocationListPath("groceries")}, navFrame{Path: budgetAllocationAddPath("groceries")})
+	app.Form = map[string]string{"action": service.AllocationActionTransferTo, "amount": "500.00", "date": "2026-05-24", "notes": "rebalance"}
+	app.Field = 2
+	app = pressRunes(app, "ren")
+	app = press(app, tea.KeyEnter)
+	app = press(app, tea.KeyCtrlS)
+	if app.Path != budgetAllocationListPath("groceries") || app.Error != "" {
+		t.Fatalf("transfer submit failed path=%s error=%q\n%s", app.Path, app.Error, app.View())
+	}
+	sourceRows, err := app.Svc.BudgetAllocations.List(ctx, groceries.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetRows, err := app.Svc.BudgetAllocations.List(ctx, rent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sourceRows) != 1 || sourceRows[0].Amount.Amount != -50000 || sourceRows[0].Notes != "rebalance" {
+		t.Fatalf("source rows = %+v", sourceRows)
+	}
+	if len(targetRows) != 1 || targetRows[0].Amount.Amount != 50000 || targetRows[0].Notes != "transfer from groceries" {
+		t.Fatalf("target rows = %+v", targetRows)
+	}
+	assertViewContains(t, app.View(), "HKD (500.00)", "rebalance")
+}
+
 func TestOwedLedgerHappyPathThroughUIAndServices(t *testing.T) {
 	app, _ := testApp(t)
 
