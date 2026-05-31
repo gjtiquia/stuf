@@ -1718,6 +1718,27 @@ func TestDashboardNetChangeUsesOnBudgetSnapshotTotals(t *testing.T) {
 	assertMoneyAmount(t, "low trend", summary.LowTrends[1].Change, 0)
 }
 
+func TestDashboardMonthsDoNotDuplicateAfterLongMonths(t *testing.T) {
+	ctx := context.Background()
+	_, _, _, dashboard, _ := serviceStack(t)
+	dashboard.Now = func() time.Time { return time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC) }
+	summary, err := dashboard.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPeriod(t, "net change 0", summary.NetChanges[0].Period, "2026-05")
+	assertPeriod(t, "net change 1", summary.NetChanges[1].Period, "2026-04")
+	assertPeriod(t, "net change 2", summary.NetChanges[2].Period, "2026-03")
+	assertPeriod(t, "high-to-low 0", summary.HighToLows[0].Period, "2026-05")
+	assertPeriod(t, "high-to-low 1", summary.HighToLows[1].Period, "2026-04")
+	assertPeriod(t, "high-to-low 2", summary.HighToLows[2].Period, "2026-03")
+	assertPeriod(t, "low 0", summary.Lows[0].Period, "2026-05")
+	assertPeriod(t, "low 1", summary.Lows[1].Period, "2026-04")
+	assertPeriod(t, "low 2", summary.Lows[2].Period, "2026-03")
+	assertTrend(t, "high trend 0", summary.HighTrends[0], "2026-04", "2026-05", 0)
+	assertTrend(t, "high trend 1", summary.HighTrends[1], "2026-03", "2026-04", 0)
+}
+
 func TestDashboardTotalSumsLatestPerAccountWithDifferentSnapshotDates(t *testing.T) {
 	ctx := context.Background()
 	_, accounts, balances, dashboard, _ := serviceStack(t)
@@ -2223,7 +2244,7 @@ func TestReportMonthlyCoverageUsesSharedPeriodBoundaries(t *testing.T) {
 func TestReportMonthlyRowsDoNotDuplicateMonthsAfterLongMonths(t *testing.T) {
 	ctx := context.Background()
 	store, _, _, _, _ := serviceStack(t)
-	store.Clock = func() time.Time { return time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC) }
+	store.Clock = func() time.Time { return time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC) }
 	reports := ReportService{Accounts: store.Acct, Balances: store.Bal, Currencies: store.Cur, AppCurrency: "HKD", Now: store.Clock}
 	rows, _, err := reports.MonthlyRows(ctx, 5)
 	if err != nil {
@@ -2236,6 +2257,57 @@ func TestReportMonthlyRowsDoNotDuplicateMonthsAfterLongMonths(t *testing.T) {
 	want := []string{"2026-05", "2026-04", "2026-03", "2026-02", "2026-01"}
 	if strings.Join(periods, ",") != strings.Join(want, ",") {
 		t.Fatalf("periods = %+v, want %+v", periods, want)
+	}
+}
+
+func TestRecentMonthBoundariesUseMonthStart(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		today time.Time
+		count int
+		want  []string
+	}{
+		{
+			name:  "normal day",
+			today: time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC),
+			count: 4,
+			want:  []string{"2026-05", "2026-04", "2026-03", "2026-02"},
+		},
+		{
+			name:  "long month end",
+			today: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
+			count: 4,
+			want:  []string{"2026-05", "2026-04", "2026-03", "2026-02"},
+		},
+		{
+			name:  "crosses shorter february",
+			today: time.Date(2026, 3, 31, 12, 0, 0, 0, time.UTC),
+			count: 4,
+			want:  []string{"2026-03", "2026-02", "2026-01", "2025-12"},
+		},
+		{
+			name:  "leap year february",
+			today: time.Date(2024, 3, 31, 12, 0, 0, 0, time.UTC),
+			count: 3,
+			want:  []string{"2024-03", "2024-02", "2024-01"},
+		},
+		{
+			name:  "zero count",
+			today: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
+			count: 0,
+			want:  nil,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			months := recentMonthBoundaries(tc.today, tc.count)
+			var periods []string
+			for _, month := range months {
+				periods = append(periods, month.Format("2006-01"))
+			}
+			if strings.Join(periods, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("periods = %+v, want %+v", periods, tc.want)
+			}
+		})
 	}
 }
 

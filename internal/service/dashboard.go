@@ -382,12 +382,7 @@ func dashboardFromHistories(today time.Time, zero money.Money, histories []dashb
 	}
 	out.Total = totalAsOfValue(histories, calcDate, zero)
 	monthStart := totalAsOfValue(histories, monthBoundary(today), zero)
-	months := []time.Time{
-		today,
-		today.AddDate(0, -1, 0),
-		today.AddDate(0, -2, 0),
-		today.AddDate(0, -3, 0),
-	}
+	months := recentMonthBoundaries(today, 4)
 	highs := make([]money.Money, len(months))
 	lows := make([]money.Money, len(months))
 	for i, month := range months {
@@ -537,6 +532,18 @@ func sameMonth(date, month time.Time) bool {
 func monthBoundary(t time.Time) time.Time {
 	y, m, _ := t.Date()
 	return time.Date(y, m, 1, 0, 0, 0, 0, t.Location())
+}
+
+func recentMonthBoundaries(today time.Time, count int) []time.Time {
+	if count <= 0 {
+		return nil
+	}
+	baseMonth := monthBoundary(today)
+	months := make([]time.Time, 0, count)
+	for i := 0; i < count; i++ {
+		months = append(months, baseMonth.AddDate(0, -i, 0))
+	}
+	return months
 }
 
 func parseDashboardDate(date string, loc *time.Location) (time.Time, error) {
