@@ -41,6 +41,7 @@
 ### budgets
 - no need to show table header on each category, becomes repetitive under the limited screen space
 - "transfer to" support during allocation
+- goals (amount, date) and default monthly allocations
 
 ### formulas
 - support app-wide formula support for all amounts
@@ -239,6 +240,22 @@ This supports the idea that budgeting is not just math; it is a cognitive organi
 - after entering budgets, i have a pretty good idea of how much i should be able to "save" per month, how to lift up the monthly "low"
 - and this is all before entering a single transaction!
 - will test run for a month and see how it goes!
+
+- started doing budgets
+- its pretty nice cuz i can deduct an estimate from budgets as its not linked to transactions
+- and if i forget to deduct, i can always freely "start over" and give myself a budget until the end of the month (or next income)
+- and since its not "synced" to account balances, i added a "buffer" to transfer into, its like "used money", money i expect to zero out after i sync my account balance (which is expected to drop)
+- this way i dun artificially inflate the available money, while still retaining the purpose of budget envelopes
+- also added budget for "lowest-low" to never spend to raise the previous month's low, and a "leftover" for unexpected expenses (social occasions and whatnot) without being too granular with the budgets
+
+- but also started doing transactions
+- start to feel a bit of duplicate work...
+    - perhaps... add two fields
+    - deduct from budget
+    - add to budget
+    - both optional, so it automates "transferring from xxx budget to buffer budget"
+- mostly using it to track money "i owe ppl", since we decided that the "ppl owe you" ledger should be only for money ppl owe you
+    - track that i actually returned the money
 
 
 
