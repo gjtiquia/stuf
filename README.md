@@ -1923,6 +1923,7 @@ deferred tags
 - available = on-budget balance - budgeted
 - available can be negative
 - negative available means money has been spent or allocated beyond current on-budget money
+- budget-to-budget transfers are budget allocations only; they do not update account balances or available money directly
 - `ppl owe you` does not increase available
 - owed money only becomes real when it appears in on-budget account balances
 - budget names are strict slugs
@@ -2391,9 +2392,16 @@ esc     : back
 allocations
 - allocation is separate from budget creation
 - allocation entries are deltas internally
-- UI supports set total, add money, remove money
+- UI supports set total, add money, remove money, transfer to
 - set total calculates the corresponding delta internally
 - set total calculates its delta from the running balance immediately before the new allocation
+- transfer to creates two normal allocation rows automatically
+- transfer to subtracts from the current budget and adds to the selected target budget
+- transfer to may make the current budget negative
+- transfer to may target hidden budgets, but excludes the current budget
+- transfer to allows multi-currency budget moves; each side uses its own budget currency and scale
+- transfer rows are not linked after creation, so later edits and deletes are manual and independent
+- transfer to defaults the target row note to `transfer from {budget}`, but the note remains freely editable
 - allocation date defaults to today
 - multiple allocations on the same date are allowed
 - allocation running balances sort by date, then created_at, then id
@@ -2456,7 +2464,34 @@ esc     : back
 ?       : help
 ```
 
-- allocation action options are set total, add money, remove money
+```
+# stuf
+
+current     : HKD 800.00
+
+/budgets/groceries/allocations/add/
+
+> 1) action : transfer to
+
+  2) amount : HKD 500.00
+
+  3) to     : rent
+
+  4) date   : 2026-05-21
+
+  5) notes  :
+
+  [confirm]
+
+---
+type    : enter text
+tab     : navigate
+enter   : confirm
+esc     : back
+?       : help
+```
+
+- allocation action options are set total, add money, remove money, transfer to
 - after confirm success, goes to /budgets/groceries/allocations/list/ automatically
 
 budget and transaction separation
