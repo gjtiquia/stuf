@@ -38,11 +38,12 @@
 
 ## priotity
 
-### keyboard hints
-- taking up quite a lot of real estate, but i dont often look at it, should simply show a ? help
-
 ### budgets
 - no need to show table header on each category, becomes repetitive under the limited screen space
+- "transfer to" support during allocation
+
+### formulas
+- support app-wide formula support for all amounts
 
 ---
 
