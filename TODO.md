@@ -257,5 +257,21 @@ This supports the idea that budgeting is not just math; it is a cognitive organi
 - mostly using it to track money "i owe ppl", since we decided that the "ppl owe you" ledger should be only for money ppl owe you
     - track that i actually returned the money
 
-
+- thinking about budgets again...
+    - at first i tried meticulously writing down "remove allocation" from meals budget after every meal
+    - but i realize, the remaining number... doesnt actually mean anything to me
+    - as in, i need to do mental math to determine "ah ok i can afford the rest of the meals"
+    - there's no immediate indication of... overspending if the scale is per month
+    - there's a tendency to... challenge it and see if i can overspend the next meal if i saved a bit in the last meal
+    - but thats... not so ideal hmmm...
+    - given the flexibility of this budgeting method, we ought to be more strict on ourselves
+    - the budget itself come from "ok i think spending xxx much every day is necessary, hence this is my estimated monthly budget"
+    - hence the purpose of a monthly budget to me is for deducting the available money, that the dollar already has a job, and just leave it at that
+    - not much purpose in... constantly tracking how much is decreased... 
+    - when doing account snapshots, the quick lazy way is simply setting the total to "meal per day * remaining days"
+    - it is by seeing the remaining available balance which is the insight to finance
+    - and every single day i can be conscious of my daily budget for food, boring but simple, no thinking about saving extra today for a treat tmr
+    - in fact, the "treat" can be allocated into as a standalone budget tbh
+    - the only reason where u should in-fact mark down, is if you owe the money to someone, in a ledger maybe, and that money will be gone anyways, it should not be available
+    - hence... it would kind of make sense to... create a bucket called "owed money", and perhaps allocations need tags...? idk can think about it later on if there's a need and use case
 
