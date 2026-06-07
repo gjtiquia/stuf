@@ -274,4 +274,5 @@ This supports the idea that budgeting is not just math; it is a cognitive organi
     - in fact, the "treat" can be allocated into as a standalone budget tbh
     - the only reason where u should in-fact mark down, is if you owe the money to someone, in a ledger maybe, and that money will be gone anyways, it should not be available
     - hence... it would kind of make sense to... create a bucket called "owed money", and perhaps allocations need tags...? idk can think about it later on if there's a need and use case
+    - another reason to do budget transfers is to "mark down" an expense that is already paid. its something that one would do before/after an account snapshot anyways
 
