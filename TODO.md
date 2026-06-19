@@ -276,3 +276,14 @@ This supports the idea that budgeting is not just math; it is a cognitive organi
     - hence... it would kind of make sense to... create a bucket called "owed money", and perhaps allocations need tags...? idk can think about it later on if there's a need and use case
     - another reason to do budget transfers is to "mark down" an expense that is already paid. its something that one would do before/after an account snapshot anyways
 
+- been running for a while
+    - yep as expected, even with a simplified system, lazy to put in snapshots regularly
+    - but its kinda different than before
+    - cuz with this flexibility, u need to "overbudget"
+    - and also, kinda locked into a "daily" budget for "daily" routines, i just need to put my focus on that, which is nice
+    - and also the "buffer" for unexpected spends, i keep that in mind as well
+    - so really the feature that would be the most useful tbh, is the mobile app for deducting unexpected spends from the budget
+    - which is interestingly a nice departure from "log EVERY TRANSACTION" instead into only logging unexpected transactions
+        - given that u already account for ur regular stuff
+        - tho u can probably guess 70% of ur regular spends, and the remaining 30% regular spends can be "discovered"
+
